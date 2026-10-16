@@ -165,8 +165,8 @@ function createServer(ctx: Ctx) {
       title: "Plot Speaks",
       version: "0.4.0",
       description: "Interactive murder mysteries and adventures to play by voice with your assistant as the narrator, plus a studio for writing and submitting your own.",
-      websiteUrl: "https://plotspeaks.volocent.com",
-      icons: [{ src: "https://plotspeaks.volocent.com/icon-512.png", mimeType: "image/png", sizes: ["512x512"] }],
+      websiteUrl: "https://plotspeaks.com",
+      icons: [{ src: "https://plotspeaks.com/icon-512.png", mimeType: "image/png", sizes: ["512x512"] }],
     },
     { instructions: INSTRUCTIONS },
   );
@@ -498,6 +498,12 @@ export default {
     if (url.protocol === "http:" && url.hostname !== "localhost" && url.hostname !== "127.0.0.1") {
       url.protocol = "https:";
       return Response.redirect(url.toString(), 301);
+    }
+    // plotspeaks.com is the home (Ben bought it 2026-10-16). The old address and www redirect there,
+    // except the old /mcp, which keeps answering: connectors added before the move post to it, and
+    // MCP clients don't reliably follow a redirect on POST.
+    if (url.hostname === "www.plotspeaks.com" || (url.hostname === "plotspeaks.volocent.com" && url.pathname !== "/mcp")) {
+      return Response.redirect(`https://plotspeaks.com${url.pathname}${url.search}`, 301);
     }
     // Review queue and cover generation: key-gated, 404 when no admin key is configured.
     const admin = await handleAdmin(request, env, BUILTINS);

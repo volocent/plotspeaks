@@ -2,7 +2,7 @@
 
 Interactive story scripts you play by voice with your own AI assistant: murder mysteries first, fantasy adventures second. One narrator, short spoken turns, built for long drives. A Volocent Labs project.
 
-**Status: early.** Play at **https://plotspeaks.volocent.com**: copy a story into a new ChatGPT or Claude chat, or add the Plot Speaks connector (`https://plotspeaks.volocent.com/mcp`, no sign-in), which loads stories and checks accusations so your assistant never holds the answer. The story format, the published stories and the tools that test them are here.
+**Status: early.** Play at **https://plotspeaks.com**: copy a story into a new ChatGPT or Claude chat, or add the Plot Speaks connector (`https://plotspeaks.com/mcp`, no sign-in), which loads stories and checks accusations so your assistant never holds the answer. The story format, the published stories and the tools that test them are here.
 
 ## What's here
 

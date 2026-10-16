@@ -34,14 +34,19 @@
         { "binding": "DB", "database_name": "plotspeaks-dev", "database_id": "3c93a1ce-a864-405f-be55-01bd5ad3d565", "migrations_dir": "migrations" }
       ]
     },
-    // Production: plotspeaks.volocent.com. Deploy only through scripts/deploy-prod.ps1, which
+    // Production: plotspeaks.com (plotspeaks.volocent.com redirects). Deploy only through scripts/deploy-prod.ps1, which
     // builds the published catalog only, runs the checks and logs a D1 restore point first.
     // No DEV_ACCESS_KEY here: production is open to players.
     // ADMIN_KEY (a secret, never a var) unlocks /admin/* (review queue, cover generation); unset -> 404.
     "prod": {
       "name": "plotspeaks",
       "workers_dev": false,
-      "routes": [{ "pattern": "plotspeaks.volocent.com", "custom_domain": true }],
+      "routes": [
+        { "pattern": "plotspeaks.com", "custom_domain": true },
+        { "pattern": "www.plotspeaks.com", "custom_domain": true },
+        // The old address: pages redirect to plotspeaks.com; /mcp keeps answering for existing connectors.
+        { "pattern": "plotspeaks.volocent.com", "custom_domain": true }
+      ],
       "vars": { "ENVIRONMENT": "production" },
       "ai": { "binding": "AI" },
       "assets": { "directory": "public", "binding": "ASSETS" },
