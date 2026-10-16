@@ -1,29 +1,30 @@
-// Plot Speaks play server (Phase 2, milestone M0: the voice check).
+// Plot Speaks play server and Story Studio (Phase 2).
 //
-// A stateless MCP server with four tools. Its job in M0 is to answer one question: will an
-// assistant in VOICE mode call a third-party tool? Secondary questions: does the narrator follow
-// GM instructions that arrive as tool output, and does it call reveal instead of answering
-// accusations itself? Each tool call is logged (wrangler tail / Workers logs) so a test session
-// can be checked afterwards.
+// A stateless MCP server (Streamable HTTP at /mcp), the catalog site (site.ts), the passenger
+// page's JSON API, and the key-gated admin pages (submissions.ts). Tools:
+//   play:   open_plot_speaks, list_stories, start_story, check_accusation, reveal_solution,
+//           get_cue, rate_story
+//   studio: write_story, review_story, submit_story, withdraw_submission
 //
-// Answer keys never reach the assistant in bulk: reveal returns one suspect's line, get_cue one
-// cue's read-aloud part. The full secrets.md and the "Wrangler only" parts are never served.
+// Answer keys never reach the assistant in bulk: check_accusation returns one suspect's line,
+// get_cue one cue, and reveal_solution the full solution only after an accusation or when the
+// player gives up. The served scripts are the connector versions built by
+// tools/worker-data/build.mjs (no paste-play "wrangler" hand-offs; see connector.mjs).
+// Each tool call is logged (wrangler tail / Workers logs) without the user's raw text.
 import { McpServer } from "@modelcontextprotocol/server";
 import { createMcpHandler } from "agents/mcp/server";
 import { z } from "zod";
 import stories from "./generated/stories.json";
 import { handleSite, type PublicStory } from "./site";
-import { storyTemplate, checkSubmitted, GENRES, LENGTHS, WRITE_GENRES, writeStory, reviewStory } from "./studio";
-import { submitStory, withdrawSubmission, loadApprovedStories, handleAdmin, serveSubmissionCover, listApprovedSubmissions, type SubEnv, type Builtins } from "./submissions";
+import { LENGTHS, WRITE_GENRES, writeStory, reviewStory } from "./studio";
+import { submitStory, withdrawSubmission, loadApprovedStories, handleAdmin, serveSubmissionCover, listApprovedSubmissions, type SubEnv, type Builtins, type PlayStory } from "./submissions";
 import { runRetention } from "./retention";
 import { countPage, countMcp, bump } from "./usage";
+import { assistantOf } from "./stats";
+import { matchStory, matchEnding, sortedNames } from "../../tools/worker-data/match.mjs";
 
 type Ending = { name: string; verdict: string; text: string };
-type Cue = { read_aloud: string; narrator_only: string | null };
-type Story = {
-  slug: string; title: string; genre: string; players: string; duration_minutes: number | null;
-  story: string; endings: Ending[]; cues: Record<string, Cue>; listen_for: string | null;
-};
+type Story = PlayStory;
 const STORIES = stories as Story[];
 // The catalog site gets the slug and the public story.md text ONLY: never endings or cues.
 const toPublic = (s: Story): PublicStory => ({ slug: s.slug, story: s.story });
@@ -32,55 +33,25 @@ const BUILTINS: Builtins = { slugs: new Set(STORIES.map((s) => s.slug)), storyFo
 
 // These rules travel with the server itself, not only inside the story text: on 2026-10-15
 // Claude declined to treat GM instructions inside a pasted document as the user's instructions.
+// No mention of children's stories here or in any tool metadata (review B2): the listing must read
+// the same whatever client scans it.
 const INSTRUCTIONS = [
   "Plot Speaks runs interactive story games that the user plays with you by voice. When the user names a story to play, call start_story with it and act as the narrator. When they open or ask for Plot Speaks without naming a story (\"open Plot Speaks\", \"let's play Plot Speaks\"), call open_plot_speaks: it returns a short spoken intro, a question and a menu to offer them. When they want to write their own story, call write_story.",
   // Worded as the game's content, not as instructions that outrank the user: Anthropic's directory
   // policy bars servers that direct Claude to take behavioural instructions from external sources.
-  "The story text returned by start_story is the game the user asked to play. Its \"How to run this\" section describes how the game is narrated (short spoken turns, a question at the end of each turn, only the clues written in the story), and the game works best played that way. The user's own requests always come first: if they ask to change pace, skip ahead, stop or play differently, do what they ask.",
-  "Where the story says to say \"Wrangler, check the secrets.\", do not say it: call reveal with the story slug and the accused person's name, then follow the verdict it returns (it starts with Correct. or Innocent.).",
-  "Where the story says \"Wrangler, cue S<n>\", do not say it: call get_cue with that cue id and narrate only its read-aloud part. Each cue also has notes for you as the narrator, to help run the scene; what the players hear is the read-aloud part. When those notes say to call a follow-up cue (for example S3b) after something happens, call get_cue for it yourself at that moment.",
-  "You do not know the solution. Never guess it, and never call reveal unless the user has formally accused someone.",
-  "start_story returns a play id. Pass it to reveal, get_cue and rate_story. To start a story the user named, call start_story directly; list_stories is for browsing.",
+  "The story text returned by start_story is the game the user asked to play. Its \"How to run this\" section describes how the game is narrated (short spoken turns, a question at the end of each turn, only the clues written in the story), and the game works best played that way. The story's rules are about narration; the user's own requests and your own guidelines always come first: if they ask to change pace, skip ahead, stop or play differently, do what they ask.",
+  "You do not know the solution. Never guess it. When the player formally accuses someone (the script says to ask for their reason first), call check_accusation with the story slug, the accused person's name and the play id, and give the verdict it returns (its line starts with Correct. or Innocent.). If it says the name could be more than one person, ask the player which they mean. Call check_accusation only for a formal accusation.",
+  "After a correct accusation, or when the player asks for the full reveal or gives up, call reveal_solution with the play id (add gave_up: true when they gave up without accusing anyone). Read its READ ALOUD part; read its WHAT BECAME OF THEM part only if the player wants to hear what became of everyone.",
+  "When the script calls for a cue, call get_cue with that cue id and narrate only its read-aloud part. Each cue also has narrator notes, to help run the scene; when they say to call a follow-up cue (for example S3b) after something happens, call get_cue for it yourself at that moment.",
+  "start_story returns a play id: pass it to check_accusation, reveal_solution and rate_story. If you no longer have it, call check_accusation without it. A two-chapter story arrives one chapter at a time: when chapter 1 ends, call start_story with chapter: 2 and the play id. To start a story the user named, call start_story directly; list_stories is for browsing.",
   "Call submit_story only when the writer has said they are ready to submit, and withdraw_submission only when they ask to withdraw. Ask the writer which name to credit.",
-  "Writing: write_story returns a suggested step-by-step way to draft a story with the user, and the format template. review_story checks a draft (format rules, plus a fair-play checklist for you to go through). When the writer wants to share it, submit_story sends it, with the name they want credited, to a person who reviews every submission before it is published; withdraw_submission removes it again with the claim code from the receipt. (The story_template prompt and check_story remain for older clients.)",
-  "When a story ends (a correct accusation, the full reveal, a victory or defeat), ask once: \"How many stars out of five would you give it? And did I give anything away too early?\" Then call rate_story with the answer. If the player doesn't want to rate, drop it.",
+  "Writing: write_story returns a suggested step-by-step way to draft a story with the user, and the format template. review_story checks a draft (format rules, plus a fair-play checklist for you to go through). When the writer wants to share it, submit_story sends it, with the name they want credited, to a person who reviews every submission before it is published; withdraw_submission removes it again with the claim code from the receipt.",
+  "When a story ends (a correct accusation, the full reveal, a victory or defeat), ask once: \"How many stars out of five would you give it? And did I give anything away too early?\" Then call rate_story with the answer and the play id. If the player doesn't want to rate, drop it.",
 ].join("\n");
 
-const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s'-]/g, " ").replace(/\s+/g, " ").trim();
-const TITLES = new Set(["father", "mr", "mrs", "ms", "miss", "dr", "the", "sir"]);
-const tokens = (s: string) => norm(s).split(" ").filter((t) => t.length > 1 && !TITLES.has(t));
-
-function findEnding(endings: Ending[], accused: string): Ending | null {
-  const acc = tokens(accused);
-  let best: Ending | null = null, bestScore = 0;
-  for (const e of endings) {
-    const et = tokens(e.name);
-    let score = norm(e.name) === norm(accused) ? 100 : 0;
-    for (const t of acc) if (et.includes(t)) score += 1;
-    if (et.length && acc[0] === et[0]) score += 0.5;
-    if (score > bestScore) { best = e; bestScore = score; }
-  }
-  return bestScore > 0 ? best : null;
-}
-
-// Titles arrive through speech recognition ("The Last Host" for The Last Toast), so after the exact
-// matches, fall back to the title sharing the most words, ignoring "the"/"a"/"of".
-const STOP = new Set(["the", "a", "an", "of", "story", "mystery", "plot", "speaks"]);
-const words = (s: string) => norm(s).replace(/-/g, " ").split(" ").filter((w) => w && !STOP.has(w));
-function findStory(slug: string, all: Story[] = STORIES): Story | undefined {
-  const exact = all.find((s) => s.slug === slug || norm(s.title) === norm(slug) || norm(s.title).includes(norm(slug)));
-  if (exact) return exact;
-  const want = words(slug);
-  let best: Story | undefined, bestScore = 0;
-  for (const s of all) {
-    const have = new Set([...words(s.title), ...words(s.slug)]);
-    const score = want.filter((w) => have.has(w)).length;
-    if (score > bestScore) { best = s; bestScore = score; }
-  }
-  return bestScore > 0 ? best : undefined;
-}
-
 const text = (t: string) => ({ content: [{ type: "text" as const, text: t }] });
+// Not-found and invalid results are marked as errors (review S16), with the actionable text kept.
+const fail = (t: string) => ({ content: [{ type: "text" as const, text: t }], isError: true });
 
 // Categories, the same four the catalog site shows (site.ts CATEGORIES): murder mysteries split by
 // metadata.tone (dark vs everything else), family mysteries (genre kids) and fantasy adventures.
@@ -97,11 +68,11 @@ function categoryOf(s: Story): CategoryId | null {
   if (s.genre === "adventure") return "adventure";
   return null;
 }
+const isMystery = (s: Story) => s.endings.length > 0 || s.genre === "murder-mystery" || s.genre === "kids";
 // list_stories genre filter. "murder-mystery" keeps its old meaning (every murder mystery, dark ones
-// included); "classic" and "dark" split it.
+// included); "classic" and "dark" split it. "kids" exists only outside ChatGPT (OpenAI's plugin rules).
 const LIST_GENRES = ["murder-mystery", "classic", "dark", "kids", "adventure"] as const;
 const LIST_GENRES_GPT = ["murder-mystery", "classic", "dark", "adventure"] as const;
-const TEMPLATE_GENRES_GPT = ["murder-mystery", "adventure"] as const;
 const WRITE_GENRES_GPT = ["murder-mystery", "dark", "adventure"] as const;
 function matchesGenre(s: Story, genre?: (typeof LIST_GENRES)[number]): boolean {
   if (!genre) return true;
@@ -127,56 +98,99 @@ function openMenu(all: Story[]): string {
   }).filter(Boolean).join("\n");
 }
 
-// The scripts are written for Phase 1, where a passenger ("wrangler") holds the answer key.
-// Through the connector there is no wrangler: on 2026-10-15 Claude voice followed the script and
-// said "Wrangler, check the secrets." aloud instead of calling reveal. So the served script has
-// those hand-offs rewritten into tool calls, with a short preface saying so.
-const CONNECTOR_PREFACE =
+// A short preface for the served script. The script itself is the connector version, built at
+// build time (tools/worker-data/connector.mjs), so nothing here depends on rewriting it.
+const prefaceFor = (s: Story) =>
   "## Playing through the Plot Speaks connector\n" +
-  "There is no wrangler or passenger in this mode, and you do not hold the answer key. Wherever this script mentions the wrangler or the secrets, use the tools instead: " +
-  "when the player formally accuses someone, call reveal with the story slug and the accused's name, then give the verdict it returns " +
-  "(it starts with Correct. or Innocent.). When the script calls for a cue, call get_cue. Never say the word \"wrangler\" aloud.\n\n";
+  (isMystery(s)
+    ? "The answer key stays on the Plot Speaks server, so you don't know the solution. When the player formally accuses someone, call check_accusation and give the verdict it returns. When they give up or ask for the full reveal, call reveal_solution.\n\n"
+    : "The hidden scenes stay on the Plot Speaks server. When the script calls for a cue, call get_cue and narrate its read-aloud part.\n\n");
 
-function forConnector(story: string): string {
-  return story
-    .replace(/say\s+"Wrangler,\s*check the secrets\.?"\s*(and wait)?/gi, "call the reveal tool with the accused person's name")
-    .replace(/"Wrangler,\s*check the secrets\.?"/gi, "the reveal tool")
-    .replace(/say\s+"Wrangler,\s*cue\s+(S\d+[a-z]?)\.?"\s*(and wait)?/gi, "call get_cue with cue $1")
-    .replace(/\*\*Wrangler cue:\*\*/g, "**Cue (call get_cue):**");
-}
 const log = (event: string, data: Record<string, unknown>) => console.log(JSON.stringify({ event, ...data }));
 
-// The play tools only read story data; start_story and reveal also record an anonymous play
-// event (no transcript, no personal data). rate_story stores the player's rating.
-const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false };
+// Annotations. "Records" tools write an anonymous play event (no transcript, no personal data);
+// the read-only ones change nothing (the per-day request tally in usage.ts is server telemetry).
+const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 const RECORDS = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false };
 
-type Ctx = { db?: D1Database; tester: boolean; client: string | null; env: Env; ip: string };
+// chatgpt: the request came from ChatGPT (its User-Agent, or openai/* keys in a tools/call _meta).
+type Ctx = { db?: D1Database; tester: boolean; client: string | null; chatgpt: boolean; env: Env; ip: string };
 
 // Built-in stories first, then approved submissions from D1 (same shape; secrets stay server-side).
-async function catalog(ctx: Ctx): Promise<Story[]> {
+async function allStories(ctx: Ctx): Promise<Story[]> {
   const extra = await loadApprovedStories(ctx.db);
-  const all = extra.length ? [...STORIES, ...extra.filter((e) => !BUILTINS.slugs.has(e.slug))] : STORIES;
-  // OpenAI's plugin rules bar anything that targets children under 13, so the family stories are
-  // not offered to ChatGPT (Ben, 2026-10-16, option B). They stay on the site and in other assistants.
-  return isChatGPT(ctx.client) ? all.filter((s) => s.genre !== "kids") : all;
+  return extra.length ? [...STORIES, ...extra.filter((e) => !BUILTINS.slugs.has(e.slug))] : STORIES;
 }
-// ChatGPT's MCP client identifies itself in the User-Agent (e.g. "openai-mcp/1.0.0").
-const isChatGPT = (ua: string | null) => /openai|chatgpt/i.test(ua ?? "");
+// OpenAI's plugin rules bar anything that targets children under 13, so the family stories are
+// not offered to ChatGPT (Ben, 2026-10-16, option B). They stay on the site and in other assistants.
+const visibleTo = (ctx: Ctx, all: Story[]) => (ctx.chatgpt ? all.filter((s) => s.genre !== "kids") : all);
+async function catalog(ctx: Ctx): Promise<Story[]> {
+  return visibleTo(ctx, await allStories(ctx));
+}
+const titleList = (list: Story[]) => [...list].sort((a, b) => a.title.localeCompare(b.title)).map((x) => `${x.title} (${x.slug})`).join(", ");
 
-// Recording must never break play: failures are logged and swallowed.
+// Resolves a spoken title or slug to a story, failing closed (review B2/S2). For ChatGPT the match
+// is made against the whole catalog, so a family title never falls through to a similar-sounding
+// story; it answers "isn't available" instead.
+async function resolveStory(ctx: Ctx, slug: string): Promise<{ s: Story; error?: undefined } | { s?: undefined; error: string }> {
+  const all = await allStories(ctx);
+  const visible = visibleTo(ctx, all);
+  const m = matchStory(slug, all) as { story: Story | null; candidates?: Story[] };
+  if (m.story && ctx.chatgpt && m.story.genre === "kids") {
+    return { error: `That story isn't available in ChatGPT. Stories you can play here include: ${titleList(visible)}.` };
+  }
+  if (m.story) return { s: m.story };
+  const near = (m.candidates ?? []).filter((x) => visible.includes(x));
+  const shown = String(slug).slice(0, 80);
+  return { error: near.length ? `No story called "${shown}". Did you mean: ${titleList(near)}?` : `No story called "${shown}". The stories are: ${titleList(visible)}.` };
+}
+
+// Gate 2's permanent count (review S4): +1 the first time a stranger's play reaches an accusation,
+// a rating or the full reveal, if the play is at least a minute old. completions' primary key makes
+// it idempotent, and the totals bump only follows this request's own insert (matched by nonce), so a
+// retried or concurrent call can't count twice. Both run in one db.batch (a D1 transaction).
+const MIN_PLAY_MS = 60_000;
+function completionStatements(db: D1Database, playId: string): D1PreparedStatement[] {
+  const nonce = crypto.randomUUID();
+  const now = Date.now();
+  return [
+    db.prepare(`INSERT OR IGNORE INTO completions (play_id, at, nonce)
+      SELECT p.id, ?, ? FROM plays p WHERE p.id = ? AND p.tester = 0 AND p.started_at <= ?`).bind(now, nonce, playId, now - MIN_PLAY_MS),
+    db.prepare(`INSERT INTO totals (key, n)
+      SELECT 'completed_stranger_plays', 1 FROM completions WHERE play_id = ? AND nonce = ?
+      ON CONFLICT(key) DO UPDATE SET n = n + 1`).bind(playId, nonce),
+  ];
+}
+
+// Recording must never break play: failures are logged and swallowed. If the completion
+// statements fail (e.g. their table is missing), the event itself is still written.
+async function recordBatch(ctx: Ctx, playId: string | null | undefined, events: (db: D1Database) => D1PreparedStatement[]) {
+  const db = ctx.db;
+  if (!db) return;
+  try {
+    await db.batch([...(playId ? completionStatements(db, playId) : []), ...events(db)]);
+  } catch (e) {
+    log("db_error", { message: String(e).slice(0, 200) });
+    if (playId) {
+      try { await db.batch(events(db)); } catch (e2) { log("db_error", { message: String(e2).slice(0, 200) }); }
+    }
+  }
+}
 async function record(ctx: Ctx, sql: string, ...args: unknown[]) {
   if (!ctx.db) return;
-  try { await ctx.db.prepare(sql).bind(...args).run(); } catch (e) { log("db_error", { message: String(e) }); }
+  try { await ctx.db.prepare(sql).bind(...args).run(); } catch (e) { log("db_error", { message: String(e).slice(0, 200) }); }
 }
 
+const SLUG = z.string().min(2).max(80);
+const PLAY_ID = z.string().min(1).max(40);
+
 function createServer(ctx: Ctx) {
-  const gpt = isChatGPT(ctx.client);
+  const gpt = ctx.chatgpt;
   const server = new McpServer(
     {
       name: "plot-speaks",
       title: "Plot Speaks",
-      version: "0.4.0",
+      version: "0.5.0",
       description: "Interactive murder mysteries and adventures to play by voice with your assistant as the narrator, plus a studio for writing and submitting your own.",
       websiteUrl: "https://plotspeaks.com",
       icons: [{ src: "https://plotspeaks.com/icon-512.png", mimeType: "image/png", sizes: ["512x512"] }],
@@ -188,7 +202,7 @@ function createServer(ctx: Ctx) {
     "open_plot_speaks",
     {
       title: "Open Plot Speaks",
-      annotations: { title: "Open Plot Speaks", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      annotations: { ...READ_ONLY, title: "Open Plot Speaks" },
       description: "Returns the Plot Speaks welcome: a short spoken introduction, a question offering to list the stories, start one or write one, and a menu of story categories with example titles.",
       inputSchema: {},
     },
@@ -209,12 +223,11 @@ function createServer(ctx: Ctx) {
     {
       title: "List stories",
       annotations: { ...READ_ONLY, title: "List stories" },
-      description: `Lists the Plot Speaks stories that can be played by voice, with length and number of players, optionally for one category: murder mysteries (classic or dark), ${gpt ? "" : "family mysteries, "}or fantasy adventures.`,
+      description: "Lists the Plot Speaks stories that can be played by voice, with length and number of players, optionally for one category: murder mysteries (classic or dark) or fantasy adventures.",
       // Optional inputs rather than none: one client called the input-less version before loading it.
       inputSchema: {
-        genre: (gpt ? z.enum(LIST_GENRES_GPT) : z.enum(LIST_GENRES)).optional().describe(gpt
-          ? "Only list this category: murder-mystery (all murder mysteries), classic (murder mysteries that aren't dark), dark (dark murder mysteries) or adventure"
-          : "Only list this category: murder-mystery (all murder mysteries), classic (murder mysteries that aren't dark), dark (dark murder mysteries), kids (family mysteries) or adventure"),
+        genre: (gpt ? z.enum(LIST_GENRES_GPT) : z.enum(LIST_GENRES)).optional().describe(
+          "Only list this category: murder-mystery (all murder mysteries), classic (murder mysteries that aren't dark), dark (dark murder mysteries) or adventure"),
         group_by_category: z.boolean().optional().describe("True to group the list under category headings"),
       },
     },
@@ -239,44 +252,118 @@ function createServer(ctx: Ctx) {
       // Not read-only: it logs an anonymous play (no transcript, no personal data). Directories reject
       // annotations that don't match behaviour.
       annotations: { ...RECORDS, title: "Start a story" },
-      description: "Loads a Plot Speaks story by slug or title. Returns its full script (setting, cast, scenes, and how the game is narrated) and a play id. Records an anonymous play.",
-      inputSchema: { slug: z.string().describe("The story's slug or title, e.g. example-dinner-party or The Last Toast") },
+      description: "Loads a Plot Speaks story by slug or title. Returns its script (setting, cast, scenes, and how the game is narrated; one chapter at a time for two-chapter stories) and a play id. Records an anonymous play.",
+      inputSchema: {
+        slug: SLUG.describe("The story's slug or title, e.g. example-dinner-party or The Last Toast"),
+        chapter: z.number().int().min(1).max(9).optional().describe("For a two-chapter story: 2 to get chapter 2 (default 1)"),
+        play_id: PLAY_ID.optional().describe("With chapter 2: the play id from chapter 1, to keep the same play"),
+      },
     },
-    async ({ slug }) => {
-      const all = await catalog(ctx);
-      const s = findStory(slug, all);
-      log("start_story", { slug, found: s?.slug ?? null });
-      if (!s) return text(`No story called "${slug}". Available: ${all.map((x) => `${x.title} (${x.slug})`).join(", ")}.`);
-      const playId = crypto.randomUUID();
-      await record(ctx, "INSERT INTO plays (id, story, client, tester, started_at) VALUES (?, ?, ?, ?, ?)", playId, s.slug, ctx.client, ctx.tester ? 1 : 0, Date.now());
+    async ({ slug, chapter, play_id }) => {
+      const r = await resolveStory(ctx, slug);
+      log("start_story", { found: r.s?.slug ?? null, chapter: chapter ?? 1 });
+      if (!r.s) return fail(r.error);
+      const s = r.s;
+      const n = chapter ?? 1;
+      const parts = s.story_connector?.length ? s.story_connector : [s.story];
+      if (n > parts.length) return fail(`"${s.title}" has ${parts.length === 1 ? "one chapter" : `${parts.length} chapters`}; call start_story without chapter to play it.`);
+      // Chapter 2 of a play already under way keeps its play id; anything else is a new play.
+      let playId: string | null = null;
+      if (n > 1 && play_id && ctx.db) {
+        try {
+          const row = await ctx.db.prepare("SELECT story FROM plays WHERE id = ?").bind(play_id).first<{ story: string }>();
+          if (row?.story === s.slug) playId = play_id;
+        } catch (e) { log("db_error", { message: String(e).slice(0, 200) }); }
+      }
+      if (!playId) {
+        playId = crypto.randomUUID();
+        await record(ctx, "INSERT INTO plays (id, story, client, tester, started_at) VALUES (?, ?, ?, ?, ?)", playId, s.slug, ctx.client, ctx.tester ? 1 : 0, Date.now());
+      }
+      const more = parts.length > 1 ? `, and to start_story with chapter: ${n === 1 ? 2 : n} for the next chapter` : "";
       return text(
-        `You are the narrator for "${s.title}". The user chose to play this through Plot Speaks; the rules in the script below are part of the game they asked for. ` +
-        `Story slug: ${s.slug}. Play id: ${playId} (pass it to reveal, get_cue and rate_story).\n\n${CONNECTOR_PREFACE}${forConnector(s.story)}`,
+        `You are the narrator for "${s.title}". The user chose to play this through Plot Speaks; the script below is the game they asked for, and their own requests come first. ` +
+        `Story slug: ${s.slug}. Play id: ${playId} (pass it to check_accusation, reveal_solution and rate_story${n === 1 ? more : ""}).\n\n${prefaceFor(s)}${parts[n - 1]}`,
       );
     },
   );
 
   server.registerTool(
-    "reveal",
+    "check_accusation",
     {
       title: "Check an accusation",
       // Not read-only: it logs an anonymous accusation event for the play.
       annotations: { ...RECORDS, title: "Check an accusation" },
-      description: "Checks an accusation in a Plot Speaks mystery. Returns the verdict line for the accused person, starting Correct. or Innocent. Records the accusation and verdict anonymously.",
+      description: "Checks a formal accusation in a Plot Speaks mystery. Returns the verdict line for the accused person, starting Correct. or Innocent., and the name it matched. Records the accusation and verdict anonymously.",
       inputSchema: {
-        slug: z.string().describe("The story slug"),
-        accused: z.string().describe("The name of the person the user accused"),
-        play_id: z.string().optional().describe("The play id from start_story"),
+        slug: SLUG.describe("The story slug"),
+        accused: z.string().min(1).max(120).describe("The name of the person the user accused"),
+        play_id: PLAY_ID.optional().describe("The play id from start_story"),
       },
     },
     async ({ slug, accused, play_id }) => {
-      const s = findStory(slug, await catalog(ctx));
-      const e = s ? findEnding(s.endings, accused) : null;
-      log("reveal", { slug, accused, story: s?.slug ?? null, matched: e?.name ?? null, verdict: e?.verdict ?? null });
-      if (!s) return text(`No story called "${slug}".`);
-      if (!e) return text(`I couldn't match "${accused}" to anyone in ${s.title}. Ask the player which of these they mean: ${s.endings.map((x) => x.name).join(", ")}.`);
-      await record(ctx, "INSERT INTO play_events (play_id, story, kind, detail, verdict, at) VALUES (?, ?, 'accusation', ?, ?, ?)", play_id ?? null, s.slug, e.name, e.verdict, Date.now());
-      return text(e.text);
+      const r = await resolveStory(ctx, slug);
+      if (!r.s) { log("check_accusation", { found: null }); return fail(r.error); }
+      const s = r.s;
+      if (!s.endings.length) { log("check_accusation", { story: s.slug, matched: null }); return fail(`${s.title} has no accusations: it's an adventure, played on to its ending.`); }
+      const m = matchEnding(s.endings, accused) as { ending: Ending | null; candidates: string[] };
+      // The matched name, never the raw accusation text (review S11).
+      log("check_accusation", { story: s.slug, matched: m.ending?.name ?? null, verdict: m.ending?.verdict ?? null, candidates: m.candidates?.length ?? 0, play_id: Boolean(play_id) });
+      if (!m.ending && m.candidates.length) {
+        return fail(`"${String(accused).slice(0, 120)}" could be more than one person in ${s.title}: ${m.candidates.join(" or ")}. Ask the player which one they mean, then call check_accusation again.`);
+      }
+      if (!m.ending) return fail(`I couldn't match "${String(accused).slice(0, 120)}" to anyone in ${s.title}. Ask the player which of these they mean: ${sortedNames(s.endings).join(", ")}.`);
+      const e = m.ending;
+      await recordBatch(ctx, play_id, (db) => [
+        db.prepare("INSERT INTO play_events (play_id, story, kind, detail, verdict, at) VALUES (?, ?, 'accusation', ?, ?, ?)").bind(play_id ?? null, s.slug, e.name, e.verdict, Date.now()),
+      ]);
+      return text(`${e.text}\n\nmatched: ${e.name} (for you, not to read aloud: if that isn't who the player meant, ask them and check again)`);
+    },
+  );
+
+  server.registerTool(
+    "reveal_solution",
+    {
+      title: "Full reveal",
+      // Not read-only: it records a 'reveal' play event. It gives the whole solution, so it is gated:
+      // the play must have an accusation on record, or the player must have said they give up.
+      annotations: { ...RECORDS, title: "Full reveal" },
+      description: "Returns the full solution of a Plot Speaks mystery (who did it, why, and the clues that pointed there) and what became of each character. Only after the player has accused someone, or when they say they give up or ask for the full reveal (gave_up: true). Records the reveal anonymously.",
+      inputSchema: {
+        slug: SLUG.describe("The story slug"),
+        play_id: PLAY_ID.describe("The play id from start_story"),
+        gave_up: z.boolean().optional().describe("True when the player has said they give up or want the answer without accusing anyone"),
+      },
+    },
+    async ({ slug, play_id, gave_up }) => {
+      const r = await resolveStory(ctx, slug);
+      if (!r.s) { log("reveal_solution", { found: null }); return fail(r.error); }
+      const s = r.s;
+      const correct = s.endings.filter((e) => e.verdict === "correct");
+      if (!s.full_reveal && !correct.length) {
+        log("reveal_solution", { story: s.slug, outcome: "none" });
+        return fail(`${s.title} has no reveal: it's an adventure, so play on to its ending.`);
+      }
+      if (!gave_up) {
+        let accused = false;
+        try {
+          accused = Boolean(ctx.db && (await ctx.db.prepare("SELECT 1 AS ok FROM play_events WHERE play_id = ? AND story = ? AND kind = 'accusation' LIMIT 1").bind(play_id, s.slug).first()));
+        } catch (e) { log("db_error", { message: String(e).slice(0, 200) }); }
+        if (!accused) {
+          log("reveal_solution", { story: s.slug, outcome: "gated" });
+          return fail("Ask the player to accuse someone first, or confirm they want to give up.");
+        }
+      }
+      log("reveal_solution", { story: s.slug, outcome: gave_up ? "gave_up" : "after_accusation", full: Boolean(s.full_reveal) });
+      await recordBatch(ctx, play_id, (db) => [
+        db.prepare("INSERT INTO play_events (play_id, story, kind, detail, at) VALUES (?, ?, 'reveal', ?, ?)").bind(play_id, s.slug, gave_up ? "gave_up" : "after_accusation", Date.now()),
+      ]);
+      // Until a story has its ## Full reveal section, the culprit's Endings detail line stands in.
+      const readAloud = s.full_reveal?.read_aloud ?? correct.map((e) => e.text.replace(/^Correct\.\s*/, "")).join("\n\n");
+      const out = [`READ ALOUD (the solution, in your narrator voice; this ends the mystery):\n${readAloud}`];
+      if (s.full_reveal?.afterward) {
+        out.push(`WHAT BECAME OF THEM (read this aloud only if the player says yes to "Would you like to hear what became of each of them?"; ask first if you haven't):\n${s.full_reveal.afterward}`);
+      }
+      return text(out.join("\n\n"));
     },
   );
 
@@ -284,24 +371,24 @@ function createServer(ctx: Ctx) {
     "get_cue",
     {
       title: "Get a scene cue",
-      annotations: { ...RECORDS, title: "Get a scene cue" },
-      description: "Returns a cue from a Plot Speaks adventure: the scene text to narrate, and the scene's private notes for the narrator. Records which cue was fetched.",
+      // Read-only (review S7): it returns story data and records nothing.
+      annotations: { ...READ_ONLY, title: "Get a scene cue" },
+      description: "Returns a cue from a Plot Speaks adventure: the scene text to narrate, and the scene's notes for the narrator.",
       inputSchema: {
-        slug: z.string().describe("The story slug"),
-        cue: z.string().describe("The cue id, e.g. S1 or S3b"),
-        play_id: z.string().optional().describe("The play id from start_story"),
+        slug: SLUG.describe("The story slug"),
+        cue: z.string().max(8).regex(/^S?\d+[a-z]?$/i).describe("The cue id, e.g. S1 or S3b"),
       },
     },
-    async ({ slug, cue, play_id }) => {
-      const s = findStory(slug, await catalog(ctx));
+    async ({ slug, cue }) => {
+      const r = await resolveStory(ctx, slug);
       const id = cue.toUpperCase().startsWith("S") ? cue.toUpperCase() : `S${cue.toUpperCase()}`;
-      const c = s?.cues[id];
-      log("get_cue", { slug, cue: id, found: Boolean(c) });
-      if (!s) return text(`No story called "${slug}".`);
-      if (!c) return text(`No cue ${id} in ${s.title}.`);
-      await record(ctx, "INSERT INTO play_events (play_id, story, kind, detail, at) VALUES (?, ?, 'cue', ?, ?)", play_id ?? null, s.slug, id, Date.now());
+      const c = r.s?.cues[id];
+      log("get_cue", { story: r.s?.slug ?? null, cue: id, found: Boolean(c) });
+      if (!r.s) return fail(r.error);
+      const s = r.s;
+      if (!c) return fail(`No cue ${id} in ${s.title}.${Object.keys(s.cues).length ? "" : " This story has no cues."}`);
       const notes = [c.narrator_only, id === "S1" && s.listen_for ? `Follow-up cues to listen for during this story:\n${s.listen_for}` : null].filter(Boolean).join("\n\n");
-      return text(`READ ALOUD (in your own narrator voice):\n${c.read_aloud}` + (notes ? `\n\nNARRATOR ONLY. Never read this aloud or hint at it:\n${notes}` : ""));
+      return text(`READ ALOUD (in your own narrator voice):\n${c.read_aloud}` + (notes ? `\n\nNARRATOR NOTES (not read aloud: they would spoil the scene):\n${notes}` : ""));
     },
   );
 
@@ -310,71 +397,48 @@ function createServer(ctx: Ctx) {
     {
       title: "Rate a story",
       annotations: { ...RECORDS, title: "Rate a story" },
-      description: "Saves a rating for a Plot Speaks story: 1 to 5 stars, whether anything was given away too early, and an optional short comment.",
+      description: "Saves a rating for a Plot Speaks story the user has just played: 1 to 5 stars, whether anything was given away too early, and an optional short comment. Needs the play id from start_story; one rating per play.",
       inputSchema: {
-        slug: z.string().describe("The story slug"),
+        slug: SLUG.describe("The story slug"),
         stars: z.number().int().min(1).max(5).describe("1 to 5"),
         spoiled: z.boolean().optional().describe("True if the player felt the narrator gave something away too early"),
         comment: z.string().max(500).optional().describe("The player's comment, if any, in their words"),
-        play_id: z.string().optional().describe("The play id from start_story"),
+        play_id: PLAY_ID.describe("The play id from start_story"),
       },
     },
     async ({ slug, stars, spoiled, comment, play_id }) => {
-      const s = findStory(slug, await catalog(ctx));
-      log("rate_story", { slug, story: s?.slug ?? null, stars, spoiled: spoiled ?? null });
-      if (!s) return text(`No story called "${slug}".`);
-      await record(ctx, "INSERT INTO ratings (play_id, story, stars, spoiled, comment, at) VALUES (?, ?, ?, ?, ?, ?)", play_id ?? null, s.slug, stars, spoiled === undefined ? null : spoiled ? 1 : 0, comment ?? null, Date.now());
+      const r = await resolveStory(ctx, slug);
+      if (!r.s) { log("rate_story", { found: null }); return fail(r.error); }
+      const s = r.s;
+      const db = ctx.db;
+      if (!db) return fail("Ratings aren't available on this server right now. Nothing was saved.");
+      let play: { story: string; tester: number } | null = null;
+      try { play = await db.prepare("SELECT story, tester FROM plays WHERE id = ?").bind(play_id).first(); } catch (e) { log("db_error", { message: String(e).slice(0, 200) }); }
+      if (!play || play.story !== s.slug) {
+        log("rate_story", { story: s.slug, outcome: "no_play" });
+        return fail(`I couldn't find that play of ${s.title}. A rating needs the play id start_story returned for this story; nothing was saved.`);
+      }
+      // Tester ratings are kept for us and left out of the public averages (review S3).
+      const tester = play.tester || ctx.tester ? 1 : 0;
+      log("rate_story", { story: s.slug, stars, spoiled: spoiled ?? null, tester });
+      await recordBatch(ctx, play_id, (d) => [
+        d.prepare("DELETE FROM ratings WHERE play_id = ?").bind(play_id),
+        d.prepare("INSERT INTO ratings (play_id, story, stars, spoiled, comment, at, tester) VALUES (?, ?, ?, ?, ?, ?, ?)")
+          .bind(play_id, s.slug, stars, spoiled === undefined ? null : spoiled ? 1 : 0, comment ?? null, Date.now(), tester),
+      ]);
       return text("Thanks, rating saved.");
     },
   );
 
-  // ------------------------------------------------------------ Story Studio (read side, M4)
-  server.registerPrompt(
-    "story_template",
-    {
-      title: "Write a Plot Speaks story",
-      description: "The Plot Speaks story format, with a short interview for drafting story.md and secrets.md.",
-      argsSchema: z.object({
-        genre: (gpt ? z.enum(TEMPLATE_GENRES_GPT) : z.enum(GENRES)).optional().describe(gpt ? "murder-mystery (default) or adventure" : "murder-mystery (default), kids, or adventure"),
-        length: z.enum(LENGTHS).optional().describe("20 or 30 (minutes, one chapter; default 30), or 2-chapter"),
-      }),
-    },
-    ({ genre, length }) => {
-      log("story_template", { genre: genre ?? null, length: length ?? null });
-      return { messages: [{ role: "user" as const, content: { type: "text" as const, text: storyTemplate(genre, length) } }] };
-    },
-  );
-
-  server.registerTool(
-    "check_story",
-    {
-      title: "Check a story draft",
-      annotations: { title: "Check a story draft", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-      description: "Check a draft Plot Speaks story against the format rules (front matter, GM instructions, spoken intro, chapters and recap blocks, read-aloud length, no audio cues, protected names; with secrets_md, also cues and the Correct./Innocent. verdict lines). Returns ERROR and WARN lines with line numbers. Nothing submitted is stored.",
-      inputSchema: {
-        story_md: z.string().max(60000).describe("The full text of story.md"),
-        secrets_md: z.string().max(60000).optional().describe("The full text of secrets.md, if written"),
-        slug: z.string().max(64).optional().describe("The story's folder name, e.g. the-last-toast; checks that name is plotspeaks-<slug>"),
-      },
-    },
-    async ({ story_md, secrets_md, slug }) => {
-      const { report, errors, warnings } = checkSubmitted(story_md, secrets_md, slug);
-      // Counts only: never the submitted text, title or slug.
-      log("check_story", { story_chars: story_md.length, secrets_chars: secrets_md?.length ?? 0, errors, warnings });
-      return text(report);
-    },
-  );
-
+  // ------------------------------------------------------------ Story Studio (write and review)
   server.registerTool(
     "write_story",
     {
       title: "Write a story",
-      annotations: { title: "Write a story", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      annotations: { ...READ_ONLY, title: "Write a story" },
       description: "Returns material for writing a Plot Speaks story: a short introduction to how a story is built (a public story.md and a private answer key, secrets.md, reviewed by a person before anything is published), a suggested way to draft and review it together, and the format template.",
       inputSchema: {
-        genre: (gpt ? z.enum(WRITE_GENRES_GPT) : z.enum(WRITE_GENRES)).optional().describe(gpt
-          ? "murder-mystery (default), dark (a dark murder mystery) or adventure"
-          : "murder-mystery (default), dark (a dark murder mystery), kids (a family mystery; nobody gets hurt) or adventure"),
+        genre: (gpt ? z.enum(WRITE_GENRES_GPT) : z.enum(WRITE_GENRES)).optional().describe("murder-mystery (default), dark (a dark murder mystery) or adventure"),
         length: z.enum(LENGTHS).optional().describe("20 or 30 (minutes, one chapter; default 30), or 2-chapter"),
       },
     },
@@ -388,18 +452,19 @@ function createServer(ctx: Ctx) {
     "review_story",
     {
       title: "Review a story draft",
-      annotations: { title: "Review a story draft", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-      description: "Runs the format checks on a draft story.md and secrets.md together (including whether story.md gives the culprit away). Returns a status, the findings with line numbers, and a fair-play checklist. Nothing sent is stored.",
+      annotations: { ...READ_ONLY, title: "Review a story draft" },
+      description: "Runs the format checks on a draft story.md, and with secrets.md also the answer-key checks (including whether story.md gives the culprit away). Returns a status, the findings with line numbers, and a fair-play checklist. Nothing sent is stored.",
       inputSchema: {
         story_md: z.string().min(1).max(60000).describe("The full text of story.md"),
-        secrets_md: z.string().max(60000).describe("The full text of secrets.md (the private answer key)"),
+        secrets_md: z.string().max(60000).optional().describe("The full text of secrets.md (the private answer key), if written"),
+        slug: z.string().max(80).optional().describe("The story's folder name, e.g. the-last-toast; checks that name is plotspeaks-<slug>"),
       },
     },
-    async ({ story_md, secrets_md }) => {
-      const r = reviewStory(story_md, secrets_md);
+    async ({ story_md, secrets_md, slug }) => {
+      const rv = reviewStory(story_md, secrets_md ?? "", slug);
       // Counts only: never the submitted text, title or slug.
-      log("review_story", { story_chars: story_md.length, secrets_chars: secrets_md.length, errors: r.errors, warnings: r.warnings });
-      return text(r.report);
+      log("review_story", { story_chars: story_md.length, secrets_chars: secrets_md?.length ?? 0, errors: rv.errors, warnings: rv.warnings });
+      return text(rv.report);
     },
   );
 
@@ -419,7 +484,10 @@ function createServer(ctx: Ctx) {
         claim_code: z.string().max(40).optional().describe("Only to update an earlier submission: the claim code from its receipt"),
       },
     },
-    async (args) => text(await submitStory(ctx.env, ctx.ip, BUILTINS, args)),
+    async (args) => {
+      const out = await submitStory(ctx.env, { ip: ctx.ip, connector: connectorOf(ctx) }, BUILTINS, args);
+      return /^Not submitted|^Submissions aren't available/.test(out) ? fail(out) : text(out);
+    },
   );
 
   server.registerTool(
@@ -433,11 +501,29 @@ function createServer(ctx: Ctx) {
         claim_code: z.string().min(1).max(40).describe("The claim code from the receipt, e.g. ABCD-EFGH-JKMN"),
       },
     },
-    async ({ id, claim_code }) => text(await withdrawSubmission(ctx.env, { id, claim_code })),
+    async ({ id, claim_code }) => {
+      const out = await withdrawSubmission(ctx.env, { id, claim_code });
+      return /^Not withdrawn|aren't available/.test(out) ? fail(out) : text(out);
+    },
   );
 
   return server;
 }
+
+// The assistant whose connector made the request, or null for a direct caller. Connector traffic
+// comes from the assistant company's servers, so its IP says nothing about the person (review S6).
+const connectorOf = (ctx: Ctx): string | null => {
+  if (ctx.chatgpt) return "ChatGPT";
+  const a = assistantOf(ctx.client);
+  return a === "Other" ? null : a;
+};
+
+// ChatGPT's MCP client identifies itself in the User-Agent (e.g. "openai-mcp/1.0.0"). OpenAI
+// documents no stable UA, so a tools/call carrying openai/* _meta keys counts too (fail closed).
+const isChatGPTUa = (ua: string | null) => /openai|chatgpt/i.test(ua ?? "");
+const hasOpenAiMeta = (msgs: any[]) =>
+  msgs.some((m) => m && m.method === "tools/call" && m.params && typeof m.params._meta === "object" && m.params._meta !== null
+    && Object.keys(m.params._meta).some((k) => k.startsWith("openai/")));
 
 type Env = SubEnv & { ASSETS?: { fetch: (request: Request) => Promise<Response> }; OPENAI_APPS_CHALLENGE?: string };
 
@@ -477,20 +563,22 @@ async function serveAudio(request: Request, assets: NonNullable<Env["ASSETS"]>):
 
 // ------------------------------------------------------------------ passenger page API
 // JSON for the site's public passenger page (for players who paste the story into a chat with no
-// connector). Each endpoint does what reveal or get_cue does, one answer at a time, and logs the
-// same way with app "passenger-page":
-//   GET /api/stories/<slug>/names           {"names": [...]}            Endings detail names only
-//   GET /api/stories/<slug>/check?name=<n>  {"verdict", "line"}          one ending line (fuzzy match)
-//   GET /api/stories/<slug>/cue/<id>        {"read_aloud": "..."}       never the narrator-only part
+// connector). Each endpoint does what check_accusation, get_cue or reveal_solution does, one answer
+// at a time, and logs the same way with app "passenger-page":
+//   GET /api/stories/<slug>/names           {"names": [...]}            Endings detail names only, sorted
+//   GET /api/stories/<slug>/check?name=<n>  {"verdict", "line"}          one ending line (same matching as check_accusation)
+//   GET /api/stories/<slug>/cue/<id>        {"read_aloud": "..."}       never the narrator notes
 //   GET /api/stories/<slug>/listen          {"follow_ups": [{when, cue}]} the Listen-for table, so a passenger knows when to call S2b etc.
-// Unknown slug, cue or name: 404 JSON. Slugs match exactly (the page links them), not fuzzily.
+//   GET /api/stories/<slug>/full-reveal     {"read_aloud", "afterward"}  the ## Full reveal section (the page asks the passenger to confirm first)
+// Unknown slug, cue or name: 404 JSON (an ambiguous name: 404 with "candidates"). Slugs match
+// exactly (the page links them), not fuzzily.
 const PASSENGER = "passenger-page";
 const apiJson = (data: unknown, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-robots-tag": "noindex" } });
 
 async function handlePassengerApi(request: Request, env: Env): Promise<Response | null> {
   const url = new URL(request.url);
-  const m = /^\/api\/stories\/([a-z0-9-]+)\/(names|check|listen|cue\/([A-Za-z0-9]+))\/?$/.exec(url.pathname);
+  const m = /^\/api\/stories\/([a-z0-9-]+)\/(names|check|listen|full-reveal|cue\/([A-Za-z0-9]+))\/?$/.exec(url.pathname);
   if (!m) return url.pathname.startsWith("/api/") ? apiJson({ error: "not_found" }, 404) : null;
   if (request.method !== "GET" && request.method !== "HEAD") return apiJson({ error: "method_not_allowed" }, 405);
   const [, slug, what, cueId] = m;
@@ -499,16 +587,16 @@ async function handlePassengerApi(request: Request, env: Env): Promise<Response 
   const db = env.DB;
   const recordEvent = async (sql: string, ...args: unknown[]) => {
     if (!db) return;
-    try { await db.prepare(sql).bind(...args).run(); } catch (e) { log("db_error", { message: String(e) }); }
+    try { await db.prepare(sql).bind(...args).run(); } catch (e) { log("db_error", { message: String(e).slice(0, 200) }); }
   };
   if (what === "names") {
     log("passenger_names", { app: PASSENGER, story: s.slug });
     // Sorted, so the order in secrets.md (often the culprit first) gives nothing away.
-    return apiJson({ names: s.endings.map((e) => e.name).sort((a, b) => a.localeCompare(b)) });
+    return apiJson({ names: sortedNames(s.endings) });
   }
   if (what === "listen") {
-    // The wrangler-only "Listen for" table: what to listen for, and which follow-up cue to call then.
-    const rows = (s.listen_for ?? "").split(/\r?\n/)
+    // The paste-play "Listen for" table: what to listen for, and which follow-up cue to call then.
+    const rows = (s.listen_for_raw ?? s.listen_for ?? "").split(/\r?\n/)
       .filter((l) => /^\|/.test(l) && !/^\|\s*-/.test(l))
       .map((l) => l.split("|").slice(1, -1).map((c) => c.trim()))
       .filter((r) => r.length >= 2 && !/^when you hear/i.test(r[0]))
@@ -516,18 +604,26 @@ async function handlePassengerApi(request: Request, env: Env): Promise<Response 
     log("passenger_listen", { app: PASSENGER, story: s.slug, rows: rows.length });
     return apiJson({ follow_ups: rows });
   }
+  if (what === "full-reveal") {
+    log("reveal_solution", { app: PASSENGER, story: s.slug, found: Boolean(s.full_reveal) });
+    if (!s.full_reveal) return apiJson({ error: "no_reveal" }, 404);
+    await recordEvent("INSERT INTO play_events (play_id, story, kind, detail, at, app) VALUES (NULL, ?, 'reveal', 'passenger', ?, ?)", s.slug, Date.now(), PASSENGER);
+    return apiJson({ read_aloud: s.full_reveal.read_aloud, afterward: s.full_reveal.afterward });
+  }
   if (what === "check") {
     const accused = (url.searchParams.get("name") ?? "").trim().slice(0, 120);
     if (!accused) return apiJson({ error: "missing_name" }, 400);
-    const e = findEnding(s.endings, accused);
-    log("reveal", { app: PASSENGER, slug, accused, story: s.slug, matched: e?.name ?? null, verdict: e?.verdict ?? null });
-    if (!e) return apiJson({ error: "no_match", names: s.endings.map((x) => x.name).sort((a, b) => a.localeCompare(b)) }, 404);
+    const r = matchEnding(s.endings, accused) as { ending: Ending | null; candidates?: string[] };
+    const e = r.ending;
+    const cands = r.candidates ?? [];
+    log("check_accusation", { app: PASSENGER, story: s.slug, matched: e?.name ?? null, verdict: e?.verdict ?? null, candidates: cands.length });
+    if (!e) return apiJson({ error: "no_match", names: cands.length ? cands : sortedNames(s.endings), ...(cands.length ? { candidates: cands } : {}) }, 404);
     await recordEvent("INSERT INTO play_events (play_id, story, kind, detail, verdict, at, app) VALUES (NULL, ?, 'accusation', ?, ?, ?, ?)", s.slug, e.name, e.verdict, Date.now(), PASSENGER);
     return apiJson({ verdict: e.verdict === "correct" ? "correct" : "wrong", line: e.text });
   }
   const id = cueId.toUpperCase().startsWith("S") ? cueId.toUpperCase() : `S${cueId.toUpperCase()}`;
   const c = s.cues[id];
-  log("get_cue", { app: PASSENGER, slug, cue: id, found: Boolean(c) });
+  log("get_cue", { app: PASSENGER, story: s.slug, cue: id, found: Boolean(c) });
   if (!c) return apiJson({ error: "unknown_cue" }, 404);
   await recordEvent("INSERT INTO play_events (play_id, story, kind, detail, at, app) VALUES (NULL, ?, 'cue', ?, ?, ?)", s.slug, id, Date.now(), PASSENGER);
   return apiJson({ read_aloud: c.read_aloud });
@@ -542,6 +638,9 @@ function sameKey(a: string, b: string): boolean {
   return diff === 0;
 }
 
+// 301 for pages; 308 (method-preserving) for anything else, so a redirected POST stays a POST (S15).
+const redirect = (request: Request, to: string) => Response.redirect(to, request.method === "GET" || request.method === "HEAD" ? 301 : 308);
+
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
     const url = new URL(request.url);
@@ -549,13 +648,13 @@ export default {
     // the request's origin; Claude refuses an http connector URL (Ben, 2026-10-16). Send everyone to https.
     if (url.protocol === "http:" && url.hostname !== "localhost" && url.hostname !== "127.0.0.1") {
       url.protocol = "https:";
-      return Response.redirect(url.toString(), 301);
+      return redirect(request, url.toString());
     }
     // plotspeaks.com is the home (Ben bought it 2026-10-16). The old address and www redirect there,
     // except the old /mcp, which keeps answering: connectors added before the move post to it, and
     // MCP clients don't reliably follow a redirect on POST.
     if (url.hostname === "www.plotspeaks.com" || (url.hostname === "plotspeaks.volocent.com" && url.pathname !== "/mcp")) {
-      return Response.redirect(`https://plotspeaks.com${url.pathname}${url.search}`, 301);
+      return redirect(request, `https://plotspeaks.com${url.pathname}${url.search}`);
     }
     if (url.pathname.startsWith("/audio/") && env.ASSETS && (request.method === "GET" || request.method === "HEAD")) {
       return serveAudio(request, env.ASSETS);
@@ -576,7 +675,7 @@ export default {
       try { dbOk = Boolean(env.DB && (await env.DB.prepare("SELECT 1 AS ok").first())); } catch { dbOk = false; }
       return apiJson({ ok: dbOk, environment: env.ENVIRONMENT ?? null, db: dbOk ? "ok" : "unavailable" }, dbOk ? 200 : 503);
     }
-    // The passenger page's answer-key endpoints (public, one answer at a time, like reveal/get_cue).
+    // The passenger page's answer-key endpoints (public, one answer at a time, like the MCP tools).
     const api = await handlePassengerApi(request, env);
     if (api) return api;
     // The catalog pages are public: they show only public story text (see site.ts). The access
@@ -626,12 +725,15 @@ export default {
     // Plays made with the access key are ours (testers); Gate 2 counts strangers only.
     const tester = Boolean(env.DEV_ACCESS_KEY) || Boolean(presented);
     const client = (request.headers.get("user-agent") ?? "").slice(0, 80) || null;
+    const chatgpt = isChatGPTUa(client) || hasOpenAiMeta(msgs);
+    // A tool call from a client we don't recognise: logged (the UA only) to spot a changed UA early.
+    if (!chatgpt && assistantOf(client) === "Other" && msgs.some((m) => m?.method === "tools/call")) log("unrecognised_client", { client });
     const ip = request.headers.get("cf-connecting-ip") ?? "";
     // MCP requests, tool calls and errors are tallied for the admin stats (src/usage.ts), from a
     // clone of the reply read after it has gone out. Only POSTs carry JSON-RPC messages.
     let res: Response;
     try {
-      res = await createMcpHandler(() => createServer({ db: env.DB, tester, client, env, ip }))(request, env, ctx);
+      res = await createMcpHandler(() => createServer({ db: env.DB, tester, client, chatgpt, env, ip }))(request, env, ctx);
     } catch (e) {
       if (request.method === "POST") ctx.waitUntil(countMcp(env.DB, msgs, null, tester, "exception"));
       throw e;

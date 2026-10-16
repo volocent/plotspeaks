@@ -12,7 +12,8 @@
 // assets binding before this code runs; index.ts answers other /covers/ paths (submissions, 404).
 //
 // NO SECRETS ON THESE PAGES. The generated story data also carries each mystery's Endings
-// detail lines (the verdicts reveal returns) and each adventure's cue read-aloud text (get_cue).
+// detail lines (the verdicts check_accusation returns), the full reveals (reveal_solution) and
+// each adventure's cue read-aloud text (get_cue).
 // This module never sees them: it only accepts a PublicStory, which index.ts builds with
 // toPublic() from the slug and the public story.md text alone, and every field shown here
 // (title, genre, rating, pitch...) is parsed from that text's front matter and cold open.
@@ -847,7 +848,8 @@ details.script pre{margin:0;padding:0 18px 18px;white-space:pre-wrap;word-break:
 .confirm .btn-ghost{flex:0 0 auto;min-height:60px}
 .answer{margin:8px 0 22px;padding:20px;border-radius:24px;background:linear-gradient(160deg,var(--navy),#0B2643);color:#F6F0E6;box-shadow:var(--shadow-lg)}
 .answer .say-label{display:block;font:700 .74rem/1.3 var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--peach);margin:0 0 10px}
-.answer .line{font:500 clamp(1.2rem,4.6vw,1.45rem)/1.45 var(--serif);font-variation-settings:"SOFT" 80,"opsz" 36;margin:0 0 18px}
+.answer .line{font:500 clamp(1.2rem,4.6vw,1.45rem)/1.45 var(--serif);font-variation-settings:"SOFT" 80,"opsz" 36;margin:0 0 18px;white-space:pre-line}
+.confirm.danger{border-color:#C0392B}
 .answer .btn-ghost{color:#F6F0E6;box-shadow:inset 0 0 0 1.5px rgba(246,240,230,.45);width:100%}
 .answer .btn-ghost:hover{color:#fff;box-shadow:inset 0 0 0 1.5px var(--peach)}
 .pass-msg{min-height:1.5em;margin:0 0 12px;font-weight:600;color:var(--ink-2)}
@@ -1177,7 +1179,7 @@ ${lead ? sampleCard(lead) : ""}
 <p>Your assistant tells the story, but it never sees who did it. When you accuse someone, it asks Plot Speaks, and Plot Speaks says whether you're right. So the narrator can't spoil the ending, even by accident.</p>
 <p>Adventures work the same way: the big surprises stay with Plot Speaks until you reach them.</p></div>
 <div class="panel"><h3>${icon("shield", 26)} Your conversation stays with your assistant</h3>
-<p>Plot Speaks never hears you. It only sees what your assistant sends it: the story you picked, the name you accused, and any rating you give. We count those plays without names or accounts, to learn which stories work.</p>
+<p>Plot Speaks never hears you. It receives only what the tools are given: the story name, the accused name, a rating or a submitted story; nothing else from your conversation. We count those plays without names or accounts, to learn which stories work.</p>
 <p class="fine">The chat itself lives in your assistant account (Claude, ChatGPT, Gemini or another), under that company's privacy terms.</p></div>
 </div>
 </div>
@@ -1406,6 +1408,23 @@ const PASSENGER_JS = `(function(){
   });
   var cf=document.getElementById("cue-form");
   if(cf)cf.addEventListener("submit",function(e){e.preventDefault();cue(cf.elements.cue.value);});
+  // Full reveal: the whole solution, so it takes a tap and a confirm, and is fetched only then.
+  var rl=document.getElementById("reveal-load"),rc=document.getElementById("reveal-confirm");
+  if(rl&&rc){
+    rl.addEventListener("click",function(){hide();rc.hidden=false;say("");});
+    document.getElementById("reveal-no").addEventListener("click",function(){rc.hidden=true;});
+    document.getElementById("reveal-go").addEventListener("click",function(){
+      rc.hidden=true;say("Getting the full reveal…");
+      getJSON("/full-reveal").then(function(r){
+        if(r.ok&&r.json&&typeof r.json.read_aloud==="string"&&r.json.read_aloud){
+          var t=r.json.read_aloud;
+          if(typeof r.json.afterward==="string"&&r.json.afterward)t+="\\n\\nOnly if the player wants to hear what became of each of them:\\n"+r.json.afterward;
+          show("The full reveal: say “Wrangler,” then read this aloud",t);
+        }else if(r.status===404){say("This story has no full reveal yet.",true);}
+        else{say("Couldn't get the full reveal from Plot Speaks. Tap again in a moment.",true);}
+      }).catch(function(){say("Couldn't reach Plot Speaks. Check your signal and tap again.",true);});
+    });
+  }
   // Follow-up cues: the story's "Listen for" table, fetched only when the passenger asks for it.
   var fl=document.getElementById("follow-load"),fol=document.getElementById("follow");
   if(fl&&fol)fl.addEventListener("click",function(){
@@ -1442,6 +1461,15 @@ export function passengerPage(p: PublicStory, origin: string): string {
 <input id="name-in" name="name" type="text" inputmode="text" enterkeyhint="go" maxlength="80" placeholder="e.g. the housekeeper">
 <button class="btn btn-ghost" type="submit">Check</button>
 </form>
+</section>
+<section aria-labelledby="reveal-h">
+<h2 class="pass-step" id="reveal-h">When the player asks for the full reveal</h2>
+<p>After a wrong accusation the narrator offers “one more accusation, or the full reveal?”, and after a right one, to tell what became of everyone. If the player wants the reveal, or gives up, this shows the whole solution.</p>
+<p><button class="btn btn-ghost" type="button" id="reveal-load">${icon("eyeoff", 20)}Full reveal</button></p>
+<div class="confirm danger" id="reveal-confirm" hidden>
+<p>Spoiler: this shows the whole solution, who did it and why. Only tap if the player has asked for the full reveal or given up, and keep the screen away from anyone still playing.</p>
+<div class="row"><button class="btn btn-primary" type="button" id="reveal-go">${icon("key", 20)}Yes, show the solution</button><button class="btn btn-ghost" type="button" id="reveal-no">Cancel</button></div>
+</div>
 </section>`;
   const adventure = `<section aria-labelledby="cues-h">
 <h2 class="pass-step" id="cues-h">When the narrator says <q>Wrangler, cue S1</q></h2>
@@ -1591,8 +1619,8 @@ export function writePage(origin: string): string {
 </div>
 <h2>Under the hood</h2>
 <p>Your assistant uses the Studio tools on the same connector as the stories. You don't need to name them.</p>
-<div class="tool"><code>story_template</code><p>The interview and the format for a mystery, family mystery or adventure, at a length you choose.</p></div>
-<div class="tool"><code>check_story</code><p>Checks structure, read-aloud length, the stop phrase and more, and lists what to fix.</p></div>
+<div class="tool"><code>write_story</code><p>The format and a suggested way to draft the story together, for a mystery or an adventure, at a length you choose.</p></div>
+<div class="tool"><code>review_story</code><p>Checks structure, read-aloud length, the stop phrase, the answer key and more, lists what to fix, and adds a fair-play checklist.</p></div>
 <div class="tool"><code>submit_story</code><p>Sends your story in for review, with the credit name you chose, and gives you your claim code.</p></div>
 <p>Stories are published under <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a>, credited to the name you chose. The format is in <a href="https://github.com/volocent/plotspeaks/blob/main/docs/FORMAT.md">docs/FORMAT.md</a> on GitHub.</p>
 <p style="margin:36px 0 64px"><a class="link-arrow" href="/stories/example-dinner-party">See an example: The Last Toast ${icon("arrow", 18)}</a></p>
@@ -1615,7 +1643,7 @@ export function privacyPage(origin: string): string {
 <p class="muted">Last updated 16 October 2026.</p>
 </header>
 <h2>Your conversation</h2>
-<p>Your chat stays with your assistant's company (Anthropic for Claude, OpenAI for ChatGPT, and so on), under that company's privacy terms. Plot Speaks never hears your voice or sees the conversation. It only receives what your assistant sends when it uses a Plot Speaks tool.</p>
+<p>Your chat stays with your assistant's company (Anthropic for Claude, OpenAI for ChatGPT, and so on), under that company's privacy terms. Plot Speaks never hears your voice. It receives only what the tools are given: the story name, the accused name, a rating or a submitted story; nothing else from your conversation.</p>
 <h2>When you play through the connector</h2>
 <p>We record anonymous play data, to learn which stories work:</p>
 <ul>
@@ -1626,7 +1654,7 @@ export function privacyPage(origin: string): string {
 </ul>
 <p>We don't store your name, your account, transcripts, or your IP address with any of this.</p>
 <h2>When you submit a story</h2>
-<p>If you use <code>submit_story</code>, we store the story, its answer key, the name you chose to be credited as (a pen name is fine), the results of our automated content checks, a generated cover image, and the contact details you choose to give (optional, seen only by the reviewer). You get a claim code to withdraw or update it later. To limit submissions to a few a day, we keep a salted hash of your IP address, never the address itself. A person reviews every submission. If it's approved, the story is published under CC BY-NC 4.0 with your credit name; your contact details never are.</p>
+<p>If you use <code>submit_story</code>, we store the story, its answer key, the name you chose to be credited as (a pen name is fine), the results of our automated content checks, a generated cover image, and the contact details you choose to give (optional, seen only by the reviewer). You get a claim code to withdraw or update it later. Through Claude, ChatGPT or another assistant, your IP address never reaches us (the request comes from the assistant's company), so a site-wide daily limit applies instead. Only when a story is submitted to the server directly, not through an assistant, do we keep a salted hash of the connecting IP address, never the address itself, to limit submissions to a few a day. A person reviews every submission. If it's approved, the story is published under CC BY-NC 4.0 with your credit name; your contact details never are.</p>
 <h2>This website</h2>
 <p>No sign-in, no ads, no analytics scripts and no tracking cookies. The pages load fonts from Google Fonts, so your browser contacts Google's servers for them. Plot Speaks is hosted on Cloudflare, which processes every request and keeps short-lived operational logs.</p>
 <p>To see how the site and the connector are used, the server keeps daily tallies: how many times each page was viewed, and how many tool calls and errors there were. A tally is only a number per day; nothing about you, your browser or your address is stored with it.</p>
@@ -1728,11 +1756,12 @@ export function notFoundPage(origin = ""): string {
 const HTML = { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=60", "x-content-type-options": "nosniff" };
 
 async function loadRatings(db: D1Database | undefined): Promise<Map<string, RatingSummary>> {
-  // Strangers and testers count together for now; only the smoke test's own ratings are left out.
+  // Public averages count strangers only: tester ratings (ratings.tester, migration 0006: plays made
+  // with the access key, and the smoke tests) are left out, and the old smoke-test marker still is.
   const out = new Map<string, RatingSummary>();
   if (!db) return out;
   try {
-    const { results } = await db.prepare("SELECT story, AVG(stars) AS avg, COUNT(*) AS count FROM ratings WHERE comment IS NULL OR comment <> 'smoke test' GROUP BY story").all<{ story: string; avg: number; count: number }>();
+    const { results } = await db.prepare("SELECT story, AVG(stars) AS avg, COUNT(*) AS count FROM ratings WHERE coalesce(tester, 0) = 0 AND (comment IS NULL OR comment <> 'smoke test') GROUP BY story").all<{ story: string; avg: number; count: number }>();
     for (const r of results ?? []) out.set(r.story, { avg: Number(r.avg), count: Number(r.count) });
   } catch (e) {
     // Ratings are decoration: a missing table or a D1 hiccup must not take the catalog down.

@@ -3,7 +3,7 @@
 A story is a folder `stories/<slug>/` holding:
 
 - `story.md` — public. Everything the assistant needs to run the game, and nothing that spoils it. SKILL.md-compatible so it can be installed as a skill or served by the MCP server.
-- `secrets.md` — private. The solution and anything else the player must not see. Never committed (see `.gitignore`). In Phase 1 the GM-wrangler passenger holds it; in Phase 2 the Worker serves it through `reveal`.
+- `secrets.md` — private. The solution and anything else the player must not see. Never committed (see `.gitignore`). In Phase 1 the GM-wrangler passenger holds it; in Phase 2 the Worker serves it one answer at a time through `check_accusation`, `get_cue` and `reveal_solution`.
 
 Simulated playtests on 2026-10-15 (`docs/TESTING.md`) showed that narrators run long, invent details and volunteer hidden clues unless the GM instructions say otherwise, and that the rules below fix most of it (median turn 60–114 words before, 41–59 after). Design constraints that shaped this (see `docs/research-report.md`, "Voice and in-car reality check"):
 
@@ -54,8 +54,8 @@ metadata:
 - Pacing: trigger every pacing beat (a chapter end, a forced scene, a lead, the out-of-time ending) on something the narrator can observe in the conversation: a scene visited, a clue found, a named action ("once the player has examined the radio and watched the replay"), or a run of turns that found nothing new. Never on an exchange count or minutes: a narrator has no clock and does not count turns. A count may appear only as a rough backstop ("if it feels like a long time and the player is circling, end the chapter"). Evidence: in simulated play on 2026-10-15, exchange-count triggers ("Chapter 1 ends at exchange 20") were skipped or fired late in most runs, while event triggers ("if the player's last three turns turned up nothing new") fired in every run of all three stories.
 - Stop phrase: "Plot Speaks, pause the story." Resume phrase: "Plot Speaks, resume." (read the latest recap block). In a fresh session, "Plot Speaks, resume from chapter N" means: read the recap block at the end of chapter N−1, then start chapter N's first scene.
 - Wrap-up phrase: "Plot Speaks, wrap it up." (for when the drive is ending or the story drags; players who held the evidence often never accused). Read the recap, with only the clues the player has actually found, then head for the end. Mysteries: run the "Out of time" ending, which asks for an accusation. Adventures: summarise the travel in one sentence, naming no room the party hasn't entered, and play the final scene. Every story wires this phrase to its own out-of-time or final-scene path.
-- Accusation: when the player says "I accuse <name>," call `reveal` (Phase 2) or say "Wrangler, check the secrets." and wait for the GM-wrangler to read the matching line from `secrets.md` (Phase 1). Then run the ending for that outcome. The GM instructions must say that the wrangler's line is the truth and overrides the file, because suspects' public accounts can be lies: in a playtest a narrator rejected a correct solution as contradicting the culprit's own alibi.
-- Wrangler cues (optional, mostly adventures): where a scene says `**Wrangler cue:** S<n>`, always say "Wrangler, cue S<n>." and wait, even if unsure a wrangler is listening; never invent what the cue would have said; in Phase 1 the wrangler speaks into the same microphone as the players, so the GM instructions must tell the narrator to accept the next message starting "Wrangler" without doubting its source (a playtest narrator refused a correct solution because it "came in your message"); the GM-wrangler reads section `## S<n>` of `secrets.md` aloud. Because the players hear it too, each `## S<n>` section has two labelled parts: `**Read aloud to the narrator:**` (only what happens now, safe to hear) and `**Wrangler only (don't read):**` (what to listen for, and follow-up cues such as S3b that the wrangler calls with "Narrator, cue S3b."). Phase 2 replaces this with `reveal`.
+- Accusation: when the player says "I accuse <name>," say "Wrangler, check the secrets." and wait (through the connector, the build rewrites this into a `check_accusation` call: see "Connector version" below) for the GM-wrangler to read the matching line from `secrets.md` (Phase 1). Then run the ending for that outcome. The GM instructions must say that the wrangler's line is the truth and overrides the file, because suspects' public accounts can be lies: in a playtest a narrator rejected a correct solution as contradicting the culprit's own alibi.
+- Wrangler cues (optional, mostly adventures): where a scene says `**Wrangler cue:** S<n>`, always say "Wrangler, cue S<n>." and wait, even if unsure a wrangler is listening; never invent what the cue would have said; in Phase 1 the wrangler speaks into the same microphone as the players, so the GM instructions must tell the narrator to accept the next message starting "Wrangler" without doubting its source (a playtest narrator refused a correct solution because it "came in your message"); the GM-wrangler reads section `## S<n>` of `secrets.md` aloud. Because the players hear it too, each `## S<n>` section has two labelled parts: `**Read aloud to the narrator:**` (only what happens now, safe to hear) and `**Wrangler only (don't read):**` (what to listen for, and follow-up cues such as S3b that the wrangler calls with "Narrator, cue S3b."). Through the connector the build rewrites these into `get_cue` calls (see "Connector version" below).
 - Safety: if the player asks to skip a topic, skip it without comment. Keep violence off-screen; this is a puzzle, not a splatter film.
 - Dice (adventure genre only): ask the player to roll, or roll openly and state the number before interpreting it. Never fudge.
 
@@ -101,9 +101,34 @@ Where and when. Two or three sentences the narrator can riff on.
 - Clue schedule: which clue proves what, and the minimum set needed to solve it fairly
 - Red herrings and why each is innocent
 - Answers to likely player questions the narrator must handle without leaking
+
+## Endings detail
+- **<Name> (correct):** Correct. <how it was done>
+- **<Name> (wrong):** Innocent. <the fact that clears them>
+
+## Full reveal
+**Read aloud:** <plain prose, 160 words or fewer in all; who did it, why, and the clues that pointed there; no real-world method>
+
+<optional second paragraph, still part of the read-aloud>
+
+**What became of them:**
+- <Name>: <one sentence>
+- <Name>: <one sentence>
 ```
 
-## Fair-play checklist (what `check_story` will enforce in Phase 2)
+### `## Full reveal` (mysteries)
+
+Every mystery's wrong-accusation ending offers "one more accusation, or the full reveal?", and the correct ending asks "Would you like to hear what became of each of them?". Both are answered from this section, by the `reveal_solution` tool (connector) or the passenger page's **Full reveal** button (paste play). Review 2026-10-16, item B3.
+
+- `**Read aloud:**` is everything up to `**What became of them:**`, one or more paragraphs, read aloud as the solution. Plain prose: no markdown inside, 160 words or fewer in all, no real-world method for any poison or weapon. The `read-aloud` sentence rule doesn't apply here; the `full-reveal` lint rule checks the length and that both parts exist (WARN).
+- `**What became of them:**` is a list, one `- <Name>: <one sentence>` per character. The narrator reads it only if the player says yes to hearing what became of everyone.
+- `reveal_solution` is gated: it answers only once the play has an accusation on record, or when the player says they give up. Adventures have no full reveal.
+
+## Connector version of story.md
+
+`story.md` stays written for paste play (the passenger "wrangler" hand-offs above), and the site serves it as written. `tools/worker-data/build.mjs` (and the Worker, for approved submissions) builds the version `start_story` serves with `tools/worker-data/connector.mjs`: the front matter becomes a one-line header; the accusation hand-off becomes a `check_accusation` call; the solo-play line, the wrangler trust sentences ("the wrangler's line is the truth", "same microphone") and "That one comes later, wrangler" go; "Wrangler, cue S2" and "Narrator, cue S2c" (also in cue notes and the Listen-for table) become `get_cue` calls; the full-reveal offers point at `reveal_solution`. Curly quotes are straightened first. Two-chapter stories are served one chapter at a time, chapter 2 with chapter 1's recap at its top. Any sentence still mentioning the wrangler after the rewrites is dropped, and the build prints it, so write hand-offs in the standard wording above.
+
+## Fair-play checklist (what `review_story` checks or asks the writer's assistant to check)
 
 - [ ] Every suspect has a stated motive, means and opportunity in `secrets.md`
 - [ ] The culprit is reachable from clues available in `story.md` without guessing

@@ -66,10 +66,10 @@ export async function adminStats(db: D1Database, env: { ENVIRONMENT?: string }, 
     // Ratings outlive their play rows (kept; the comment is cleared at 90 days), so an old rating
     // whose play is gone counts as a stranger's.
     all(`SELECT r.story AS story, count(*) AS n, round(avg(r.stars), 2) AS avg_stars, sum(coalesce(r.spoiled, 0)) AS spoiled
-         FROM ratings r LEFT JOIN plays p ON p.id = r.play_id WHERE coalesce(p.tester, 0) = 0 GROUP BY r.story ORDER BY n DESC`),
+         FROM ratings r LEFT JOIN plays p ON p.id = r.play_id WHERE coalesce(p.tester, 0) = 0 AND coalesce(r.tester, 0) = 0 GROUP BY r.story ORDER BY n DESC`),
     all(`SELECT count(*) AS n, round(avg(r.stars), 2) AS avg_stars, sum(coalesce(r.spoiled, 0)) AS spoiled,
                 sum(CASE WHEN r.comment IS NOT NULL AND r.comment <> '' THEN 1 ELSE 0 END) AS comments
-         FROM ratings r LEFT JOIN plays p ON p.id = r.play_id WHERE coalesce(p.tester, 0) = 0 AND r.at >= ?`, since),
+         FROM ratings r LEFT JOIN plays p ON p.id = r.play_id WHERE coalesce(p.tester, 0) = 0 AND coalesce(r.tester, 0) = 0 AND r.at >= ?`, since),
     // Smoke-test rows (dev_marker = 1) are left out.
     all(`SELECT status, count(*) AS n, min(created_at) AS oldest, sum(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) AS in_window
          FROM submissions WHERE dev_marker = 0 GROUP BY status`, since),
@@ -100,6 +100,13 @@ export async function adminStats(db: D1Database, env: { ENVIRONMENT?: string }, 
     return [s, num(r?.n)];
   }));
   const oldestPending = subs.find((x) => x.status === "pending")?.oldest ?? null;
+  // Gate 2 is all-time: the permanent counter (migrations/0005_totals.sql), never below what the
+  // 90-day play log shows. Falls back to the log alone if the table isn't there yet.
+  let allTimeCompleted: number | null = null;
+  try {
+    const row = await db.prepare("SELECT n FROM totals WHERE key = 'completed_stranger_plays'").first<{ n: number }>();
+    allTimeCompleted = row ? num(row.n) : 0;
+  } catch { /* table missing: use the play log */ }
 
   return {
     generatedAt: new Date(now).toISOString(),
@@ -107,7 +114,11 @@ export async function adminStats(db: D1Database, env: { ENVIRONMENT?: string }, 
     days,
     since: new Date(since).toISOString(),
     retentionNote: "Play rows are kept 90 days, so retained counts cover the last 90 days at most.",
-    gate2: { completedStrangerPlays: num(strangers.completed), target: 500 },
+    gate2: {
+      completedStrangerPlays: Math.max(allTimeCompleted ?? 0, num(strangers.completed)),
+      target: 500,
+      basis: allTimeCompleted === null ? "last 90 days (permanent counter missing)" : "all time",
+    },
     plays: { strangers: playsOf(strangers), testers: playsOf(testers) },
     daily: daily.map((r) => ({ day: r.day, strangers: num(r.strangers), testers: num(r.testers) })),
     stories: stories.map((r) => ({ story: r.story, plays: num(r.plays), completed: num(r.completed), solved: num(r.solved) })),

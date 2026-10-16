@@ -5,7 +5,7 @@ import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { checkStoryText, checkAudioCues, checkDenylist, checkWranglerCues, checkCueParts, checkReadAloud, checkCulpritTells, parseDenylist } from './rules.mjs';
+import { checkStoryText, checkAudioCues, checkDenylist, checkWranglerCues, checkCueParts, checkReadAloud, checkCulpritTells, checkFullReveal, parseFrontMatter, parseDenylist } from './rules.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '..', '..');
@@ -49,6 +49,8 @@ export function checkStoryDir(dir, denylist) {
     for (const f of checkWranglerCues(story, secrets)) findings.push({ ...f });
     for (const f of checkCueParts(secrets)) findings.push({ ...f });
     for (const f of checkCulpritTells(story, secrets)) findings.push({ file: 'story.md', ...f });
+    const fm = parseFrontMatter(story);
+    if (secrets && fm.ok) findings.push(...checkFullReveal(secrets, { genre: fm.metadata.genre }));
   }
   const errors = findings.filter((f) => f.severity === 'ERROR').length;
   const warnings = findings.filter((f) => f.severity === 'WARN').length;

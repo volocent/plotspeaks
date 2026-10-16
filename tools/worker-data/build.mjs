@@ -1,7 +1,10 @@
 // Builds worker/src/generated/stories.json from stories/<slug>/story.md + secrets.md.
-// The JSON holds only what the Worker serves: the public story text, the per-suspect
-// Endings detail lines (reveal) and the read-aloud parts of cue sections (get_cue). The
-// "Wrangler only" parts and the rest of secrets.md never leave this machine.
+// The JSON holds only what the Worker serves: the public story text (for the site), its
+// connector version (story_connector, for start_story: no paste-play wrangler text, no front
+// matter, one part per chapter; see connector.mjs), the per-suspect Endings detail lines
+// (check_accusation), the cue sections (get_cue: read-aloud, plus narrator notes rewritten for
+// the connector), the raw Listen-for table (passenger page) and the `## Full reveal` section
+// (reveal_solution). The rest of secrets.md never leaves this machine.
 // The output is gitignored because it contains solutions.
 // Usage: node tools/worker-data/build.mjs
 import {
@@ -13,7 +16,8 @@ import {
 } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseEndings, extractCue } from "../playtest/lib.mjs";
+import { parseEndings, extractCue, parseFullReveal } from "../playtest/lib.mjs";
+import { connectorStory, connectorNotes } from "./connector.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const field = (fm, key) => {
@@ -27,6 +31,7 @@ const field = (fm, key) => {
 };
 
 const stories = [];
+const warnings = [];
 // --catalog: build only the stories published in stories/catalog.json (production). Without it,
 // every story folder is built (dev), so drafts can be tested before they are published.
 const catalogOnly = process.argv.includes("--catalog");
@@ -63,12 +68,22 @@ for (const slug of readdirSync(join(root, "stories")).sort()) {
     const m = /\*\*Wrangler only[^*]*:\*\*\s*([\s\S]*?)(?=^\*\*[A-Z][^\n]*:\*\*|(?![\s\S]))/im.exec(sec[1]);
     return m ? m[1].trim() : null;
   };
+  const dropped = [];
+  const clean = (t) => {
+    if (!t) return t;
+    const r = connectorNotes(t);
+    dropped.push(...r.dropped);
+    return r.text;
+  };
   const cues = {};
   for (const id of cueIds) {
     const c = extractCue(secrets, id);
-    if (c) cues[`S${id}`.toUpperCase()] = { read_aloud: c, narrator_only: wranglerOnly(id) };
+    if (c) cues[`S${id}`.toUpperCase()] = { read_aloud: clean(c), narrator_only: clean(wranglerOnly(id)) };
   }
   const listenFor = (/^#{2,3}\s+Listen for[^\n]*\n([\s\S]*?)(?=^#{2,3}\s)/im.exec(secrets) || [, null])[1];
+  const connector = connectorStory(story);
+  dropped.push(...connector.dropped);
+  for (const d of dropped) warnings.push(`${slug}: dropped a wrangler sentence: ${d}`);
   stories.push({
     slug,
     title: field(fm, "title") || slug,
@@ -76,13 +91,17 @@ for (const slug of readdirSync(join(root, "stories")).sort()) {
     players: field(fm, "players"),
     duration_minutes: Number(field(fm, "duration_minutes")) || null,
     story,
+    story_connector: connector.parts,
     endings: parseEndings(secrets).map(({ name, verdict, text }) => ({
       name,
       verdict,
       text,
     })),
     cues,
-    listen_for: listenFor ? listenFor.trim() : null,
+    // For get_cue's S1 notes (rewritten for the connector) and the passenger page (raw: it reads cue ids only).
+    listen_for: listenFor ? clean(listenFor.trim()) : null,
+    listen_for_raw: listenFor ? listenFor.trim() : null,
+    full_reveal: parseFullReveal(secrets),
   });
 }
 
@@ -90,5 +109,8 @@ const outDir = join(root, "worker", "src", "generated");
 mkdirSync(outDir, { recursive: true });
 writeFileSync(join(outDir, "stories.json"), JSON.stringify(stories, null, 2));
 console.log(
-  `wrote worker/src/generated/stories.json: ${stories.map((s) => `${s.slug} (${s.endings.length} endings, ${Object.keys(s.cues).length} cues)`).join(", ")}`,
+  `wrote worker/src/generated/stories.json: ${stories.map((s) => `${s.slug} (${s.endings.length} endings, ${Object.keys(s.cues).length} cues${s.story_connector.length > 1 ? `, ${s.story_connector.length} chapters` : ""}${s.full_reveal ? ", full reveal" : ""})`).join(", ")}`,
 );
+// The connector text must never mention the wrangler: a sentence dropped by the fallback means a
+// phrasing connector.mjs doesn't rewrite yet. GM sentences only, never answer text.
+for (const w of warnings) console.log(`WARN  ${w}`);

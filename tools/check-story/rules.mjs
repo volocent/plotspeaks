@@ -263,11 +263,15 @@ export function checkColdOpen(text) {
   return out;
 }
 
-/** Rule `read-aloud`: more than 3 sentences is an ERROR, exactly 1 a WARN. */
+/** Rule `read-aloud`: more than 3 sentences is an ERROR, exactly 1 a WARN. The `## Full reveal`
+ *  section of secrets.md is exempt (it is one longer explanation, checked by `full-reveal`). */
 export function checkReadAloud(text) {
   const lines = linesOf(text);
   const out = [];
+  let inReveal = false;
   for (let i = 0; i < lines.length; i++) {
+    if (/^##\s/.test(lines[i])) inReveal = /^##\s+Full reveal\b/i.test(lines[i]);
+    if (inReveal) continue;
     // Matches **Read aloud:**, labelled beats like **Read aloud (cold open, beat 1):**,
     // and secrets.md cue parts **Read aloud to the narrator:**.
     const m = /^\*\*Read aloud(?: \([^)]*\)| to the narrator)?:\*\*\s*(.*)$/.exec(lines[i]);
@@ -421,6 +425,42 @@ export function checkCueParts(secretsText) {
     if (!body.includes('**read aloud to the narrator:**')) out.push(warn(i + 1, 'cue-parts', `section ${id} lacks "**Read aloud to the narrator:**"`, { file: 'secrets.md' }));
     if (!body.includes("**wrangler only (don't read):**")) out.push(warn(i + 1, 'cue-parts', `section ${id} lacks "**Wrangler only (don't read):**"`, { file: 'secrets.md' }));
   });
+  return out;
+}
+
+// ---------- full reveal ----------
+
+/**
+ * Rule `full-reveal` (WARN only): a mystery's secrets.md should have a `## Full reveal` section
+ * (docs/FORMAT.md), served by reveal_solution once the player has accused someone or given up:
+ *   **Read aloud:** plain prose, one or more paragraphs, 160 words or fewer in all
+ *   **What became of them:** then "- <Name>: <one sentence>" bullets
+ * opts.genre is the story's metadata.genre; adventures are skipped.
+ */
+export function checkFullReveal(secretsText, opts = {}) {
+  if (opts.genre === 'adventure') return [];
+  const lines = linesOf(secretsText || '');
+  const at = lines.findIndex((l) => /^##\s+Full reveal\s*$/i.test(l));
+  if (at < 0) return [warn(1, 'full-reveal', 'no "## Full reveal" section (mysteries need one: reveal_solution reads it when the player gives up or asks for the full reveal)', { file: 'secrets.md' })];
+  let end = lines.findIndex((l, j) => j > at && /^##\s/.test(l));
+  if (end < 0) end = lines.length;
+  const sec = lines.slice(at + 1, end);
+  const ra = sec.findIndex((l) => /^\*\*Read aloud:\*\*/.test(l));
+  const wb = sec.findIndex((l) => /^\*\*What became of them:?\*\*/i.test(l));
+  const out = [];
+  const line = (k) => at + 2 + k;
+  if (ra < 0) out.push(warn(at + 1, 'full-reveal', '"## Full reveal" has no "**Read aloud:**" part', { file: 'secrets.md' }));
+  if (wb < 0) out.push(warn(at + 1, 'full-reveal', '"## Full reveal" has no "**What became of them:**" part', { file: 'secrets.md' }));
+  if (ra >= 0) {
+    const body = sec.slice(ra, wb > ra ? wb : sec.length).join(' ').replace(/^\*\*Read aloud:\*\*/, '');
+    const words = body.trim().split(/\s+/).filter(Boolean).length;
+    if (words > 160) out.push(warn(line(ra), 'full-reveal', `the full reveal's read-aloud part is ${words} words (160 at most)`, { file: 'secrets.md' }));
+    if (/\*\*|^#|\s#\s|\[[^\]]*\]\(/.test(body)) out.push(warn(line(ra), 'full-reveal', "the full reveal's read-aloud part should be plain prose (no markdown inside)", { file: 'secrets.md' }));
+  }
+  if (wb >= 0) {
+    const bullets = sec.slice(wb + 1).filter((l) => /^\s*[-*]\s+\S/.test(l));
+    if (!bullets.length) out.push(warn(line(wb), 'full-reveal', '"**What became of them:**" has no "- <Name>: <one sentence>" bullets', { file: 'secrets.md' }));
+  }
   return out;
 }
 

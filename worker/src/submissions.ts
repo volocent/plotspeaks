@@ -9,23 +9,27 @@
 //     served by the Worker at /covers/<slug>.jpg, the same path as the built-in covers.
 //
 // Used by index.ts:
-//   submitStory(env, ip, builtins, args)  the submit_story tool (new story, or a replacement with replaces_id + claim_code)
+//   submitStory(env, caller, builtins, args)  the submit_story tool (new story, or a replacement with replaces_id + claim_code)
 //   withdrawSubmission(env, args)         the withdraw_submission tool (id + claim code)
 //   loadApprovedStories(db)               approved submissions in the play-tool Story shape
 //   handleAdmin(request, env, builtins)   /admin/* (key-gated; 404 when no admin key is set)
 //   serveSubmissionCover(db, slug)        /covers/<slug>.jpg for an approved submission
 //
-// Flow of submit_story: size caps (zod, in index.ts) -> check_story lint (refuse on any ERROR) ->
-// per-IP and site-wide daily caps -> Llama Guard 3 on story_md and secrets_md -> cover -> D1 row
+// Flow of submit_story: size caps (zod, in index.ts) -> format lint (refuse on any ERROR) ->
+// daily caps (per IP for direct callers; site-wide for everyone, connector traffic included) -> Llama Guard 3 on story_md and secrets_md -> cover -> D1 row
 // with status 'pending'. Nothing is public until Ben approves it at /admin/submissions.
 import { checkSubmitted, DENYLIST } from "./studio";
 import { generateCover } from "./covers";
-import { parseEndings, extractCue } from "../../tools/playtest/lib.mjs";
+import { parseEndings, extractCue, parseFullReveal } from "../../tools/playtest/lib.mjs";
+import { connectorStory, connectorNotes } from "../../tools/worker-data/connector.mjs";
 import { parseFrontMatter, checkDenylist } from "../../tools/check-story/rules.mjs";
 import { adminStats } from "./stats";
 
 export const GUARD_MODEL = "@cf/meta/llama-guard-3-8b";
 export const PER_IP_DAILY = 3;
+// Site-wide submissions a day (env SUBMIT_DAILY_CAP overrides). Connector traffic arrives from the
+// assistant company's servers, so it is held only by this cap, never by the per-IP one (S6).
+export const SITE_DAILY_DEFAULT = 20;
 const DAY = 24 * 60 * 60 * 1000;
 
 type Ai = { run: (model: string, input: Record<string, unknown>) => Promise<any> };
@@ -35,10 +39,14 @@ export type SubEnv = {
 };
 type Ending = { name: string; verdict: string; text: string };
 type Cue = { read_aloud: string; narrator_only: string | null };
+export type FullReveal = { read_aloud: string; afterward: string | null };
 export type PlayStory = {
   slug: string; title: string; genre: string; players: string; duration_minutes: number | null;
-  story: string; endings: Ending[]; cues: Record<string, Cue>; listen_for: string | null;
+  story: string; story_connector: string[]; endings: Ending[]; cues: Record<string, Cue>;
+  listen_for: string | null; listen_for_raw: string | null; full_reveal: FullReveal | null;
 };
+/** Who is submitting: the connecting IP, and whether it is an assistant's connector (whose IP is the company's, not the person's). */
+export type Caller = { ip: string; connector: string | null };
 export type Builtins = { slugs: Set<string>; storyFor: (slug: string) => string | null };
 
 const log = (event: string, data: Record<string, unknown>) => console.log(JSON.stringify({ event, ...data }));
@@ -190,7 +198,9 @@ function meta(storyMd: string) {
 }
 
 // Same extraction as tools/worker-data/build.mjs, so an approved submission plays exactly like a
-// built-in story: reveal returns one ending line, get_cue one cue.
+// built-in story: check_accusation returns one ending line, get_cue one cue, and the connector
+// text has no paste-play wrangler hand-offs (tools/worker-data/connector.mjs).
+const notes = (t: string | null) => (t ? (connectorNotes(t) as { text: string }).text : t);
 function playData(secrets: string) {
   const s = nl(secrets);
   const wranglerOnly = (id: string) => {
@@ -202,18 +212,18 @@ function playData(secrets: string) {
   const cues: Record<string, Cue> = {};
   for (const m of s.matchAll(/^##\s+S(\d+[a-z]?)\b/gim)) {
     const c = extractCue(s, m[1]);
-    if (c) cues[`S${m[1]}`.toUpperCase()] = { read_aloud: c, narrator_only: wranglerOnly(m[1]) };
+    if (c) cues[`S${m[1]}`.toUpperCase()] = { read_aloud: notes(c) as string, narrator_only: notes(wranglerOnly(m[1])) };
   }
   const listen = (/^#{2,3}\s+Listen for[^\n]*\n([\s\S]*?)(?=^#{2,3}\s)/im.exec(s) || [, null])[1];
   const endings = (parseEndings(s) as Ending[]).map(({ name, verdict, text }) => ({ name, verdict, text }));
-  return { endings, cues, listen_for: listen ? listen.trim() : null };
+  return { endings, cues, listen_for: listen ? notes(listen.trim()) : null, listen_for_raw: listen ? listen.trim() : null, full_reveal: parseFullReveal(s) as FullReveal | null };
 }
 
 // ------------------------------------------------------------------ submit_story
 
 export async function submitStory(
   env: SubEnv,
-  ip: string,
+  caller: Caller,
   builtins: Builtins,
   args: { story_md: string; secrets_md?: string; contact?: string; author_name: string; replaces_id?: string; claim_code?: string },
 ): Promise<string> {
@@ -227,7 +237,7 @@ export async function submitStory(
   const lint = checkSubmitted(story, secrets);
   if (lint.errors) {
     log("submit_story", { outcome: "lint", errors: lint.errors });
-    return `Not submitted: the story has ${lint.errors} format error(s). Fix them and submit again (check_story shows the same list).\n\n${lint.report}`;
+    return `Not submitted: the story has ${lint.errors} format error(s). Fix them and submit again (review_story shows the same list).\n\n${lint.report}`;
   }
   const db = env.DB, ai = env.AI;
   if (!db || !ai) return "Submissions are switched off on this server right now. Nothing was stored.";
@@ -248,11 +258,13 @@ export async function submitStory(
     }
   }
 
-  const ipHash = await hashIp(ip || "unknown", env);
+  // Through a connector the IP is the assistant company's, shared by everyone using it, so it is
+  // neither hashed nor capped; the row is marked with the assistant's name instead.
+  const ipHash = caller.connector ? `connector:${caller.connector}` : await hashIp(caller.ip || "unknown", env);
   const since = Date.now() - DAY;
-  const cap = Number(env.SUBMIT_DAILY_CAP) || 8;
+  const cap = Number(env.SUBMIT_DAILY_CAP) || SITE_DAILY_DEFAULT;
   try {
-    const mine = await db.prepare("SELECT COUNT(*) AS n FROM submission_attempts WHERE ip_hash = ? AND at > ?").bind(ipHash, since).first<{ n: number }>();
+    const mine = caller.connector ? null : await db.prepare("SELECT COUNT(*) AS n FROM submission_attempts WHERE ip_hash = ? AND at > ?").bind(ipHash, since).first<{ n: number }>();
     if ((mine?.n ?? 0) >= PER_IP_DAILY) return `Not submitted: there's a limit of ${PER_IP_DAILY} submissions a day from one connection, and it has been reached. Please try again tomorrow.`;
     const all = await db.prepare("SELECT COUNT(*) AS n FROM submission_attempts WHERE at > ?").bind(since).first<{ n: number }>();
     if ((all?.n ?? 0) >= cap) return "Not submitted: Plot Speaks has taken all the submissions it can screen today. Please try again tomorrow.";
@@ -391,7 +403,7 @@ async function approvedRows(db: D1Database | undefined): Promise<Row[]> {
 export async function loadApprovedStories(db: D1Database | undefined): Promise<PlayStory[]> {
   return (await approvedRows(db)).map((r) => ({
     slug: r.slug, title: r.title, genre: r.genre ?? "", players: r.players ?? "", duration_minutes: r.duration_minutes,
-    story: r.story_md, ...playData(r.secrets_md ?? ""),
+    story: r.story_md, story_connector: (connectorStory(r.story_md) as { parts: string[] }).parts, ...playData(r.secrets_md ?? ""),
   }));
 }
 

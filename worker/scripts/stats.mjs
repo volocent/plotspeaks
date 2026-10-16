@@ -36,7 +36,10 @@ console.log(`Plot Speaks plays (${env}, ${where.slice(2)})\n`);
 console.log(line(['who', 'story', 'plays', 'completed', 'solved']));
 for (const r of byGroup) console.log(line([r.tester ? 'testers' : 'strangers', r.story, r.plays, r.completed, r.solved]));
 const strangers = byGroup.filter((r) => !r.tester).reduce((a, r) => a + r.completed, 0);
-console.log(`\nGate 2: ${strangers} of 500 completed plays by strangers.`);
+// All-time count from the permanent counter (play rows are deleted after 90 days).
+let allTime = null;
+try { allTime = q(`SELECT n FROM totals WHERE key = 'completed_stranger_plays'`)[0]?.n ?? 0; } catch { /* no table yet */ }
+console.log(`\nGate 2: ${Math.max(allTime ?? 0, strangers)} of 500 completed plays by strangers (${allTime === null ? 'last 90 days only' : 'all time'}).`);
 console.log('\nRatings');
 for (const r of ratings) console.log(`  ${r.story}: ${r.n} rating(s), average ${r.avg_stars} stars, ${r.said_spoiled ?? 0} said something was given away early`);
 // Which assistant each play came from, from the MCP client's User-Agent.

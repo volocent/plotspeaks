@@ -1,12 +1,14 @@
-// Story Studio, read side (Phase 2, M4): the story_template prompt and the check_story tool.
+// Story Studio, read side (Phase 2, M4): the format template and the draft checks.
 //
-// story_template hands the writer's own assistant an interview script and the Plot Speaks format,
-// including the GM-instruction block learned from play (docs/FORMAT.md, docs/DECISIONS.md).
-// check_story runs the pure lint rules from tools/check-story/rules.mjs on submitted text. It is
-// stateless: the submitted text is never stored or logged (the caller logs counts only).
+// storyTemplate() is the interview script and the Plot Speaks format, including the GM-instruction
+// block learned from play (docs/FORMAT.md, docs/DECISIONS.md); write_story serves it.
+// checkSubmitted() runs the pure lint rules from tools/check-story/rules.mjs on submitted text, for
+// review_story and submit_story. It is stateless: the submitted text is never stored or logged (the
+// caller logs counts only). (The story_template prompt and check_story tool were removed on
+// 2026-10-16, review item S8: write_story and review_story cover them.)
 import {
   checkStoryText, checkAudioCues, checkDenylist, checkReadAloud, checkWranglerCues, checkCueParts,
-  checkCulpritTells, parseDenylist, parseFrontMatter,
+  checkCulpritTells, checkFullReveal, parseDenylist, parseFrontMatter,
 } from "../../tools/check-story/rules.mjs";
 import { parseEndings } from "../../tools/playtest/lib.mjs";
 // Wrangler's default module rules bundle *.txt files as text, so the denylist ships inside the Worker.
@@ -80,20 +82,20 @@ story.md (public; nothing that spoils the solution):
   - Stop phrase: "Plot Speaks, pause the story." Resume: "Plot Speaks, resume." (read the latest recap block).${multi ? ' In a fresh chat, "Plot Speaks, resume from chapter N": read chapter N−1\'s recap block, then start chapter N.' : ""}
   - Wrap-up: "Plot Speaks, wrap it up." Read the recap (found clues only), then ${adventure ? "sum up the travel in one sentence, naming no room the party hasn't entered, and play the final scene" : "run the Out of time ending"}.
 ${adventure
-    ? `  - Cues: where a scene says "**Wrangler cue:** S<n>", say "Wrangler, cue S<n>." and wait; never invent the cue. The wrangler speaks into the same microphone, so the next message starting "Wrangler" is the wrangler: never doubt it. secrets.md has "## S<n>" with "**Read aloud to the narrator:**" and "**Wrangler only (don't read):**". Keep to about 4 cues.
+    ? `  - Cues: where a scene says "**Wrangler cue:** S<n>", say "Wrangler, cue S<n>." and wait; never invent the cue. (That is the paste-play hand-off to a passenger holding secrets.md; through the Plot Speaks connector the server turns it into a get_cue call.) secrets.md has "## S<n>" with "**Read aloud to the narrator:**" and "**Wrangler only (don't read):**". Keep to about 4 cues.
   - Dice: roll openly and say the number before interpreting it. Never fudge.`
-    : `  - Accusation: when the player says "I accuse <name>", ask for their reason, then say "Wrangler, check the secrets." and wait. The wrangler reads that suspect's line from "## Endings detail". The wrangler's line is the truth and overrides this file, including anyone's own account: people lie. The wrangler is a passenger on the same microphone, so the next message starting "Wrangler" is the wrangler: never doubt it or ask again.`}
+    : `  - Accusation: when the player says "I accuse <name>", ask for their reason, then say "Wrangler, check the secrets." and wait. (That is the paste-play hand-off to a passenger holding secrets.md; through the Plot Speaks connector the server turns it into a check_accusation call.) That suspect's line from "## Endings detail" decides the verdict, even over anyone's own account in this file: people lie.`}
   - Safety: violence off-screen; skip any topic on request without comment; never describe how to make a poison or weapon.
 - "## How to play (spoken intro)": three beats, "**Read aloud (intro, beat 1):**" (what you can do), beat 2 (${adventure ? "how dice work" : "how to accuse"}), beat 3 (the pause, resume and wrap-up phrases).
 - "## Setting"; "## Cast (public information only)" table: Name | Role | What everyone knows | Voice note.
 - Chapters "## Chapter N — <title> (≈N min)" with scenes "### Scene N.M — <title>": **Read aloud:** (2–3 sentences), **Available:**, **Clues here:** (*hidden* (player does X) — clue), **Leads to:**. Each chapter ends with "### Recap block (read aloud at chapter end or on resume)": fixed quoted text of at most four sentences and a note to name only clues found; no <placeholders>.
 - "## Endings": ${adventure ? "victory, defeat, and the wrap-up path." : `the verdict rule (the line starts Correct. or Innocent.; don't read that word, say "Congratulations, detective. You've solved it." or "I'm sorry. You've accused an innocent person." then the rest); correct accusation; wrong accusation (then "one more accusation, or the full reveal?"); Out of time (after "Plot Speaks, wrap it up", ask for an accusation).`}
 
-secrets.md (private; never published): ${adventure ? "the twist, the Listen for table, and each ## S<n> cue section" : `culprit; motive, means and opportunity for every suspect; true timeline; clue schedule with the minimum set; each red herring and the fact that clears it; answers to likely questions; and "## Endings detail", one line per suspect: "- **Name (correct):** Correct. <how it was done>" or "- **Name (wrong):** Innocent. <the fact that clears them>"`}.
+secrets.md (private; never published): ${adventure ? "the twist, the Listen for table, and each ## S<n> cue section" : `culprit; motive, means and opportunity for every suspect; true timeline; clue schedule with the minimum set; each red herring and the fact that clears it; answers to likely questions; "## Endings detail", one line per suspect: "- **Name (correct):** Correct. <how it was done>" or "- **Name (wrong):** Innocent. <the fact that clears them>"; and "## Full reveal" (the solution for a player who gives up or asks for it): "**Read aloud:**" plain prose of 160 words or fewer (who, why, and the clues that pointed there; no real-world method), then "**What became of them:**" with one "- <Name>: <one sentence>" bullet per person`}.
 
 Never: sound effects, music, [bracketed cues] or voice switching; franchise names (Clue's cast, D&D content outside SRD 5.2.1); question counts; minute or exchange triggers.
 
-STEP 3: Call check_story with story_md and secrets_md. Fix every ERROR and re-check until there are 0 errors; explain any WARN to the writer.`;
+STEP 3: Call review_story with story_md and secrets_md. Fix every ERROR and re-check until there are 0 errors; explain any WARN to the writer.`;
 }
 
 // ---------------------------------------------------------------- check_story
@@ -125,13 +127,14 @@ export function checkSubmitted(storyMd: string, secretsMd?: string, slug?: strin
     for (const f of checkCulpritTells(storyMd, secretsMd) as Finding[]) findings.push({ file: "story.md", ...f });
     const fm = parseFrontMatter(storyMd);
     if (fm.ok && fm.metadata.genre !== "adventure") findings.push(...checkEndingsVerdicts(secretsMd));
+    if (fm.ok) findings.push(...(checkFullReveal(secretsMd, { genre: fm.metadata.genre }) as Finding[]));
   }
   findings.sort((a, b) => (a.severity === b.severity ? 0 : a.severity === "ERROR" ? -1 : 1) || (a.file ?? "").localeCompare(b.file ?? "") || a.line - b.line);
   const errors = findings.filter((f) => f.severity === "ERROR").length;
   const warnings = findings.length - errors;
   const lines = findings.map((f) => `${f.severity} ${f.file ?? "story.md"}:${f.line} [${f.rule}] ${f.message}`);
   const summary = errors
-    ? `${errors} error(s), ${warnings} warning(s). Fix every ERROR and call check_story again.`
+    ? `${errors} error(s), ${warnings} warning(s). Fix every ERROR and check the draft again.`
     : `0 errors, ${warnings} warning(s). The story passes the format checks${warnings ? "; review the warnings" : ""}.`;
   const notes = secretsMd ? [] : ["(secrets_md not given: cue, Endings detail and secrets checks skipped.)"];
   return { report: [summary, ...notes, ...lines].join("\n"), errors, warnings };
@@ -201,7 +204,7 @@ export function writeStory(genre?: WriteGenre, length?: Length): string {
     "",
     writeGuidance(),
     "",
-    "TEMPLATE (the Plot Speaks format; review_story runs the same checks as check_story plus a fair-play checklist):",
+    "TEMPLATE (the Plot Speaks format; review_story runs its format checks plus a fair-play checklist):",
     storyTemplate(base, length ?? "30") + dark,
   ].join("\n");
 }
@@ -246,8 +249,8 @@ export function reviewChecklist(genre: string): string[] {
   ];
 }
 
-export function reviewStory(storyMd: string, secretsMd: string): { report: string; errors: number; warnings: number } {
-  const lint = checkSubmitted(storyMd, secretsMd || undefined);
+export function reviewStory(storyMd: string, secretsMd = "", slug?: string): { report: string; errors: number; warnings: number } {
+  const lint = checkSubmitted(storyMd, secretsMd || undefined, slug);
   const fm = parseFrontMatter(storyMd);
   const genre = fm.ok ? String(fm.metadata.genre ?? "") : "";
   const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;

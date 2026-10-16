@@ -16,6 +16,29 @@ export function parseEndings(secretsMd) {
   return out;
 }
 
+/**
+ * Parse secrets.md's `## Full reveal` section (docs/FORMAT.md):
+ *   **Read aloud:** <one or more paragraphs>
+ *   **What became of them:**
+ *   - <Name>: <one sentence>
+ * read_aloud is everything between the two labels (paragraphs kept, trimmed); afterward is the
+ * bullet list after the second label. Returns null when the section or its Read aloud part is missing.
+ */
+export function parseFullReveal(secretsMd) {
+  const s = String(secretsMd ?? '').replace(/\r\n?/g, '\n');
+  const m = /^##\s+Full reveal\s*$([\s\S]*?)(?=^##\s|(?![\s\S]))/im.exec(s);
+  if (!m) return null;
+  const sec = m[1];
+  const ra = /\*\*Read aloud:\*\*\s*([\s\S]*?)(?=^\*\*What became of them:?\*\*|(?![\s\S]))/im.exec(sec);
+  if (!ra || !ra[1].trim()) return null;
+  const read_aloud = ra[1].trim().replace(/\n{3,}/g, '\n\n');
+  const after = /^\*\*What became of them:?\*\*:?\s*([\s\S]*)$/im.exec(sec);
+  const afterward = after
+    ? after[1].split('\n').map((l) => l.trim()).filter((l) => /^[-*]\s+/.test(l)).map((l) => l.replace(/^[*]\s+/, '- ')).join('\n')
+    : '';
+  return { read_aloud, afterward: afterward || null };
+}
+
 const TITLES = new Set(['father', 'sister', 'brother', 'dr', 'mr', 'mrs', 'ms', 'miss', 'judge', 'sheriff', 'the', 'lord', 'lady', 'sir']);
 function tokens(name) {
   return normalizeName(name).split(' ').filter((t) => t.length > 1 && !TITLES.has(t));

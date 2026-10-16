@@ -8,6 +8,7 @@
 //   ratings                      kept; the free-text comment is cleared after 90 days
 //   submissions, pending/approved kept (approved stories are the catalog)
 //   daily_counts                 deleted after 400 days (counts only, no personal data; src/usage.ts)
+//   completions                  deleted after 90 days (Gate 2 markers; the count stays in totals)
 
 const DAY = 24 * 60 * 60 * 1000;
 export const KEEP_DAYS = 90;
@@ -32,6 +33,11 @@ export async function runRetention(db: D1Database | undefined, now = Date.now())
   try {
     const cutoff = new Date(now - COUNT_DAYS * DAY).toISOString().slice(0, 10);
     counts.daily_counts = (await db.prepare("DELETE FROM daily_counts WHERE day < ?").bind(cutoff).run()).meta?.changes ?? 0;
+  } catch { /* table not there yet */ }
+  // Gate 2 completion markers (migration 0006): only needed while their play row exists, so they
+  // go at 90 days too; the count itself lives on in totals.
+  try {
+    counts.completions = (await db.prepare("DELETE FROM completions WHERE at < ?").bind(old).run()).meta?.changes ?? 0;
   } catch { /* table not there yet */ }
   return counts;
 }
