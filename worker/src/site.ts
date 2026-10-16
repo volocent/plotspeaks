@@ -241,6 +241,8 @@ const ICON = {
   menu: `<path d="M4 7h16M4 12h16M4 17h16"/>`,
   close: `<path d="M6 6l12 12M18 6 6 18"/>`,
   shield: `<path d="M12 3 5 6v5.5c0 4.5 3 8 7 9.5 4-1.5 7-5 7-9.5V6Z"/><path d="m9 12 2 2 4-4"/>`,
+  play: `<path d="M8.5 5.5v13l10-6.5Z" fill="currentColor"/>`,
+  pausebars: `<path d="M9 6v12M15 6v12" stroke-width="3"/>`,
 };
 type IconName = keyof typeof ICON;
 const icon = (name: IconName, size = 24, cls = "ic") =>
@@ -545,6 +547,23 @@ p{margin:0 0 1em}
 .bars i{display:block;width:5px;border-radius:3px;background:linear-gradient(var(--sky),var(--orange));height:30%;animation:bar 1.4s ease-in-out infinite}
 .bars i:nth-child(3n){animation-delay:.2s}.bars i:nth-child(3n+1){animation-delay:.45s}.bars i:nth-child(4n){animation-delay:.7s}.bars i:nth-child(5n){animation-delay:.9s}
 @keyframes bar{0%,100%{height:22%}50%{height:100%}}
+/* the card's audio sample: without JS a plain player; with JS a button, and the bubbles follow the speaker */
+.sample{display:flex;align-items:center;flex-wrap:wrap;gap:10px 14px;margin-top:14px}
+.sample audio{width:100%;height:44px}
+.sample-btn{padding-left:8px;gap:10px}
+.sample-btn .knob{display:inline-grid;place-items:center;width:34px;height:34px;border-radius:50%;background:var(--btn);color:var(--btn-ink);flex:none}
+.sample-btn .knob .ic-pause,.is-playing .sample-btn .knob .ic-play{display:none}
+.is-playing .sample-btn .knob .ic-pause{display:block}
+.sample-time{font:600 .86rem/1 var(--sans);color:var(--ink-2);font-variant-numeric:tabular-nums}
+.js-sample{cursor:pointer}
+.js-sample .sample audio{display:none}
+.js-sample .bars i{animation-play-state:paused}
+.js-sample:not(.is-on) .bars i{animation:none}
+.js-sample:not(.is-on) .bars i:nth-child(2n){height:50%}.js-sample:not(.is-on) .bars i:nth-child(3n){height:75%}.js-sample:not(.is-on) .bars i:nth-child(5n){height:40%}.js-sample:not(.is-on) .bars i:nth-child(7n){height:95%}
+.js-sample.is-playing .bars i{animation-play-state:running}
+.js-sample .say{transition:opacity .25s ease,box-shadow .25s ease}
+.js-sample.is-on .say{opacity:.55}
+.js-sample.is-on .say.is-speaking{opacity:1;box-shadow:0 0 0 3px var(--orange)}
 
 /* story page: the Connect row */
 .connect-row{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:24px 20px;position:relative;overflow:hidden}
@@ -992,6 +1011,84 @@ const WAVES = `<svg class="waves" viewBox="0 0 600 600" aria-hidden="true" focus
 const bars = (n = 28) => `<div class="bars" aria-hidden="true">${Array.from({ length: n }, () => "<i></i>").join("")}</div>`;
 
 // ============================================================================ HOME
+// The hero card's audio sample: worker/public/audio/sample-last-toast.mp3, made by
+// worker/scripts/make-sample.mjs (Workers AI Aura 1: "asteria" for you, "helios" for the narrator).
+// `start` is when each line begins in the file, in seconds, as that script printed it. Change
+// the text here only together with the audio. Public story.md text only: the cold open, and a
+// fact the table volunteers in Scene 1.2.
+const SAMPLE = {
+  src: "/audio/sample-last-toast.mp3", seconds: 38,
+  lines: [
+    { who: "you", start: 0.16, text: "“Start The Last Toast with Plot Speaks.”" },
+    { who: "narrator", start: 3.24, text: "Retired judge Marguerite Okafor is hosting her own retirement dinner at Harrow House, a stone place on a hill above the river. During the cheese course, the housekeeper finds Marguerite slumped in her study, a half-finished glass of port beside her. Snow has iced the roads, and nobody can leave. Everyone turns to you, the only investigator here. Where do you want to start?" },
+    { who: "you", start: 23.61, text: "“Who poured the port tonight?”" },
+    { who: "narrator", start: 25.78, text: "Father Reyes lifts his eyes from the table, and pauses. “I did, at ten past nine. Everyone drank from the same decanter, in front of the whole table, and nobody else is ill.” Who do you want to talk to next?" },
+  ],
+};
+
+function sampleCard(lead: Meta): string {
+  // The sample is The Last Toast's; any other lead story keeps the card as it was, silent.
+  const withSample = lead.slug === "example-dinner-party";
+  return `<figure class="voice rise rise-3" aria-label="Example of a story starting"${withSample ? ` data-sample="${esc(JSON.stringify(SAMPLE.lines))}"` : ""}>
+<p class="voice-top"><span class="live" aria-hidden="true"></span> In the car, by voice</p>
+<p class="say say-you" data-who="you"><b>You</b><span data-line>“Start ${esc(lead.title)} with Plot Speaks.”</span></p>
+<p class="say say-narrator" data-who="narrator"><b>Narrator</b><span data-line>${esc(lead.pitch)}</span></p>
+${bars()}
+${withSample ? `<div class="sample">
+<button type="button" class="btn btn-ghost btn-sm sample-btn" hidden aria-label="Play a ${SAMPLE.seconds}-second sample of ${esc(lead.title)}"><span class="knob">${icon("play", 18, "ic ic-play")}${icon("pausebars", 18, "ic ic-pause")}</span><span class="sample-label">Hear a sample (${SAMPLE.seconds}s)</span></button>
+<span class="sample-time" hidden aria-hidden="true"></span>
+<audio controls preload="none" src="${SAMPLE.src}" aria-label="A ${SAMPLE.seconds}-second sample of ${esc(lead.title)}: you start the story, the narrator reads the opening, you ask who poured the port, and Father Reyes answers."></audio>
+</div>` : ""}
+</figure>`;
+}
+
+// Plays the sample from the card's button (or a tap anywhere on the card). The bubbles show the
+// line being spoken and highlight its speaker; the bars move only while it plays; at the end it
+// resets to the card as it first loaded.
+const SAMPLE_JS = `(function(){
+  var card=document.querySelector("[data-sample]");if(!card)return;
+  var lines;try{lines=JSON.parse(card.getAttribute("data-sample"));}catch(e){return;}
+  var audio=card.querySelector("audio"),btn=card.querySelector(".sample-btn"),label=btn.querySelector(".sample-label"),time=card.querySelector(".sample-time");
+  if(!audio||!audio.canPlayType||!audio.canPlayType("audio/mpeg"))return;
+  var bubbles={you:card.querySelector('[data-who="you"]'),narrator:card.querySelector('[data-who="narrator"]')};
+  var first={you:bubbles.you.querySelector("[data-line]").textContent,narrator:bubbles.narrator.querySelector("[data-line]").textContent};
+  var title=btn.getAttribute("aria-label"),idle=label.textContent,current=-1;
+  card.classList.add("js-sample");btn.hidden=false;audio.removeAttribute("controls");
+  function mmss(t){t=Math.max(0,Math.floor(t||0));return Math.floor(t/60)+":"+(t%60<10?"0":"")+t%60;}
+  function show(i){
+    if(i===current)return;current=i;
+    for(var k in bubbles)bubbles[k].classList.remove("is-speaking");
+    if(i<0)return;
+    // each bubble shows its speaker's latest line so far (right after a seek, too)
+    for(var w in bubbles){var txt=first[w];for(var n=0;n<=i;n++)if(lines[n].who===w)txt=lines[n].text;bubbles[w].querySelector("[data-line]").textContent=txt;}
+    bubbles[lines[i].who].classList.add("is-speaking");
+  }
+  function lineAt(t){var i=0;for(var n=0;n<lines.length;n++)if(t>=lines[n].start-0.05)i=n;return i;}
+  function state(){
+    var playing=!audio.paused&&!audio.ended,mid=audio.currentTime>0&&!audio.ended;
+    card.classList.toggle("is-playing",playing);
+    label.textContent=playing?"Pause":mid?"Resume":idle;
+    btn.setAttribute("aria-label",playing?"Pause the sample":mid?"Resume the sample":title);
+  }
+  function reset(){
+    card.classList.remove("is-on","is-playing");show(-1);
+    for(var k in bubbles)bubbles[k].querySelector("[data-line]").textContent=first[k];
+    try{audio.currentTime=0;}catch(e){}
+    time.hidden=true;label.textContent=idle;btn.setAttribute("aria-label",title);
+  }
+  function toggle(){
+    if(audio.paused||audio.ended){
+      card.classList.add("is-on");time.hidden=false;show(lineAt(audio.currentTime));
+      var p=audio.play();if(p&&p.catch)p.catch(function(){reset();label.textContent="Couldn't play. Tap to try again";});
+    }else audio.pause();
+  }
+  btn.addEventListener("click",function(e){e.stopPropagation();toggle();});
+  card.addEventListener("click",function(e){if(!e.target.closest("a,button"))toggle();});
+  audio.addEventListener("play",state);audio.addEventListener("pause",state);
+  audio.addEventListener("timeupdate",function(){if(!card.classList.contains("is-on"))return;show(lineAt(audio.currentTime));time.textContent=mmss(audio.currentTime)+" / "+"0:${SAMPLE.seconds}";});
+  audio.addEventListener("ended",reset);
+})();`;
+
 const exampleTitle = (metas: Meta[]) => (metas.find((m) => m.slug === "example-dinner-party") ?? metas[0])?.title ?? "The Last Toast";
 
 function storyCard(m: Meta, r: RatingSummary | undefined): string {
@@ -1043,12 +1140,7 @@ ${WAVES}
 <p class="lead rise rise-3">Murder mysteries and fantasy adventures you play by voice with the AI assistant you already use. One narrator does every voice. You ask the questions. Made for car rides.</p>
 <div class="rise rise-3">${connectPanel({ id: "start" })}</div>
 </div>
-${lead ? `<figure class="voice rise rise-3" aria-label="Example of a story starting">
-<p class="voice-top"><span class="live" aria-hidden="true"></span> In the car, by voice</p>
-<p class="say say-you"><b>You</b>“Start ${esc(lead.title)} with Plot Speaks.”</p>
-<p class="say say-narrator"><b>Narrator</b>${esc(lead.pitch)}</p>
-${bars()}
-</figure>` : ""}
+${lead ? sampleCard(lead) : ""}
 </div>
 </section>
 
@@ -1124,7 +1216,7 @@ ${connectDialogs({ url: origin + "/mcp", story: example })}`;
   return page({
     title: "Plot Speaks: murder mysteries you play out loud",
     description: "Murder mysteries and fantasy adventures you play by voice with your own AI assistant, made for car rides. Connect once, then just say which story you want.",
-    body, origin, path: "/", script: FILTER_JS,
+    body, origin, path: "/", script: FILTER_JS + "\n" + SAMPLE_JS,
   });
 }
 

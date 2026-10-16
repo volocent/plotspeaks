@@ -490,6 +490,41 @@ export async function handleAdmin(request: Request, env: SubEnv, builtins: Built
     }
   }
 
+  // Speech for the home page's audio sample (worker/scripts/make-sample.mjs): one line of text in,
+  // MP3 out, on Workers AI Aura. Key-gated like /admin/cover; nothing here is reachable without the key.
+  if (url.pathname === "/admin/tts" && request.method === "POST") {
+    if (!env.AI) return json({ error: "no AI binding" }, 500);
+    let body: { text?: string; speaker?: string };
+    try { body = await request.json(); } catch { return json({ error: "send JSON: {text, speaker}" }, 400); }
+    const text = String(body.text ?? "").trim();
+    if (!text || text.length > 1000) return json({ error: "text is required, 1000 characters at most" }, 400);
+    try {
+      const out = await env.AI.run("@cf/deepgram/aura-1", { text, speaker: body.speaker || "angus", encoding: "mp3" });
+      const bytes = new Uint8Array(await new Response(out as BodyInit).arrayBuffer());
+      log("admin_tts", { chars: text.length, bytes: bytes.length });
+      return new Response(bytes, { headers: { "content-type": "audio/mpeg" } });
+    } catch (e) {
+      return json({ error: String(e).slice(0, 300) }, 502);
+    }
+  }
+  // Transcribes posted audio (the sample's listen check) with Whisper; returns its text and word times.
+  if (url.pathname === "/admin/stt" && request.method === "POST") {
+    if (!env.AI) return json({ error: "no AI binding" }, 500);
+    const audio = new Uint8Array(await request.arrayBuffer());
+    if (!audio.length || audio.length > 5_000_000) return json({ error: "post the audio bytes, 5 MB at most" }, 400);
+    try {
+      // ?model=turbo uses whisper-large-v3-turbo (base64 input), a stricter second opinion.
+      let b64 = "";
+      if (url.searchParams.get("model") === "turbo") for (let i = 0; i < audio.length; i += 0x8000) b64 += String.fromCharCode(...audio.subarray(i, i + 0x8000));
+      const r = url.searchParams.get("model") === "turbo"
+        ? await env.AI.run("@cf/openai/whisper-large-v3-turbo", { audio: btoa(b64), language: "en" })
+        : await env.AI.run("@cf/openai/whisper", { audio: [...audio] });
+      return json({ text: r?.text ?? "", words: r?.words ?? [] });
+    } catch (e) {
+      return json({ error: String(e).slice(0, 300) }, 502);
+    }
+  }
+
   const coverM = /^\/admin\/submissions\/([a-z0-9]+)\/cover$/.exec(url.pathname);
   if (coverM && request.method === "GET") {
     const row = await db.prepare("SELECT cover, cover_type FROM submissions WHERE id = ? AND cover IS NOT NULL").bind(coverM[1]).first<{ cover: ArrayBuffer; cover_type: string }>();

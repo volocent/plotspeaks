@@ -16,8 +16,10 @@
   ],
   "observability": { "enabled": true },
   // Workers AI: cover images and submission moderation. Static files (logo, covers) in public/.
+  // /audio/* runs the Worker first so the home page's sample can answer byte-range requests
+  // (iOS Safari needs them to play audio); see serveAudio() in src/index.ts.
   "ai": { "binding": "AI" },
-  "assets": { "directory": "public", "binding": "ASSETS" },
+  "assets": { "directory": "public", "binding": "ASSETS", "run_worker_first": ["/audio/*"] },
   // Daily 90-day log retention (scheduled() in src/index.ts -> src/retention.ts). Triggers are
   // per environment, so every env below repeats it. 03:23 UTC, off the hour.
   "triggers": { "crons": ["23 3 * * *"] },
@@ -28,7 +30,7 @@
       "workers_dev": true,
       "vars": { "ENVIRONMENT": "dev" },
       "ai": { "binding": "AI" },
-      "assets": { "directory": "public", "binding": "ASSETS" },
+      "assets": { "directory": "public", "binding": "ASSETS", "run_worker_first": ["/audio/*"] },
       "triggers": { "crons": ["23 3 * * *"] },
       "d1_databases": [
         { "binding": "DB", "database_name": "plotspeaks-dev", "database_id": "3c93a1ce-a864-405f-be55-01bd5ad3d565", "migrations_dir": "migrations" }
@@ -49,7 +51,7 @@
       ],
       "vars": { "ENVIRONMENT": "production" },
       "ai": { "binding": "AI" },
-      "assets": { "directory": "public", "binding": "ASSETS" },
+      "assets": { "directory": "public", "binding": "ASSETS", "run_worker_first": ["/audio/*"] },
       "triggers": { "crons": ["23 3 * * *"] },
       "d1_databases": [
         { "binding": "DB", "database_name": "plotspeaks", "database_id": "bf10cf37-6f31-4f7f-bf5d-e2366dd00518", "migrations_dir": "migrations" }

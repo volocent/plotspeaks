@@ -47,6 +47,9 @@ const tools = (await rpc('tools/list', {})).json?.result?.tools?.map((t) => t.na
 ok(['open_plot_speaks', 'list_stories', 'start_story', 'reveal', 'get_cue', 'rate_story', 'write_story', 'review_story', 'check_story', 'submit_story', 'withdraw_submission'].every((t) => tools.includes(t)), `tools: ${tools.join(', ')}`);
 const toolList = (await rpc('tools/list', {})).json?.result?.tools ?? [];
 ok(toolList.every((t) => typeof t.title === 'string' && t.title.length > 0), 'every tool has a title');
+// Claude's directory form reads the title from annotations.title (2026-10-16 submission).
+ok(toolList.every((t) => typeof t.annotations?.title === 'string' && t.annotations.title.length > 0), 'every tool has annotations.title');
+ok(['start_story', 'reveal', 'get_cue'].every((n) => toolList.find((t) => t.name === n)?.annotations?.readOnlyHint === false), 'tools that log a play are not marked read-only');
 
 const list = await call('list_stories', {});
 ok(/example-dinner-party/.test(list) && /keepers-bell/.test(list), 'list_stories lists the stories');
@@ -151,6 +154,7 @@ ok(home.status === 200 && /text\/html/.test(home.type), `GET / is an HTML page (
 const slugs = [...home.body.matchAll(/href="\/stories\/([^"/]+)"/g)].map((m) => decodeURIComponent(m[1]));
 ok(slugs.includes('example-dinner-party') && slugs.includes('keepers-bell'), `GET / lists the stories (${slugs.join(', ')})`);
 ok(/The Last Toast/.test(home.body) && /The Keeper(&#39;|')s Bell/.test(home.body), 'GET / shows story titles');
+ok(/<audio controls preload="none" src="\/audio\/sample-last-toast\.mp3"/.test(home.body) && /class="btn btn-ghost btn-sm sample-btn" hidden aria-label="Play a/.test(home.body), 'GET / has the audio sample (a plain player without JS, a play button with it)');
 const firstAdventure = home.body.search(/genre-adventure"/), lastMystery = home.body.lastIndexOf('genre-murder-mystery"');
 ok(firstAdventure === -1 || lastMystery === -1 || lastMystery < firstAdventure, 'GET / lists mysteries first');
 
@@ -229,6 +233,13 @@ if (base.startsWith('https://')) {
 const coverRes = await fetch(`${base}/covers/example-dinner-party.jpg`);
 await coverRes.arrayBuffer();
 ok(coverRes.status === 200 && /^image\//.test(coverRes.headers.get('content-type') ?? ''), `GET /covers/example-dinner-party.jpg is an image (${coverRes.status} ${coverRes.headers.get('content-type')})`);
+const sampleRes = await fetch(`${base}/audio/sample-last-toast.mp3`);
+const sampleBytes = (await sampleRes.arrayBuffer()).byteLength;
+ok(sampleRes.status === 200 && /^audio\//.test(sampleRes.headers.get('content-type') ?? '') && sampleBytes > 50_000 && sampleBytes < 600_000,
+  `GET /audio/sample-last-toast.mp3 is audio (${sampleRes.status} ${sampleRes.headers.get('content-type')}, ${Math.round(sampleBytes / 1024)} KB)`);
+const sampleRange = await fetch(`${base}/audio/sample-last-toast.mp3`, { headers: { range: 'bytes=0-1' } });
+ok(sampleRange.status === 206 && sampleRange.headers.get('content-range') === `bytes 0-1/${sampleBytes}` && (await sampleRange.arrayBuffer()).byteLength === 2,
+  `the sample answers a byte-range request, as iOS Safari needs (${sampleRange.status} ${sampleRange.headers.get('content-range')})`);
 const noCover = await fetch(`${base}/covers/no-such-story.jpg`);
 await noCover.arrayBuffer();
 ok(noCover.status === 404, `an unknown cover is 404 (${noCover.status})`);

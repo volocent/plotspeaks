@@ -177,7 +177,7 @@ function createServer(ctx: Ctx) {
     "open_plot_speaks",
     {
       title: "Open Plot Speaks",
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      annotations: { title: "Open Plot Speaks", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       description: "Call this first when the user opens or asks for Plot Speaks without naming a story (for example \"open Plot Speaks\" or \"let's play Plot Speaks\"). Returns a short spoken introduction, a question asking whether they'd like to hear the stories, start one or write their own, and a menu of story categories with example titles.",
       inputSchema: {},
     },
@@ -197,7 +197,7 @@ function createServer(ctx: Ctx) {
     "list_stories",
     {
       title: "List stories",
-      annotations: READ_ONLY,
+      annotations: { ...READ_ONLY, title: "List stories" },
       description: "List the Plot Speaks stories that can be played by voice, optionally for one category: murder mysteries (classic or dark), family mysteries for kids, and fantasy adventures. You don't need this to start a story the user named: call start_story directly.",
       // Optional inputs rather than none: one client called the input-less version before loading it.
       inputSchema: {
@@ -223,8 +223,9 @@ function createServer(ctx: Ctx) {
     "start_story",
     {
       title: "Start a story",
-      // Read-only for the story data; it also logs an anonymous play (no transcript, no personal data).
-      annotations: READ_ONLY,
+      // Not read-only: it logs an anonymous play (no transcript, no personal data). Directories reject
+      // annotations that don't match behaviour.
+      annotations: { ...RECORDS, title: "Start a story" },
       description: "Load a Plot Speaks story to narrate. Returns the full story script, including the narrator's rules. Call it when the user asks to play a story.",
       inputSchema: { slug: z.string().describe("The story's slug or title, e.g. example-dinner-party or The Last Toast") },
     },
@@ -246,8 +247,8 @@ function createServer(ctx: Ctx) {
     "reveal",
     {
       title: "Check an accusation",
-      // Read-only for the story data; it also logs an anonymous accusation event for the play.
-      annotations: READ_ONLY,
+      // Not read-only: it logs an anonymous accusation event for the play.
+      annotations: { ...RECORDS, title: "Check an accusation" },
       description: "Check a formal accusation in a Plot Speaks mystery. Call only after the user says they accuse someone. Returns that person's verdict line, starting Correct. or Innocent.",
       inputSchema: {
         slug: z.string().describe("The story slug"),
@@ -270,7 +271,7 @@ function createServer(ctx: Ctx) {
     "get_cue",
     {
       title: "Get a scene cue",
-      annotations: READ_ONLY,
+      annotations: { ...RECORDS, title: "Get a scene cue" },
       description: "Get a cue in a Plot Speaks adventure, when the story calls for one. Returns the text to narrate plus narrator-only notes that must never be read aloud.",
       inputSchema: {
         slug: z.string().describe("The story slug"),
@@ -295,7 +296,7 @@ function createServer(ctx: Ctx) {
     "rate_story",
     {
       title: "Rate a story",
-      annotations: RECORDS,
+      annotations: { ...RECORDS, title: "Rate a story" },
       description: "Save the player's rating when a Plot Speaks story ends: 1 to 5 stars, whether the narrator gave anything away too early, and an optional short comment.",
       inputSchema: {
         slug: z.string().describe("The story slug"),
@@ -335,7 +336,7 @@ function createServer(ctx: Ctx) {
     "check_story",
     {
       title: "Check a story draft",
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      annotations: { title: "Check a story draft", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       description: "Check a draft Plot Speaks story against the format rules (front matter, GM instructions, spoken intro, chapters and recap blocks, read-aloud length, no audio cues, protected names; with secrets_md, also cues and the Correct./Innocent. verdict lines). Returns ERROR and WARN lines with line numbers. Nothing submitted is stored.",
       inputSchema: {
         story_md: z.string().max(60000).describe("The full text of story.md"),
@@ -355,7 +356,7 @@ function createServer(ctx: Ctx) {
     "write_story",
     {
       title: "Write a story",
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      annotations: { title: "Write a story", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       description: "Start writing a Plot Speaks story with the user. Returns a short intro for the user (how a story is built: a public story.md plus a private answer key, secrets.md; that you draft it together; that a person at Plot Speaks reviews it before anything is published; roughly how long it takes), a suggested step-by-step way to work together, and the format template. Call it when the user wants to write their own story.",
       inputSchema: {
         genre: z.enum(WRITE_GENRES).optional().describe("murder-mystery (default), dark (a dark murder mystery), kids (a family mystery; nobody gets hurt) or adventure"),
@@ -372,7 +373,7 @@ function createServer(ctx: Ctx) {
     "review_story",
     {
       title: "Review a story draft",
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      annotations: { title: "Review a story draft", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       description: "Review a draft Plot Speaks story before it is submitted. Runs the automatic format checks on story.md and secrets.md together (including whether story.md gives the culprit away) and returns a status (passes format checks, or the number of problems), the findings with line numbers, and a fair-play checklist for you to go through with the writer, since the server can't judge fairness itself. Nothing sent is stored.",
       inputSchema: {
         story_md: z.string().min(1).max(60000).describe("The full text of story.md"),
@@ -392,7 +393,7 @@ function createServer(ctx: Ctx) {
     "submit_story",
     {
       title: "Submit a story",
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+      annotations: { title: "Submit a story", readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
       description: "Submit a finished Plot Speaks story for publication, credited to the name the writer chooses. Runs the format checks (any error refuses it), an automatic safety screen and a daily limit, then stores it for a person to review. Nothing is public until it is approved. The receipt includes a claim code, shown once, that the writer needs to withdraw or update the story later. Call only when the writer has said they are ready to submit. To send a new version of an earlier submission, include replaces_id and claim_code.",
       inputSchema: {
         story_md: z.string().min(1).max(60000).describe("The full text of story.md"),
@@ -410,7 +411,7 @@ function createServer(ctx: Ctx) {
     "withdraw_submission",
     {
       title: "Withdraw a submission",
-      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+      annotations: { title: "Withdraw a submission", readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
       description: "Withdraw a story the user submitted to Plot Speaks: deletes the submission (pending or published) when the submission id and claim code from its receipt match. Call only when the writer asks to withdraw it.",
       inputSchema: {
         id: z.string().min(1).max(40).describe("The submission id from the receipt"),
@@ -423,7 +424,41 @@ function createServer(ctx: Ctx) {
   return server;
 }
 
-type Env = SubEnv;
+type Env = SubEnv & { ASSETS?: { fetch: (request: Request) => Promise<Response> } };
+
+// ------------------------------------------------------------------ audio with byte ranges
+// The home page's audio sample (public/audio/). Static assets answer a Range request with the
+// whole file and a 200, and iOS Safari won't play media from a server without byte ranges, so
+// /audio/* runs the Worker first (assets.run_worker_first in wrangler.jsonc) and is sliced here.
+async function serveAudio(request: Request, assets: NonNullable<Env["ASSETS"]>): Promise<Response> {
+  const res = await assets.fetch(new Request(request.url, { method: "GET" }));
+  if (!res.ok) return res;
+  const body = new Uint8Array(await res.arrayBuffer());
+  const size = body.length;
+  const headers = new Headers({
+    "content-type": res.headers.get("content-type") || "audio/mpeg",
+    "accept-ranges": "bytes",
+    "cache-control": "public, max-age=86400",
+  });
+  const etag = res.headers.get("etag");
+  if (etag) headers.set("etag", etag);
+  const head = request.method === "HEAD";
+  const m = /^bytes=(\d*)-(\d*)$/.exec((request.headers.get("range") ?? "").trim());
+  if (!m || (!m[1] && !m[2])) {
+    headers.set("content-length", String(size));
+    return new Response(head ? null : body, { status: 200, headers });
+  }
+  let start: number, end: number;
+  if (!m[1]) { start = Math.max(0, size - Number(m[2])); end = size - 1; }
+  else { start = Number(m[1]); end = m[2] ? Math.min(Number(m[2]), size - 1) : size - 1; }
+  if (start >= size || start > end) {
+    headers.set("content-range", `bytes */${size}`);
+    return new Response(null, { status: 416, headers });
+  }
+  headers.set("content-range", `bytes ${start}-${end}/${size}`);
+  headers.set("content-length", String(end - start + 1));
+  return new Response(head ? null : body.subarray(start, end + 1), { status: 206, headers });
+}
 
 // ------------------------------------------------------------------ passenger page API
 // JSON for the site's public passenger page (for players who paste the story into a chat with no
@@ -506,6 +541,9 @@ export default {
     // MCP clients don't reliably follow a redirect on POST.
     if (url.hostname === "www.plotspeaks.com" || (url.hostname === "plotspeaks.volocent.com" && url.pathname !== "/mcp")) {
       return Response.redirect(`https://plotspeaks.com${url.pathname}${url.search}`, 301);
+    }
+    if (url.pathname.startsWith("/audio/") && env.ASSETS && (request.method === "GET" || request.method === "HEAD")) {
+      return serveAudio(request, env.ASSETS);
     }
     // Review queue and cover generation: key-gated, 404 when no admin key is configured.
     const admin = await handleAdmin(request, env, BUILTINS);
