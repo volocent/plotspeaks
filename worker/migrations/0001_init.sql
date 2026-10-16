@@ -1,9 +1,10 @@
 -- Plot Speaks play data (Phase 2, M2). What Gate 2 needs and nothing more: no transcripts,
 -- no player names, no IP addresses.
 
--- One row per start_story call. "client" is the MCP client name the assistant reports
--- (e.g. "claude-ai"), used to split counts by assistant; "tester" marks plays made with the
--- dev access key, so Gate 2 can count strangers only.
+-- One row per start_story call. "client" is the User-Agent the assistant's connector sends
+-- (e.g. "claude-user", "openai-mcp/1.0.0"; first 80 characters), used to split counts by
+-- assistant; "tester" marks plays made on the dev server or with the prod tester key, so Gate 2
+-- can count strangers only.
 CREATE TABLE plays (
   id          TEXT PRIMARY KEY,
   story       TEXT NOT NULL,
@@ -12,7 +13,8 @@ CREATE TABLE plays (
   started_at  INTEGER NOT NULL
 );
 
--- Accusations, verdicts and cues within a play (kind: accusation | cue).
+-- Accusations, verdicts, reveals and cues within a play (kind: accusation | reveal | cue; the MCP
+-- get_cue tool records nothing, so cue rows come from the passenger page only).
 CREATE TABLE play_events (
   id        INTEGER PRIMARY KEY AUTOINCREMENT,
   play_id   TEXT,

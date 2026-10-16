@@ -25,7 +25,7 @@ The first thing you hear should come from the story. If it starts a different ta
 
 ## Checking an accusation
 
-The story file doesn't contain the answer. When you accuse someone, the narrator hands over to whoever holds the answer key: today, a passenger (the "wrangler"), and soon the Plot Speaks connector, which checks it automatically. Stories in this repo are for playing with a friend who knows the answer, for writing to the format, and for trying the tools.
+The story file doesn't contain the answer. When you accuse someone, the narrator hands over to whoever holds the answer key: the Plot Speaks connector (`https://plotspeaks.com/mcp`) checks it automatically, or a passenger uses the story's public page at `https://plotspeaks.com/stories/<slug>/passenger`. Stories in this repo are for playing that way, for writing to the format, and for trying the tools.
 
 ## Safety
 

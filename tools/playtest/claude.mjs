@@ -1,6 +1,6 @@
 // Thin wrapper around the Claude Code CLI in headless mode (subscription auth, no API key).
 import { spawnSync } from 'node:child_process';
-import { existsSync, readdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, mkdtempSync, writeFileSync, unlinkSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
@@ -20,8 +20,10 @@ export function findClaudeBin() {
   return 'claude';
 }
 
-// Empty cwd so no project CLAUDE.md loads.
+// Empty cwd so no project CLAUDE.md loads. Removed when the process ends: the system-prompt files
+// written here hold story text and, in --solo / --secrets runs, the answer key.
 export const EMPTY_CWD = mkdtempSync(join(tmpdir(), 'plotspeaks-playtest-'));
+process.on('exit', () => { try { rmSync(EMPTY_CWD, { recursive: true, force: true }); } catch { /* best effort */ } });
 
 /**
  * One CLI call. `conv` is {id, started}; the first call uses --session-id, later ones --resume.
@@ -32,17 +34,24 @@ export function callClaude({ conv, prompt, model, systemPrompt, bin = findClaude
   if (!String(prompt ?? '').trim()) prompt = '(no answer)';
   const args = ['-p', '--model', model, '--output-format', 'json', '--tools', '',
     '--strict-mcp-config', '--setting-sources', '', '--disable-slash-commands'];
+  let promptFile = null;
   if (systemPrompt) {
-    const f = join(EMPTY_CWD, `sp-${randomUUID()}.txt`);
-    writeFileSync(f, systemPrompt);
-    args.push('--system-prompt-file', f);
+    promptFile = join(EMPTY_CWD, `sp-${randomUUID()}.txt`);
+    writeFileSync(promptFile, systemPrompt);
+    args.push('--system-prompt-file', promptFile);
   }
   if (conv) {
     if (conv.started) args.push('--resume', conv.id);
     else args.push('--session-id', conv.id);
   }
   const t0 = Date.now();
-  const r = spawnSync(bin, args, { input: prompt, cwd: EMPTY_CWD, encoding: 'utf8', timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024, windowsHide: true });
+  let r;
+  try {
+    r = spawnSync(bin, args, { input: prompt, cwd: EMPTY_CWD, encoding: 'utf8', timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024, windowsHide: true });
+  } finally {
+    // The CLI has read it by now; the answer key must not sit in the temp folder.
+    if (promptFile) { try { unlinkSync(promptFile); } catch { /* already gone */ } }
+  }
   const ms = Date.now() - t0;
   if (r.error) throw new Error(`claude spawn failed: ${r.error.message}`);
   let j;

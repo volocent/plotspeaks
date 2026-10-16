@@ -102,6 +102,11 @@ STEP 3: Call review_story with story_md and secrets_md. Fix every ERROR and re-c
 
 type Finding = { severity: "ERROR" | "WARN"; line: number; rule: string; message: string; file?: string };
 
+// The lint helpers are plain JavaScript (shared with tools/check-story); these give TypeScript the shapes it can't infer.
+type FrontMatter = { ok: boolean; metadata: Record<string, unknown> };
+const frontMatter = (text: string): FrontMatter => parseFrontMatter(text) as FrontMatter;
+const lintStory = (text: string, opts: { slug?: string; denylist: string[] }): Finding[] => checkStoryText(text, opts as never) as Finding[];
+
 /** Worker-only rule `endings-verdict`: secrets.md answers every accusation with a Correct./Innocent. line. */
 function checkEndingsVerdicts(secrets: string): Finding[] {
   const endings = parseEndings(secrets.replace(/\r\n?/g, "\n")) as { name: string; verdict: string; text: string }[];
@@ -118,14 +123,14 @@ function checkEndingsVerdicts(secrets: string): Finding[] {
 }
 
 export function checkSubmitted(storyMd: string, secretsMd?: string, slug?: string): { report: string; errors: number; warnings: number } {
-  const findings: Finding[] = (checkStoryText(storyMd, { slug, denylist: DENYLIST }) as Finding[]).map((f) => ({ file: "story.md", ...f }));
+  const findings: Finding[] = lintStory(storyMd, { slug, denylist: DENYLIST }).map((f) => ({ file: "story.md", ...f }));
   if (secretsMd) {
     for (const f of [...checkAudioCues(secretsMd), ...checkDenylist(secretsMd, DENYLIST), ...checkReadAloud(secretsMd)] as Finding[]) findings.push({ file: "secrets.md", ...f });
     findings.push(...(checkWranglerCues(storyMd, secretsMd) as Finding[]), ...(checkCueParts(secretsMd) as Finding[]));
     // culprit-tell needs both files: it reads secrets.md's "**Culprit:**" line and looks for that
     // name in story.md's GM instructions and cast table (same rule as tools/check-story).
     for (const f of checkCulpritTells(storyMd, secretsMd) as Finding[]) findings.push({ file: "story.md", ...f });
-    const fm = parseFrontMatter(storyMd);
+    const fm = frontMatter(storyMd);
     if (fm.ok && fm.metadata.genre !== "adventure") findings.push(...checkEndingsVerdicts(secretsMd));
     if (fm.ok) findings.push(...(checkFullReveal(secretsMd, { genre: fm.metadata.genre }) as Finding[]));
   }
@@ -251,7 +256,7 @@ export function reviewChecklist(genre: string): string[] {
 
 export function reviewStory(storyMd: string, secretsMd = "", slug?: string): { report: string; errors: number; warnings: number } {
   const lint = checkSubmitted(storyMd, secretsMd || undefined, slug);
-  const fm = parseFrontMatter(storyMd);
+  const fm = frontMatter(storyMd);
   const genre = fm.ok ? String(fm.metadata.genre ?? "") : "";
   const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
   const status = lint.errors

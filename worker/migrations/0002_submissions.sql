@@ -15,7 +15,7 @@ CREATE TABLE submissions (
   secrets_md        TEXT,
   contact           TEXT,
   moderation        TEXT NOT NULL,   -- JSON: Llama Guard verdict per file
-  lint              TEXT NOT NULL,   -- check_story summary line + counts
+  lint              TEXT NOT NULL,   -- JSON: the format check's counts, summary line and report (review_story's checks)
   cover             BLOB,
   cover_type        TEXT,
   cover_prompt      TEXT,

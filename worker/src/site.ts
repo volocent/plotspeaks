@@ -1647,7 +1647,7 @@ export function privacyPage(origin: string): string {
 <h2>When you play through the connector</h2>
 <p>We record anonymous play data, to learn which stories work:</p>
 <ul>
-<li><strong>Starting a story:</strong> which story, the app name your assistant reports (for example “claude-ai”), the time, and a random play id.</li>
+<li><strong>Starting a story:</strong> which story, the identifier your assistant's connector sends with the request (its User-Agent, which names the assistant, not you), the time, and a random play id.</li>
 <li><strong>Accusations:</strong> the name you accused, whether it was right, and the time.</li>
 <li><strong>Adventure cues:</strong> which hidden scene was fetched, and the time.</li>
 <li><strong>Ratings:</strong> the stars, whether the ending was spoiled, any comment you choose to add, and the time.</li>

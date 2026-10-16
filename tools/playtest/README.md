@@ -8,7 +8,7 @@ Separate Claude Code CLI conversations (headless, `claude -p`, so information is
 
 - **Narrator** (`--solo`: uses `dist/solo/<slug>-solo.md` with the secrets inside, see tools/solo; wrangler cues never fire) - system prompt is a short voice-mode framing plus the full `story.md`. With `--secrets with` it also gets `secrets.md` under a "GM-ONLY SECRETS" header, to test whether a narrator holding the answer leaks it. Continued across turns with `--resume`.
 - **Player** - a persona (`personas.mjs`: `curious`, `adversarial`, `drifter`, `adventurer`). It never sees `story.md` or `secrets.md`.
-- **Wrangler** - code, not a model. On "Wrangler, check the secrets" it finds the accused name in the player's last "I accuse ..." line and sends the matching `## Endings detail` line. On "Wrangler, cue S<id>" it sends the `Read aloud to the narrator` part (plus `Numbers`) of `## S<id>`. "Wrangler only" text is never sent. Follow-up cues (S3b etc.) are not simulated.
+- **Wrangler** - code, not a model. On "Wrangler, check the secrets" it finds the accused name in the player's last "I accuse ..." line and sends the matching `## Endings detail` line. On "Wrangler, cue S<id>" it sends the `Read aloud to the narrator` part (plus `Numbers`) of `## S<id>`. "Wrangler only" text is never sent. Follow-up cues (S3b etc.) fire only when a passenger model is given with `--wrangler-model`.
 - **Judge** - one call after the session with story, secrets and transcript; returns strict JSON (leaks, coherence breaks, format counts, hand-off, resume, outcome). Parsed defensively, one retry.
 
 Every call runs in an empty temp directory with `--tools ""`, `--system-prompt-file`, `--strict-mcp-config`, `--setting-sources ""` and `--disable-slash-commands`, so no project CLAUDE.md, MCP servers, hooks or the ~68k-token Claude Code prompt load. Calls are sequential.
@@ -21,10 +21,10 @@ node tools/playtest/playtest.mjs stories/example-dinner-party --persona adversar
 node tools/playtest/playtest.mjs stories/keepers-bell --persona adventurer --resume-test --split-at 12
 node tools/playtest/playtest.mjs stories/example-dinner-party --dry-run      # canned replies, no CLI calls
 node tools/playtest/summarize.mjs                                            # table of every result
-node --test tools/playtest/test/lib.test.mjs                                  # unit tests
+node --test tools/playtest/test/lib.test.mjs tools/playtest/test/asr.test.mjs  # unit tests
 ```
 
-Options: `--persona`, `--narrator-model`, `--player-model`, `--judge-model` (default sonnet), `--secrets without|with`, `--turns` (default 30), `--resume-test`, `--split-at N`, `--seed label`, `--dry-run`. The session also ends on an accepted ending after the wrangler line, or if the player says "Plot Speaks, end the story".
+Options: `--persona`, `--narrator-model`, `--player-model`, `--judge-model` (default sonnet), `--wrangler-model` (a passenger model that calls follow-up cues), `--secrets without|with`, `--solo`, `--asr-noise low|high` (misheard-speech noise on the player's lines), `--turns` (default 30), `--resume-test`, `--split-at N`, `--seed label`, `--dry-run`. The session also ends on an accepted ending after the wrangler line, or if the player says "Plot Speaks, end the story".
 
 `--resume-test` starts a NEW narrator conversation (no memory) at "resume from chapter 2" in the narrator's output, or at exchange N, and sends "Plot Speaks, resume from chapter 2." plus a "We found ..." summary written by the player model.
 

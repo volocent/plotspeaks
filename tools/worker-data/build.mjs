@@ -80,7 +80,8 @@ for (const slug of readdirSync(join(root, "stories")).sort()) {
     const c = extractCue(secrets, id);
     if (c) cues[`S${id}`.toUpperCase()] = { read_aloud: clean(c), narrator_only: clean(wranglerOnly(id)) };
   }
-  const listenFor = (/^#{2,3}\s+Listen for[^\n]*\n([\s\S]*?)(?=^#{2,3}\s)/im.exec(secrets) || [, null])[1];
+  // The table may be the last section of secrets.md: "the next heading or the end" closes it.
+  const listenFor = (/^#{2,3}\s+Listen for[^\n]*\n([\s\S]*?)(?=^#{2,3}\s|(?![\s\S]))/im.exec(secrets) || [, null])[1];
   const connector = connectorStory(story);
   dropped.push(...connector.dropped);
   for (const d of dropped) warnings.push(`${slug}: dropped a wrangler sentence: ${d}`);
@@ -88,6 +89,7 @@ for (const slug of readdirSync(join(root, "stories")).sort()) {
     slug,
     title: field(fm, "title") || slug,
     genre: field(fm, "genre"),
+    tone: field(fm, "tone").toLowerCase(),
     players: field(fm, "players"),
     duration_minutes: Number(field(fm, "duration_minutes")) || null,
     story,

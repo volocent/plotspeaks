@@ -10,9 +10,27 @@ import { readFileSync, existsSync } from 'node:fs';
 
 const openServer = process.argv.includes('--open');
 const base = (process.argv.slice(2).find((a) => !a.startsWith('--')) || 'http://127.0.0.1:8799').replace(/\/$/, '');
-const key = existsSync(new URL('../.dev.vars', import.meta.url))
-  ? (/^DEV_ACCESS_KEY=(.+)$/m.exec(readFileSync(new URL('../.dev.vars', import.meta.url), 'utf8')) || [])[1]?.trim()
-  : process.env.DEV_ACCESS_KEY;
+// Dev: the access key from .dev.vars (every dev play is a tester play). Prod (--open): the tester
+// key (secret TESTER_KEY, local copy in .prod-secrets/), so smoke plays never count as strangers.
+const readKey = (file, name) => existsSync(file) ? (new RegExp(`^${name}=(.+)$`, 'm').exec(readFileSync(file, 'utf8')) || [, readFileSync(file, 'utf8')])[1]?.trim() : process.env[name];
+const key = openServer
+  ? readKey(new URL('../../.prod-secrets/TESTER_KEY.txt', import.meta.url), 'TESTER_KEY')
+  : readKey(new URL('../.dev.vars', import.meta.url), 'DEV_ACCESS_KEY');
+if (openServer && !key) { console.log('FAIL  no tester key: put it in .prod-secrets/TESTER_KEY.txt (or env TESTER_KEY) so smoke plays are not counted as strangers'); process.exit(1); }
+
+// Prod's Cloudflare rule blocks an IP that sends more than 60 requests in 10 s to /mcp or /api/*
+// (docs/DECISIONS.md). The leak scan alone makes more than that, so on an open server those
+// requests are spaced 220 ms apart (at most 45 in any 10 s); the pages are not rate-limited.
+const rawFetch = globalThis.fetch;
+let lastLimited = 0;
+globalThis.fetch = async (url, init) => {
+  if (openServer && /\/(mcp|api\/)/.test(String(url))) {
+    const wait = lastLimited + 220 - Date.now();
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+    lastLimited = Date.now();
+  }
+  return rawFetch(url, init);
+};
 
 let id = 0, failed = 0;
 const ok = (cond, msg) => { console.log(`${cond ? 'PASS' : 'FAIL'}  ${msg}`); if (!cond) failed++; };
@@ -324,10 +342,11 @@ ok(toolLeaks === 0, `no answer-key line, Endings text or full reveal in ${toolOu
 const getJson = async (path) => { const r = await fetch(`${base}${path}`); let json = null; try { json = await r.json(); } catch {} return { status: r.status, type: r.headers.get('content-type') ?? '', json }; };
 const names = await getJson('/api/stories/example-dinner-party/names');
 ok(names.status === 200 && /application\/json/.test(names.type) && Array.isArray(names.json?.names) && names.json.names.some((n) => /Winterbourne/.test(n)), `GET /api/stories/<slug>/names lists the names (${names.status})`);
+const nameList = Array.isArray(names.json?.names) ? names.json.names : [];
 const namesRaw = JSON.stringify(names.json ?? {});
-ok(Object.keys(names.json ?? {}).join() === 'names' && !/Correct\.|Innocent\./.test(namesRaw) && !needles.some((n) => namesRaw.includes(n.slice(0, 60))) && names.json.names.every((n) => n.length < 60),
+ok(Object.keys(names.json ?? {}).join() === 'names' && !/Correct\.|Innocent\./.test(namesRaw) && !needles.some((n) => namesRaw.includes(n.slice(0, 60))) && nameList.every((n) => n.length < 60),
   'names returns names only, no ending text');
-ok(JSON.stringify([...names.json.names].sort((x, y) => x.localeCompare(y))) === JSON.stringify(names.json.names), 'names are sorted (secrets.md order gives nothing away)');
+ok(nameList.length > 0 && JSON.stringify([...nameList].sort((x, y) => x.localeCompare(y))) === JSON.stringify(nameList), 'names are sorted (secrets.md order gives nothing away)');
 const checked = await getJson(`/api/stories/example-dinner-party/check?name=${encodeURIComponent('hale winterbourne')}`);
 ok(checked.status === 200 && checked.json?.verdict === 'wrong' && /^Innocent\./.test(checked.json?.line ?? '') && Object.keys(checked.json).sort().join() === 'line,verdict', `GET .../check returns one verdict line (${checked.json?.verdict})`);
 const misheardCheck = await getJson(`/api/stories/example-dinner-party/check?name=${encodeURIComponent('Mr Winterbourne')}`);

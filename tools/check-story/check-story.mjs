@@ -59,6 +59,11 @@ export function checkStoryDir(dir, denylist) {
 
 function main(argv) {
   const json = argv.includes('--json');
+  const unknown = argv.filter((a) => a.startsWith('--') && a !== '--json');
+  if (unknown.length) {
+    console.error(`unknown option ${unknown.join(' ')}; usage: node tools/check-story/check-story.mjs [--json] [stories/<slug> ...]`);
+    process.exit(2);
+  }
   let targets = argv.filter((a) => !a.startsWith('--'));
   if (targets.length === 0) {
     const root = join(repoRoot, 'stories');

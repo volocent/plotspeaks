@@ -37,14 +37,19 @@ export type SubEnv = {
   ENVIRONMENT?: string; DEV_ACCESS_KEY?: string; ADMIN_KEY?: string; IP_SALT?: string; SUBMIT_DAILY_CAP?: string;
   DB?: D1Database; AI?: Ai;
 };
-type Ending = { name: string; verdict: string; text: string };
+export type Ending = { name: string; verdict: string; text: string };
 type Cue = { read_aloud: string; narrator_only: string | null };
 export type FullReveal = { read_aloud: string; afterward: string | null };
 export type PlayStory = {
-  slug: string; title: string; genre: string; players: string; duration_minutes: number | null;
+  slug: string; title: string; genre: string; tone: string; players: string; duration_minutes: number | null;
   story: string; story_connector: string[]; endings: Ending[]; cues: Record<string, Cue>;
   listen_for: string | null; listen_for_raw: string | null; full_reveal: FullReveal | null;
 };
+/** metadata.tone from a story's front matter (classic | dark | cozy), lower-cased; "" when absent. */
+export function toneOf(story: string): string {
+  const fm = (/^---\r?\n([\s\S]*?)\r?\n---/.exec(story) || [, ""])[1];
+  return ((/^\s*tone:\s*["']?([A-Za-z-]+)/m.exec(fm) || [, ""])[1]).toLowerCase();
+}
 /** Who is submitting: the connecting IP, and whether it is an assistant's connector (whose IP is the company's, not the person's). */
 export type Caller = { ip: string; connector: string | null };
 export type Builtins = { slugs: Set<string>; storyFor: (slug: string) => string | null };
@@ -214,7 +219,8 @@ function playData(secrets: string) {
     const c = extractCue(s, m[1]);
     if (c) cues[`S${m[1]}`.toUpperCase()] = { read_aloud: notes(c) as string, narrator_only: notes(wranglerOnly(m[1])) };
   }
-  const listen = (/^#{2,3}\s+Listen for[^\n]*\n([\s\S]*?)(?=^#{2,3}\s)/im.exec(s) || [, null])[1];
+  // The table may be the last section of the file, so "the next heading or the end" closes it.
+  const listen = (/^#{2,3}\s+Listen for[^\n]*\n([\s\S]*?)(?=^#{2,3}\s|(?![\s\S]))/im.exec(s) || [, null])[1];
   const endings = (parseEndings(s) as Ending[]).map(({ name, verdict, text }) => ({ name, verdict, text }));
   return { endings, cues, listen_for: listen ? notes(listen.trim()) : null, listen_for_raw: listen ? listen.trim() : null, full_reveal: parseFullReveal(s) as FullReveal | null };
 }
@@ -297,8 +303,8 @@ export async function submitStory(
 
   const m = meta(story);
   // No cover here: the MCP tools never generate images (Anthropic directory acknowledgement,
-  // 2026-10-16). The cover is made when Ben approves the story on the admin page.
-  const cover: { bytes: Uint8Array; contentType: string; prompt: string } | null = null;
+  // 2026-10-16). The cover columns are written NULL and filled in when Ben approves the story on
+  // the admin page; a replacement also clears the old cover so approval makes a fresh one.
   const lintSummary = JSON.stringify({ errors: lint.errors, warnings: lint.warnings, summary: lint.report.split("\n")[0], report: lint.report.slice(0, 4000) });
   const moderation = JSON.stringify({ model: GUARD_MODEL, at: Date.now(), story: mod.story, secrets: mod.secrets });
   const contact = args.contact?.trim() || null;
@@ -314,7 +320,7 @@ export async function submitStory(
       `UPDATE submissions SET status = 'pending', reviewed_at = NULL, title = ?, genre = ?, players = ?, duration_minutes = ?, story_md = ?, secrets_md = ?,
          contact = ?, moderation = ?, lint = ?, cover = ?, cover_type = ?, cover_prompt = ?, author_name = ? WHERE id = ?`,
     ).bind(m.title, m.genre, m.players, m.duration, story, secrets ?? null, contact, moderation, lintSummary,
-      cover ? cover.bytes : null, cover?.contentType ?? null, cover?.prompt ?? null, author.name, replacing.id).run();
+      null, null, null, author.name, replacing.id).run();
     await attempt("stored", replacing.id);
     log("submit_story", { outcome: "replaced", id: replacing.id, was: replacing.status, story_chars: story.length, warnings: lint.warnings });
     return [
@@ -338,10 +344,10 @@ export async function submitStory(
        moderation, lint, cover, cover_type, cover_prompt, ip_hash, dev_marker, author_name, claim_hash)
      VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).bind(id, Date.now(), m.title, slug, m.genre, m.players, m.duration, story, secrets ?? null, contact,
-    moderation, lintSummary, cover ? cover.bytes : null, cover?.contentType ?? null, cover?.prompt ?? null, ipHash, devMarker,
+    moderation, lintSummary, null, null, null, ipHash, devMarker,
     author.name, await claimHash(id, code)).run();
   await attempt("stored", id);
-  log("submit_story", { outcome: "stored", id, story_chars: story.length, secrets_chars: secrets?.length ?? 0, warnings: lint.warnings, cover: Boolean(cover) });
+  log("submit_story", { outcome: "stored", id, story_chars: story.length, secrets_chars: secrets?.length ?? 0, warnings: lint.warnings });
 
   return [
     `Thank you! "${m.title}" was received, credited to ${author.name}. Submission id: ${id}.`,
@@ -370,14 +376,20 @@ export async function withdrawSubmission(env: SubEnv, args: { id: string; claim_
     log("withdraw_submission", { outcome: "no_match" });
     return "Not withdrawn: no submission matches that id and claim code. Check both (the code looks like ABCD-EFGH-JKMN). Nothing was changed.";
   }
-  await db.batch([
-    db.prepare("DELETE FROM submissions WHERE id = ?").bind(id),
-    // The attempt rows still count toward the daily caps (withdrawing must not reset them), so they
-    // only lose the link; smoke-test rows on dev are removed outright.
-    row.dev_marker
-      ? db.prepare("DELETE FROM submission_attempts WHERE submission_id = ?").bind(id)
-      : db.prepare("UPDATE submission_attempts SET submission_id = NULL WHERE submission_id = ?").bind(id),
-  ]);
+  try {
+    await db.batch([
+      db.prepare("DELETE FROM submissions WHERE id = ?").bind(id),
+      // The attempt rows still count toward the daily caps (withdrawing must not reset them), so they
+      // only lose the link; smoke-test rows on dev are removed outright.
+      row.dev_marker
+        ? db.prepare("DELETE FROM submission_attempts WHERE submission_id = ?").bind(id)
+        : db.prepare("UPDATE submission_attempts SET submission_id = NULL WHERE submission_id = ?").bind(id),
+    ]);
+  } catch (e) {
+    // Caught here so the database's own error text never becomes the tool's reply.
+    log("db_error", { where: "withdraw_delete", message: String(e).slice(0, 200) });
+    return "Withdrawals aren't available on this server right now. Nothing was changed; try again in a minute.";
+  }
   log("withdraw_submission", { outcome: "deleted", id, was: row.status });
   return `Withdrawn: "${row.title}" (submission ${id}) has been deleted from Plot Speaks${row.status === "approved" ? " and is no longer in the catalog" : ""}. Its claim code no longer works.`;
 }
@@ -402,7 +414,7 @@ async function approvedRows(db: D1Database | undefined): Promise<Row[]> {
 
 export async function loadApprovedStories(db: D1Database | undefined): Promise<PlayStory[]> {
   return (await approvedRows(db)).map((r) => ({
-    slug: r.slug, title: r.title, genre: r.genre ?? "", players: r.players ?? "", duration_minutes: r.duration_minutes,
+    slug: r.slug, title: r.title, genre: r.genre ?? "", tone: toneOf(r.story_md), players: r.players ?? "", duration_minutes: r.duration_minutes,
     story: r.story_md, story_connector: (connectorStory(r.story_md) as { parts: string[] }).parts, ...playData(r.secrets_md ?? ""),
   }));
 }
@@ -424,7 +436,8 @@ export async function serveSubmissionCover(db: D1Database | undefined, slug: str
 
 // ------------------------------------------------------------------ admin (key-gated)
 
-function sameKey(a: string, b: string): boolean {
+/** Constant-time comparison, so a key can't be guessed from response timing (used by index.ts too). */
+export function sameKey(a: string, b: string): boolean {
   const ea = new TextEncoder().encode(a), eb = new TextEncoder().encode(b);
   if (ea.length !== eb.length) return false;
   let diff = 0;

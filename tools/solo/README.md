@@ -18,7 +18,7 @@ The output contains the solutions. `dist/` is gitignored; do not commit it, publ
 
 ## Using it
 
-Ben uploads `<slug>-solo.md` to the assistant (ChatGPT project or custom GPT files) instead of `story.md`, and does not upload `secrets.md` separately. Start with "Plot Speaks, start the story." as usual; there is no wrangler step.
+Paste `<slug>-solo.md` as the first message of a new chat instead of `story.md` (attaching it to a Project failed on ChatGPT Free: voice mode ignored the file, see docs/DECISIONS.md), and never paste `secrets.md` separately. Start with "Plot Speaks, start the story." as usual; there is no wrangler step.
 
 ## Playtesting
 

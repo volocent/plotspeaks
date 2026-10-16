@@ -2,7 +2,9 @@
 // deletes or clears rows by age, so running it twice, or after a missed day, does the same thing.
 // Cheap: one batch of five statements on indexed columns; on a quiet day each touches zero rows.
 //
-//   plays, play_events           deleted after 90 days (Gate 2 counts are taken from live data)
+//   plays, play_events           deleted after 90 days (Gate 2's running count lives in totals, so it
+//                                survives this); events whose play is gone go with it, so a late
+//                                accusation on an old play can't linger as an orphan
 //   submission_attempts          deleted after 2 days (they only feed the 24-hour submit caps)
 //   submissions, status rejected deleted 90 days after review (or submission, if never reviewed)
 //   ratings                      kept; the free-text comment is cleared after 90 days
@@ -21,6 +23,8 @@ export async function runRetention(db: D1Database | undefined, now = Date.now())
   const steps: [string, D1PreparedStatement][] = [
     ["play_events", db.prepare("DELETE FROM play_events WHERE at < ?").bind(old)],
     ["plays", db.prepare("DELETE FROM plays WHERE started_at < ?").bind(old)],
+    // Passenger-page events have no play (play_id NULL) and are kept by age alone.
+    ["orphan_events", db.prepare("DELETE FROM play_events WHERE play_id IS NOT NULL AND play_id NOT IN (SELECT id FROM plays)")],
     ["submission_attempts", db.prepare("DELETE FROM submission_attempts WHERE at < ?").bind(now - ATTEMPT_DAYS * DAY)],
     ["rejected_submissions", db.prepare("DELETE FROM submissions WHERE status = 'rejected' AND coalesce(reviewed_at, created_at) < ?").bind(old)],
     ["rating_comments", db.prepare("UPDATE ratings SET comment = NULL WHERE at < ? AND comment IS NOT NULL").bind(old)],

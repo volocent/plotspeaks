@@ -1,7 +1,8 @@
 // GET /admin/stats.json?days=N (key-gated in submissions.ts handleAdmin, like the rest of /admin):
 // the usage numbers the owner's admin dashboard and daily monitoring read.
 // Definitions match worker/scripts/stats.mjs:
-//   - a play is "completed" when it reached an accusation or a rating (Gate 2: 500 by strangers);
+//   - a play is "completed" when it reached an accusation, a rating or the full reveal (the same
+//     three triggers as the permanent Gate 2 counter in totals; Gate 2: 500 by strangers);
 //   - testers are plays made with the access key; everything else is a stranger;
 //   - the assistant comes from plays.client, the MCP client's User-Agent.
 // Play rows are deleted after 90 days (src/retention.ts), so "retained" means the last 90 days.
@@ -17,7 +18,7 @@ export function assistantOf(ua: string | null | undefined): string {
     : /perplexity/i.test(s) ? "Perplexity" : "Other";
 }
 
-const COMPLETED = `(EXISTS (SELECT 1 FROM play_events e WHERE e.play_id = p.id AND e.kind = 'accusation')
+const COMPLETED = `(EXISTS (SELECT 1 FROM play_events e WHERE e.play_id = p.id AND e.kind IN ('accusation', 'reveal'))
                   OR EXISTS (SELECT 1 FROM ratings r WHERE r.play_id = p.id))`;
 const SOLVED = `EXISTS (SELECT 1 FROM play_events e WHERE e.play_id = p.id AND e.verdict = 'correct')`;
 const ACCUSED = `EXISTS (SELECT 1 FROM play_events e WHERE e.play_id = p.id AND e.kind = 'accusation')`;

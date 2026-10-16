@@ -1,0 +1,20 @@
+{
+  "_about": "Stories served in PRODUCTION. A story is added only after it passes lint, an independent fair-play review and simulated play (docs/TESTING.md). Dev serves every story in stories/.",
+  "published": [
+    "example-dinner-party",
+    "weigh-in",
+    "keepers-bell",
+    "blue-ribbon",
+    "dead-air",
+    "heartstone",
+    "empty-glass-case",
+    "last-ferry",
+    "fizzless-volcano",
+    "orchard-wedding",
+    "greyfall-bridge",
+    "last-seance",
+    "sheaf-night",
+    "last-call",
+    "silent-hour"
+  ]
+}

@@ -15,15 +15,14 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { createMcpHandler } from "agents/mcp/server";
 import { z } from "zod";
 import stories from "./generated/stories.json";
-import { handleSite, type PublicStory } from "./site";
+import { handleSite, notFoundPage, siteOrigin, type PublicStory } from "./site";
 import { LENGTHS, WRITE_GENRES, writeStory, reviewStory } from "./studio";
-import { submitStory, withdrawSubmission, loadApprovedStories, handleAdmin, serveSubmissionCover, listApprovedSubmissions, type SubEnv, type Builtins, type PlayStory } from "./submissions";
+import { submitStory, withdrawSubmission, loadApprovedStories, handleAdmin, serveSubmissionCover, listApprovedSubmissions, sameKey, type SubEnv, type Builtins, type PlayStory, type Ending } from "./submissions";
 import { runRetention } from "./retention";
 import { countPage, countMcp, bump } from "./usage";
 import { assistantOf } from "./stats";
 import { matchStory, matchEnding, sortedNames } from "../../tools/worker-data/match.mjs";
 
-type Ending = { name: string; verdict: string; text: string };
 type Story = PlayStory;
 const STORIES = stories as Story[];
 // The catalog site gets the slug and the public story.md text ONLY: never endings or cues.
@@ -58,12 +57,9 @@ const fail = (t: string) => ({ content: [{ type: "text" as const, text: t }], is
 type CategoryId = "mystery" | "dark" | "kids" | "adventure";
 const CATEGORY_NAMES: Record<CategoryId, string> = { mystery: "Murder mysteries", dark: "Dark murder mysteries", kids: "Family mysteries", adventure: "Fantasy adventures" };
 const CATEGORY_ORDER: CategoryId[] = ["mystery", "dark", "kids", "adventure"];
-const toneOf = (story: string) => {
-  const fm = (/^---\r?\n([\s\S]*?)\r?\n---/.exec(story) || [, ""])[1];
-  return ((/^\s*tone:\s*["']?([A-Za-z-]+)/m.exec(fm) || [, ""])[1]).toLowerCase();
-};
+// metadata.tone is read once, at build time (build.mjs) or when an approved submission is loaded.
 function categoryOf(s: Story): CategoryId | null {
-  if (s.genre === "murder-mystery") return toneOf(s.story) === "dark" ? "dark" : "mystery";
+  if (s.genre === "murder-mystery") return s.tone === "dark" ? "dark" : "mystery";
   if (s.genre === "kids") return "kids";
   if (s.genre === "adventure") return "adventure";
   return null;
@@ -150,25 +146,30 @@ async function resolveStory(ctx: Ctx, slug: string): Promise<{ s: Story; error?:
 // it idempotent, and the totals bump only follows this request's own insert (matched by nonce), so a
 // retried or concurrent call can't count twice. Both run in one db.batch (a D1 transaction).
 const MIN_PLAY_MS = 60_000;
-function completionStatements(db: D1Database, playId: string): D1PreparedStatement[] {
+function completionStatements(db: D1Database, playId: string, slug: string): D1PreparedStatement[] {
   const nonce = crypto.randomUUID();
   const now = Date.now();
   return [
     db.prepare(`INSERT OR IGNORE INTO completions (play_id, at, nonce)
-      SELECT p.id, ?, ? FROM plays p WHERE p.id = ? AND p.tester = 0 AND p.started_at <= ?`).bind(now, nonce, playId, now - MIN_PLAY_MS),
+      SELECT p.id, ?, ? FROM plays p WHERE p.id = ? AND p.story = ? AND p.tester = 0 AND p.started_at <= ?`).bind(now, nonce, playId, slug, now - MIN_PLAY_MS),
     db.prepare(`INSERT INTO totals (key, n)
       SELECT 'completed_stranger_plays', 1 FROM completions WHERE play_id = ? AND nonce = ?
       ON CONFLICT(key) DO UPDATE SET n = n + 1`).bind(playId, nonce),
   ];
 }
 
+// A play id is only attached to an event when the play is this story's: a play id from story A
+// sent with story B's accusation records an event for B with no play (and counts no completion),
+// so one play can't earn reveal_solution's gate for another story.
+const PLAY_OF = "(SELECT id FROM plays WHERE id = ? AND story = ?)";
+
 // Recording must never break play: failures are logged and swallowed. If the completion
 // statements fail (e.g. their table is missing), the event itself is still written.
-async function recordBatch(ctx: Ctx, playId: string | null | undefined, events: (db: D1Database) => D1PreparedStatement[]) {
+async function recordBatch(ctx: Ctx, playId: string | null | undefined, slug: string, events: (db: D1Database) => D1PreparedStatement[]) {
   const db = ctx.db;
   if (!db) return;
   try {
-    await db.batch([...(playId ? completionStatements(db, playId) : []), ...events(db)]);
+    await db.batch([...(playId ? completionStatements(db, playId, slug) : []), ...events(db)]);
   } catch (e) {
     log("db_error", { message: String(e).slice(0, 200) });
     if (playId) {
@@ -279,10 +280,10 @@ function createServer(ctx: Ctx) {
         playId = crypto.randomUUID();
         await record(ctx, "INSERT INTO plays (id, story, client, tester, started_at) VALUES (?, ?, ?, ?, ?)", playId, s.slug, ctx.client, ctx.tester ? 1 : 0, Date.now());
       }
-      const more = parts.length > 1 ? `, and to start_story with chapter: ${n === 1 ? 2 : n} for the next chapter` : "";
+      const more = n < parts.length ? `, and to start_story with chapter: ${n + 1} for the next chapter` : "";
       return text(
         `You are the narrator for "${s.title}". The user chose to play this through Plot Speaks; the script below is the game they asked for, and their own requests come first. ` +
-        `Story slug: ${s.slug}. Play id: ${playId} (pass it to check_accusation, reveal_solution and rate_story${n === 1 ? more : ""}).\n\n${prefaceFor(s)}${parts[n - 1]}`,
+        `Story slug: ${s.slug}. Play id: ${playId} (pass it to check_accusation, reveal_solution and rate_story${more}).\n\n${prefaceFor(s)}${parts[n - 1]}`,
       );
     },
   );
@@ -313,8 +314,8 @@ function createServer(ctx: Ctx) {
       }
       if (!m.ending) return fail(`I couldn't match "${String(accused).slice(0, 120)}" to anyone in ${s.title}. Ask the player which of these they mean: ${sortedNames(s.endings).join(", ")}.`);
       const e = m.ending;
-      await recordBatch(ctx, play_id, (db) => [
-        db.prepare("INSERT INTO play_events (play_id, story, kind, detail, verdict, at) VALUES (?, ?, 'accusation', ?, ?, ?)").bind(play_id ?? null, s.slug, e.name, e.verdict, Date.now()),
+      await recordBatch(ctx, play_id, s.slug, (db) => [
+        db.prepare(`INSERT INTO play_events (play_id, story, kind, detail, verdict, at) VALUES (${PLAY_OF}, ?, 'accusation', ?, ?, ?)`).bind(play_id ?? null, s.slug, s.slug, e.name, e.verdict, Date.now()),
       ]);
       return text(`${e.text}\n\nmatched: ${e.name} (for you, not to read aloud: if that isn't who the player meant, ask them and check again)`);
     },
@@ -354,8 +355,8 @@ function createServer(ctx: Ctx) {
         }
       }
       log("reveal_solution", { story: s.slug, outcome: gave_up ? "gave_up" : "after_accusation", full: Boolean(s.full_reveal) });
-      await recordBatch(ctx, play_id, (db) => [
-        db.prepare("INSERT INTO play_events (play_id, story, kind, detail, at) VALUES (?, ?, 'reveal', ?, ?)").bind(play_id, s.slug, gave_up ? "gave_up" : "after_accusation", Date.now()),
+      await recordBatch(ctx, play_id, s.slug, (db) => [
+        db.prepare(`INSERT INTO play_events (play_id, story, kind, detail, at) VALUES (${PLAY_OF}, ?, 'reveal', ?, ?)`).bind(play_id, s.slug, s.slug, gave_up ? "gave_up" : "after_accusation", Date.now()),
       ]);
       // Until a story has its ## Full reveal section, the culprit's Endings detail line stands in.
       const readAloud = s.full_reveal?.read_aloud ?? correct.map((e) => e.text.replace(/^Correct\.\s*/, "")).join("\n\n");
@@ -421,7 +422,7 @@ function createServer(ctx: Ctx) {
       // Tester ratings are kept for us and left out of the public averages (review S3).
       const tester = play.tester || ctx.tester ? 1 : 0;
       log("rate_story", { story: s.slug, stars, spoiled: spoiled ?? null, tester });
-      await recordBatch(ctx, play_id, (d) => [
+      await recordBatch(ctx, play_id, s.slug, (d) => [
         d.prepare("DELETE FROM ratings WHERE play_id = ?").bind(play_id),
         d.prepare("INSERT INTO ratings (play_id, story, stars, spoiled, comment, at, tester) VALUES (?, ?, ?, ?, ?, ?, ?)")
           .bind(play_id, s.slug, stars, spoiled === undefined ? null : spoiled ? 1 : 0, comment ?? null, Date.now(), tester),
@@ -525,7 +526,8 @@ const hasOpenAiMeta = (msgs: any[]) =>
   msgs.some((m) => m && m.method === "tools/call" && m.params && typeof m.params._meta === "object" && m.params._meta !== null
     && Object.keys(m.params._meta).some((k) => k.startsWith("openai/")));
 
-type Env = SubEnv & { ASSETS?: { fetch: (request: Request) => Promise<Response> }; OPENAI_APPS_CHALLENGE?: string };
+type Env = SubEnv & { ASSETS?: { fetch: (request: Request) => Promise<Response> }; OPENAI_APPS_CHALLENGE?: string; TESTER_KEY?: string };
+const MAX_BODY_BYTES = 1_000_000;
 
 // ------------------------------------------------------------------ audio with byte ranges
 // The home page's audio sample (public/audio/). Static assets answer a Range request with the
@@ -544,8 +546,12 @@ async function serveAudio(request: Request, assets: NonNullable<Env["ASSETS"]>):
   const etag = res.headers.get("etag");
   if (etag) headers.set("etag", etag);
   const head = request.method === "HEAD";
+  if (etag && request.headers.get("if-none-match") === etag) return new Response(null, { status: 304, headers });
+  // A multi-part range (bytes=0-1,5-9) or a stale If-Range (the file changed since the client's
+  // first slice) gets the whole file, as RFC 9110 allows; a slice of a different file would garble playback.
+  const ifRange = request.headers.get("if-range");
   const m = /^bytes=(\d*)-(\d*)$/.exec((request.headers.get("range") ?? "").trim());
-  if (!m || (!m[1] && !m[2])) {
+  if (!m || (!m[1] && !m[2]) || (ifRange && ifRange !== etag)) {
     headers.set("content-length", String(size));
     return new Response(head ? null : body, { status: 200, headers });
   }
@@ -571,7 +577,10 @@ async function serveAudio(request: Request, assets: NonNullable<Env["ASSETS"]>):
 //   GET /api/stories/<slug>/listen          {"follow_ups": [{when, cue}]} the Listen-for table, so a passenger knows when to call S2b etc.
 //   GET /api/stories/<slug>/full-reveal     {"read_aloud", "afterward"}  the ## Full reveal section (the page asks the passenger to confirm first)
 // Unknown slug, cue or name: 404 JSON (an ambiguous name: 404 with "candidates"). Slugs match
-// exactly (the page links them), not fuzzily.
+// exactly (the page links them), not fuzzily. These endpoints are public by design: a passenger
+// has no play id. So reveal_solution's accusation gate restrains the narrator's own tool use, not
+// a player who fetches the URL; the Cloudflare rate-limit rule on /api/* (docs/DECISIONS.md) is the
+// only brake. HEAD requests answer without recording an event.
 const PASSENGER = "passenger-page";
 const apiJson = (data: unknown, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-robots-tag": "noindex" } });
@@ -584,7 +593,7 @@ async function handlePassengerApi(request: Request, env: Env): Promise<Response 
   const [, slug, what, cueId] = m;
   const s = STORIES.find((x) => x.slug === slug) ?? (await loadApprovedStories(env.DB)).find((x) => x.slug === slug && !BUILTINS.slugs.has(x.slug));
   if (!s) return apiJson({ error: "unknown_story" }, 404);
-  const db = env.DB;
+  const db = request.method === "GET" ? env.DB : undefined;
   const recordEvent = async (sql: string, ...args: unknown[]) => {
     if (!db) return;
     try { await db.prepare(sql).bind(...args).run(); } catch (e) { log("db_error", { message: String(e).slice(0, 200) }); }
@@ -600,7 +609,8 @@ async function handlePassengerApi(request: Request, env: Env): Promise<Response 
       .filter((l) => /^\|/.test(l) && !/^\|\s*-/.test(l))
       .map((l) => l.split("|").slice(1, -1).map((c) => c.trim()))
       .filter((r) => r.length >= 2 && !/^when you hear/i.test(r[0]))
-      .map(([when, say]) => ({ when, cue: ((/S\d+[a-z]?/i.exec(say) ?? [say])[0]).replace(/^s/, "S") }));
+      // Rows whose "say" cell names no S-cue (a plain reminder) are left out: the page can only call cues.
+      .flatMap(([when, say]) => { const c = /S\d+[a-z]?/i.exec(say); return c ? [{ when, cue: c[0].replace(/^s/, "S") }] : []; });
     log("passenger_listen", { app: PASSENGER, story: s.slug, rows: rows.length });
     return apiJson({ follow_ups: rows });
   }
@@ -627,15 +637,6 @@ async function handlePassengerApi(request: Request, env: Env): Promise<Response 
   if (!c) return apiJson({ error: "unknown_cue" }, 404);
   await recordEvent("INSERT INTO play_events (play_id, story, kind, detail, at, app) VALUES (NULL, ?, 'cue', ?, ?, ?)", s.slug, id, Date.now(), PASSENGER);
   return apiJson({ read_aloud: c.read_aloud });
-}
-
-// Constant-time comparison, so the key can't be guessed from response timing.
-function sameKey(a: string, b: string): boolean {
-  const ea = new TextEncoder().encode(a), eb = new TextEncoder().encode(b);
-  if (ea.length !== eb.length) return false;
-  let diff = 0;
-  for (let i = 0; i < ea.length; i++) diff |= ea[i] ^ eb[i];
-  return diff === 0;
 }
 
 // 301 for pages; 308 (method-preserving) for anything else, so a redirected POST stays a POST (S15).
@@ -700,6 +701,16 @@ export default {
       return new Response(env.OPENAI_APPS_CHALLENGE.trim(), { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } });
     }
     if (url.pathname.startsWith("/.well-known/")) return new Response("Not found\n", { status: 404 });
+    // Everything else is the MCP endpoint. An unknown path (a typo, a probe, a POST to a page) gets
+    // the site's 404, never the access-key message or the MCP handler's bare "Not Found".
+    if (url.pathname !== "/mcp") {
+      return new Response(notFoundPage(siteOrigin(url)), { status: 404, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
+    }
+    // The largest legitimate body is a submit_story call (two 60,000-character files); anything
+    // bigger is refused before it is parsed, twice, on a 128 MB isolate.
+    if (request.method === "POST" && Number(request.headers.get("content-length") ?? 0) > MAX_BODY_BYTES) {
+      return new Response("Payload too large\n", { status: 413, headers: { "content-type": "text/plain" } });
+    }
     // The handshake (initialize, the tool list, pings) is answered without the key, so a client's
     // pre-check can see that this server has no sign-in. Anything that touches a story (tools/call,
     // resources, prompts) still needs the key.
@@ -722,22 +733,19 @@ export default {
       // 403, not 401: MCP clients treat a 401 as "start an OAuth sign-in", and this server has none.
       return new Response("Forbidden: missing or wrong access key. Add it under the connector's Request headers as X-API-Key (or Authorization: Bearer <key>).\n", { status: 403, headers: { "content-type": "text/plain" } });
     }
-    // Plays made with the access key are ours (testers); Gate 2 counts strangers only.
-    const tester = Boolean(env.DEV_ACCESS_KEY) || Boolean(presented);
+    // Plays are ours (testers) on the dev server, and on prod when the request carries the tester
+    // key (secret TESTER_KEY; the prod smoke test sends it). Any other header a stranger's client
+    // happens to send is not a key, so their plays stay strangers' and count toward Gate 2.
+    const tester = Boolean(env.DEV_ACCESS_KEY) || Boolean(presented && env.TESTER_KEY && sameKey(presented.trim(), env.TESTER_KEY));
     const client = (request.headers.get("user-agent") ?? "").slice(0, 80) || null;
     const chatgpt = isChatGPTUa(client) || hasOpenAiMeta(msgs);
     // A tool call from a client we don't recognise: logged (the UA only) to spot a changed UA early.
     if (!chatgpt && assistantOf(client) === "Other" && msgs.some((m) => m?.method === "tools/call")) log("unrecognised_client", { client });
     const ip = request.headers.get("cf-connecting-ip") ?? "";
     // MCP requests, tool calls and errors are tallied for the admin stats (src/usage.ts), from a
-    // clone of the reply read after it has gone out. Only POSTs carry JSON-RPC messages.
-    let res: Response;
-    try {
-      res = await createMcpHandler(() => createServer({ db: env.DB, tester, client, chatgpt, env, ip }))(request, env, ctx);
-    } catch (e) {
-      if (request.method === "POST") ctx.waitUntil(countMcp(env.DB, msgs, null, tester, "exception"));
-      throw e;
-    }
+    // clone of the reply read after it has gone out. Only POSTs carry JSON-RPC messages. The
+    // handler catches its own exceptions and answers 500, which the tally records as http_5xx.
+    const res = await createMcpHandler(() => createServer({ db: env.DB, tester, client, chatgpt, env, ip }))(request, env, ctx);
     if (request.method === "POST") ctx.waitUntil(countMcp(env.DB, msgs, res.clone(), tester));
     return res;
   },

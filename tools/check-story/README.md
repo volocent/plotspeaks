@@ -1,6 +1,6 @@
 # check-story
 
-Zero-dependency lint for Plot Speaks stories (Node 20+, plain ESM). It is the seed of the Phase 2 Worker's `check_story` tool: `rules.mjs` holds pure functions that take strings, and `check-story.mjs` is the only file that touches the disk or git.
+Zero-dependency lint for Plot Speaks stories (Node 24, plain ESM). The Worker's `review_story` tool and `submit_story` run the same rules: `rules.mjs` holds pure functions that take strings (the Worker bundles it), and `check-story.mjs` is the only file that touches the disk or git.
 
 ## Run
 
@@ -24,6 +24,10 @@ Output is `ERROR|WARN <file>:<line> <rule> — <message>` per finding, then `<sl
 - `accusation-handoff`, `resume-chapter`: murder-mysteries need "Wrangler, check the secrets" in the GM instructions; stories with more than one chapter need "resume from chapter".
 - `cue-parts`: each `## S<n>` secrets section should have `**Read aloud to the narrator:**` and `**Wrangler only (don't read):**` (WARN). Follow-up sections such as `S3b` need no cue of their own when `S3` is cued.
 - `spoiler-hint`, `hidden-clue`: cheap heuristics (WARN).
+- `spoken-intro`: the story opens with the spoken introduction the narrator can skip on request (ERROR when missing).
+- `read-aloud-length`: a read-aloud beat over 45 words (40 in family stories) is a WARN; the Full reveal section is exempt.
+- `culprit-tell`: story.md must not name the culprit in a GM trigger or mark only the culprit's cast row "until confronted" (ERROR); other GM mentions WARN.
+- `full-reveal`: every mystery's secrets.md needs a `## Full reveal` section with a `**Read aloud:**` part (160 words at most) and `**What became of them:**` bullets.
 
 ## What it does not check
 

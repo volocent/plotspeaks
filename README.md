@@ -10,7 +10,7 @@ Interactive story scripts you play by voice with your own AI assistant: murder m
 stories/        the published stories (murder mysteries, family mysteries, SRD adventures); catalog.json lists them
 docs/FORMAT.md  the story format: front matter, GM instructions, scenes, recaps, endings
 docs/PLAY.md    how to play a story today
-tools/          check-story (lint), playtest (simulated play), solo, story-loader, wrangler-console
+tools/          check-story (lint), playtest (simulated play), solo, worker-data (connector build and matching)
 worker/         the Plot Speaks MCP server (Cloudflare Worker)
 ```
 

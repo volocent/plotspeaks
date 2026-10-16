@@ -216,7 +216,7 @@ async function main() {
     playerLine = playerSay(narratorText);
     heard = hear(playerLine);
     log('player', playerLine, null, heard);
-    if (/plotspeaks,?\s+end the story/i.test(playerLine)) { outcomeHint = 'player ended story'; break; }
+    if (/plot\s*speaks,?\s+end the story/i.test(playerLine)) { outcomeHint = 'player ended story'; break; }
 
     const splitNow = opt.resumeTest && !resumed &&
       ((opt.splitAt != null && turn >= opt.splitAt) || (opt.splitAt == null && /resume from chapter 2/i.test(narratorText)));

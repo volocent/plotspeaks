@@ -135,10 +135,6 @@ export function slugFromDir(dir) {
   return dir.replace(/[\\/]+$/, '').split(/[\\/]/).pop();
 }
 
-export function detectChapter2(text) {
-  return /resume from chapter 2|chapter 2\b|chapter two/i.test(text);
-}
-
 /** Pregenerated character names from a "## Pregenerated characters" section. */
 export function pregenNames(storyMd) {
   const m = storyMd.match(/^##\s+Pregenerated characters[^\n]*\n([\s\S]*?)(?=^##\s|(?![\s\S]))/im);

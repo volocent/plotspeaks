@@ -14,12 +14,14 @@ function q(sql) {
   const r = spawnSync(process.execPath, [fileURLToPath(wrangler), 'd1', 'execute', env === 'prod' ? 'plotspeaks' : `plotspeaks-${env}`, `--env=${env}`, where, '--json',
     `--command=${sql.replace(/\s+/g, ' ').trim()}`], { encoding: 'utf8', cwd: fileURLToPath(new URL('..', import.meta.url)) });
   const out = r.stdout || '';
-  const start = out.indexOf('[');
+  // The JSON result starts with "[{"; a wrangler banner line such as "[WARNING]" must not be mistaken for it.
+  const start = out.indexOf('[{');
   if (r.status !== 0 || start < 0) throw new Error(`d1 query failed: ${(r.stderr || out).slice(0, 400)}`);
   return JSON.parse(out.slice(start))[0].results;
 }
 
-const COMPLETED = `(EXISTS (SELECT 1 FROM play_events e WHERE e.play_id = p.id AND e.kind = 'accusation')
+// Same definition as src/stats.ts: an accusation, a reveal or a rating completes a play.
+const COMPLETED = `(EXISTS (SELECT 1 FROM play_events e WHERE e.play_id = p.id AND e.kind IN ('accusation', 'reveal'))
                   OR EXISTS (SELECT 1 FROM ratings r WHERE r.play_id = p.id))`;
 
 const byGroup = q(`

@@ -5,9 +5,12 @@
   "scripts": {
     "data": "node ../tools/worker-data/build.mjs",
     "dev": "npm run data && wrangler dev",
-    "deploy:dev": "npm run data && wrangler deploy --env=dev"
+    "deploy:dev": "npm run data && npm run typecheck && wrangler deploy --env=dev",
+    "types": "wrangler types --include-runtime=true",
+    "typecheck": "npm run types && tsc -p tsconfig.json"
   },
   "devDependencies": {
+    "typescript": "^5.9.3",
     "wrangler": "^4.127.1"
   },
   "dependencies": {
