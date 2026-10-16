@@ -280,3 +280,22 @@ test('wrangler cues: "cue S3b" mentions need a section; extra labels allowed in 
   const parts = "## S3b — x\n**When:** now\n**Read aloud to the narrator:** hi\n**Numbers (read these aloud too):** 3\n**Wrangler only (don't read):** n\n";
   assert.deepEqual(checkCueParts(parts), []);
 });
+
+test('culprit-tell: confronting the culprit in a GM trigger is an error; other mentions warn', async () => {
+  const { checkCulpritTells } = await import('../rules.mjs');
+  const secrets = '- **Culprit:** Mrs. Ada Fenn (the cook).\n';
+  const story = [
+    '## How to run this (GM instructions)',
+    '- Pacing: once the player has confronted Ada, ask who they accuse.',
+    '  5. Lead: "Look at Fenn\'s apron."',
+    '## Cast (public information only)',
+    '| Name | Role | Notes |',
+    '|---|---|---|',
+    '| Ada Fenn | Cook | Until confronted, Ada is calm. |',
+    '| Bo Hart | Groom | Nervous. |',
+  ].join('\n');
+  const f = checkCulpritTells(story, secrets);
+  assert.deepEqual(f.map((x) => [x.line, x.severity]), [[2, 'ERROR'], [3, 'WARN'], [7, 'ERROR']]);
+  assert.deepEqual(checkCulpritTells('## How to run this\n- once the player has found the apron', secrets), []);
+  assert.deepEqual(checkCulpritTells(story, ''), []);
+});

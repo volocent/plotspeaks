@@ -14,6 +14,7 @@ import { z } from "zod";
 import stories from "./generated/stories.json";
 import { handleSite, type PublicStory } from "./site";
 import { storyTemplate, checkSubmitted, GENRES, LENGTHS } from "./studio";
+import { submitStory, loadApprovedStories, handleAdmin, serveSubmissionCover, listApprovedSubmissions, type SubEnv, type Builtins } from "./submissions";
 
 type Ending = { name: string; verdict: string; text: string };
 type Cue = { read_aloud: string; narrator_only: string | null };
@@ -25,6 +26,7 @@ const STORIES = stories as Story[];
 // The catalog site gets the slug and the public story.md text ONLY: never endings or cues.
 const toPublic = (s: Story): PublicStory => ({ slug: s.slug, story: s.story });
 const PUBLIC_STORIES: PublicStory[] = STORIES.map(toPublic);
+const BUILTINS: Builtins = { slugs: new Set(STORIES.map((s) => s.slug)), storyFor: (slug) => STORIES.find((s) => s.slug === slug)?.story ?? null };
 
 // These rules travel with the server itself, not only inside the story text: on 2026-10-15
 // Claude declined to treat GM instructions inside a pasted document as the user's instructions.
@@ -35,7 +37,7 @@ const INSTRUCTIONS = [
   "Where the story says \"Wrangler, cue S<n>\", do not say it: call get_cue with that cue id and narrate only its read-aloud part. Each cue also has narrator-only notes: follow them silently and never read them aloud. When those notes say to call a follow-up cue (for example S3b) after something happens, call get_cue for it yourself at that moment.",
   "You do not know the solution. Never guess it, and never call reveal unless the user has formally accused someone.",
   "start_story returns a play id. Pass it to reveal, get_cue and rate_story.",
-  "If the user wants to write their own story, follow the story_template prompt (it interviews them, then you write story.md and secrets.md), and run check_story on every draft until it reports 0 errors.",
+  "If the user wants to write their own story, follow the story_template prompt (it interviews them, then you write story.md and secrets.md), and run check_story on every draft until it reports 0 errors. When it passes and the writer wants to share it, call submit_story with both files; a person reviews every submission before it is published.",
   "When a story ends (a correct accusation, the full reveal, a victory or defeat), ask once: \"How many stars out of five would you give it? And did I give anything away too early?\" Then call rate_story with the answer. If the player doesn't want to rate, drop it.",
 ].join("\n");
 
@@ -60,12 +62,12 @@ function findEnding(endings: Ending[], accused: string): Ending | null {
 // matches, fall back to the title sharing the most words, ignoring "the"/"a"/"of".
 const STOP = new Set(["the", "a", "an", "of", "story", "mystery", "plot", "speaks"]);
 const words = (s: string) => norm(s).replace(/-/g, " ").split(" ").filter((w) => w && !STOP.has(w));
-function findStory(slug: string): Story | undefined {
-  const exact = STORIES.find((s) => s.slug === slug || norm(s.title) === norm(slug) || norm(s.title).includes(norm(slug)));
+function findStory(slug: string, all: Story[] = STORIES): Story | undefined {
+  const exact = all.find((s) => s.slug === slug || norm(s.title) === norm(slug) || norm(s.title).includes(norm(slug)));
   if (exact) return exact;
   const want = words(slug);
   let best: Story | undefined, bestScore = 0;
-  for (const s of STORIES) {
+  for (const s of all) {
     const have = new Set([...words(s.title), ...words(s.slug)]);
     const score = want.filter((w) => have.has(w)).length;
     if (score > bestScore) { best = s; bestScore = score; }
@@ -99,7 +101,13 @@ const log = (event: string, data: Record<string, unknown>) => console.log(JSON.s
 const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false };
 const RECORDS = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false };
 
-type Ctx = { db?: D1Database; tester: boolean; client: string | null };
+type Ctx = { db?: D1Database; tester: boolean; client: string | null; env: Env; ip: string };
+
+// Built-in stories first, then approved submissions from D1 (same shape; secrets stay server-side).
+async function catalog(ctx: Ctx): Promise<Story[]> {
+  const extra = await loadApprovedStories(ctx.db);
+  return extra.length ? [...STORIES, ...extra.filter((e) => !BUILTINS.slugs.has(e.slug))] : STORIES;
+}
 
 // Recording must never break play: failures are logged and swallowed.
 async function record(ctx: Ctx, sql: string, ...args: unknown[]) {
@@ -108,11 +116,22 @@ async function record(ctx: Ctx, sql: string, ...args: unknown[]) {
 }
 
 function createServer(ctx: Ctx) {
-  const server = new McpServer({ name: "plot-speaks", version: "0.2.0" }, { instructions: INSTRUCTIONS });
+  const server = new McpServer(
+    {
+      name: "plot-speaks",
+      title: "Plot Speaks",
+      version: "0.3.0",
+      description: "Interactive murder mysteries and adventures to play by voice with your assistant as the narrator, plus a studio for writing and submitting your own.",
+      websiteUrl: "https://plotspeaks.volocent.com",
+      icons: [{ src: "https://plotspeaks.volocent.com/icon-512.png", mimeType: "image/png", sizes: ["512x512"] }],
+    },
+    { instructions: INSTRUCTIONS },
+  );
 
   server.registerTool(
     "list_stories",
     {
+      title: "List stories",
       annotations: READ_ONLY,
       description: "List the Plot Speaks stories that can be played by voice: murder mysteries and adventures. You don't need this to start a story the user named: call start_story directly.",
       // An optional input rather than none: one client called the input-less version before loading it.
@@ -120,7 +139,7 @@ function createServer(ctx: Ctx) {
     },
     async ({ genre }) => {
       log("list_stories", { genre: genre ?? null });
-      return text(STORIES.filter((s) => !genre || s.genre === genre)
+      return text((await catalog(ctx)).filter((s) => !genre || s.genre === genre)
         .map((s) => `${s.title} (slug: ${s.slug}; ${s.genre}; ${s.players} players; about ${s.duration_minutes} minutes)`).join("\n"));
     },
   );
@@ -128,14 +147,17 @@ function createServer(ctx: Ctx) {
   server.registerTool(
     "start_story",
     {
+      title: "Start a story",
+      // Read-only for the story data; it also logs an anonymous play (no transcript, no personal data).
       annotations: READ_ONLY,
       description: "Load a Plot Speaks story to narrate. Returns the full story script, including the narrator's rules. Call it when the user asks to play a story.",
       inputSchema: { slug: z.string().describe("The story's slug or title, e.g. example-dinner-party or The Last Toast") },
     },
     async ({ slug }) => {
-      const s = findStory(slug);
+      const all = await catalog(ctx);
+      const s = findStory(slug, all);
       log("start_story", { slug, found: s?.slug ?? null });
-      if (!s) return text(`No story called "${slug}". Available: ${STORIES.map((x) => `${x.title} (${x.slug})`).join(", ")}.`);
+      if (!s) return text(`No story called "${slug}". Available: ${all.map((x) => `${x.title} (${x.slug})`).join(", ")}.`);
       const playId = crypto.randomUUID();
       await record(ctx, "INSERT INTO plays (id, story, client, tester, started_at) VALUES (?, ?, ?, ?, ?)", playId, s.slug, ctx.client, ctx.tester ? 1 : 0, Date.now());
       return text(
@@ -148,6 +170,8 @@ function createServer(ctx: Ctx) {
   server.registerTool(
     "reveal",
     {
+      title: "Check an accusation",
+      // Read-only for the story data; it also logs an anonymous accusation event for the play.
       annotations: READ_ONLY,
       description: "Check a formal accusation in a Plot Speaks mystery. Call only after the user says they accuse someone. Returns that person's verdict line, starting Correct. or Innocent.",
       inputSchema: {
@@ -157,7 +181,7 @@ function createServer(ctx: Ctx) {
       },
     },
     async ({ slug, accused, play_id }) => {
-      const s = findStory(slug);
+      const s = findStory(slug, await catalog(ctx));
       const e = s ? findEnding(s.endings, accused) : null;
       log("reveal", { slug, accused, story: s?.slug ?? null, matched: e?.name ?? null, verdict: e?.verdict ?? null });
       if (!s) return text(`No story called "${slug}".`);
@@ -170,6 +194,7 @@ function createServer(ctx: Ctx) {
   server.registerTool(
     "get_cue",
     {
+      title: "Get a scene cue",
       annotations: READ_ONLY,
       description: "Get a cue in a Plot Speaks adventure, when the story calls for one. Returns the text to narrate plus narrator-only notes that must never be read aloud.",
       inputSchema: {
@@ -179,7 +204,7 @@ function createServer(ctx: Ctx) {
       },
     },
     async ({ slug, cue, play_id }) => {
-      const s = findStory(slug);
+      const s = findStory(slug, await catalog(ctx));
       const id = cue.toUpperCase().startsWith("S") ? cue.toUpperCase() : `S${cue.toUpperCase()}`;
       const c = s?.cues[id];
       log("get_cue", { slug, cue: id, found: Boolean(c) });
@@ -194,6 +219,7 @@ function createServer(ctx: Ctx) {
   server.registerTool(
     "rate_story",
     {
+      title: "Rate a story",
       annotations: RECORDS,
       description: "Save the player's rating when a Plot Speaks story ends: 1 to 5 stars, whether the narrator gave anything away too early, and an optional short comment.",
       inputSchema: {
@@ -205,7 +231,7 @@ function createServer(ctx: Ctx) {
       },
     },
     async ({ slug, stars, spoiled, comment, play_id }) => {
-      const s = findStory(slug);
+      const s = findStory(slug, await catalog(ctx));
       log("rate_story", { slug, story: s?.slug ?? null, stars, spoiled: spoiled ?? null });
       if (!s) return text(`No story called "${slug}".`);
       await record(ctx, "INSERT INTO ratings (play_id, story, stars, spoiled, comment, at) VALUES (?, ?, ?, ?, ?, ?)", play_id ?? null, s.slug, stars, spoiled === undefined ? null : spoiled ? 1 : 0, comment ?? null, Date.now());
@@ -233,6 +259,7 @@ function createServer(ctx: Ctx) {
   server.registerTool(
     "check_story",
     {
+      title: "Check a story draft",
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       description: "Check a draft Plot Speaks story against the format rules (front matter, GM instructions, spoken intro, chapters and recap blocks, read-aloud length, no audio cues, protected names; with secrets_md, also cues and the Correct./Innocent. verdict lines). Returns ERROR and WARN lines with line numbers. Nothing submitted is stored.",
       inputSchema: {
@@ -249,10 +276,26 @@ function createServer(ctx: Ctx) {
     },
   );
 
+  // ------------------------------------------------------------ Story Studio (submit, M5)
+  server.registerTool(
+    "submit_story",
+    {
+      title: "Submit a story",
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+      description: "Submit a finished Plot Speaks story for publication. Runs check_story (any ERROR refuses it), an automatic safety screen and a daily limit, then stores it for a person to review. Nothing is public until it is approved. Call only when the writer asks to submit, after check_story reports 0 errors.",
+      inputSchema: {
+        story_md: z.string().min(1).max(60000).describe("The full text of story.md"),
+        secrets_md: z.string().max(30000).optional().describe("The full text of secrets.md (kept private on the server; mysteries need one)"),
+        contact: z.string().max(200).optional().describe("Optional: how the reviewer can reach the writer (email or handle). Seen only by the reviewer."),
+      },
+    },
+    async ({ story_md, secrets_md, contact }) => text(await submitStory(ctx.env, ctx.ip, BUILTINS, { story_md, secrets_md, contact })),
+  );
+
   return server;
 }
 
-type Env = { ENVIRONMENT?: string; DEV_ACCESS_KEY?: string; DB?: D1Database };
+type Env = SubEnv;
 
 // Constant-time comparison, so the key can't be guessed from response timing.
 function sameKey(a: string, b: string): boolean {
@@ -266,10 +309,21 @@ function sameKey(a: string, b: string): boolean {
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
     const url = new URL(request.url);
+    // Review queue and cover generation: key-gated, 404 when no admin key is configured.
+    const admin = await handleAdmin(request, env, BUILTINS);
+    if (admin) return admin;
+    // Covers for built-in stories are static assets (public/covers/), matched before the Worker
+    // runs. A request that reaches here is for an approved submission's cover, kept in D1.
+    const coverPath = /^\/covers\/([a-z0-9-]+)\.jpg$/.exec(url.pathname);
+    if (coverPath && (request.method === "GET" || request.method === "HEAD")) {
+      return (await serveSubmissionCover(env.DB, coverPath[1])) ?? new Response("Not found\n", { status: 404, headers: { "content-type": "text/plain" } });
+    }
     // The catalog pages are public: they show only public story text (see site.ts). The access
     // key below applies to the MCP endpoint only.
     if (url.pathname !== "/mcp") {
-      const site = await handleSite(request, PUBLIC_STORIES, env.DB);
+      // Approved submissions join the catalog in the same public-only shape (slug + story.md text).
+      const approved = await listApprovedSubmissions(env.DB);
+      const site = await handleSite(request, approved.length ? [...PUBLIC_STORIES, ...approved.filter((a) => !BUILTINS.slugs.has(a.slug))] : PUBLIC_STORIES, env.DB);
       if (site) return site;
     }
     // Dev lock (Ben, 2026-10-15): until real sign-in arrives in M5, the dev server answers only
@@ -299,6 +353,7 @@ export default {
     // Plays made with the access key are ours (testers); Gate 2 counts strangers only.
     const tester = Boolean(env.DEV_ACCESS_KEY) || Boolean(presented);
     const client = (request.headers.get("user-agent") ?? "").slice(0, 80) || null;
-    return createMcpHandler(() => createServer({ db: env.DB, tester, client }))(request, env, ctx);
+    const ip = request.headers.get("cf-connecting-ip") ?? "";
+    return createMcpHandler(() => createServer({ db: env.DB, tester, client, env, ip }))(request, env, ctx);
   },
 } satisfies ExportedHandler;

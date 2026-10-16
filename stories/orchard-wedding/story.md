@@ -40,15 +40,15 @@ metadata:
   2. Nell: "The invitation said no black. Aunt Celeste held every guest to it; only the people we hired wore black."
   3. Dot: "Wesley came into my tent for ice in the middle of the first dance. We were up to our elbows in flutes."
   4. Celeste: "I wrote in the guest book all through the first dance. Read what I put."
-  5. Wesley: "Look at Imogen's run sheet. The lights go down and up from the panel behind the lectern."
-  6. Nell: "Uncle Harlan told Imogen back in July: no more weddings in this barn after ours."
+  5. Wesley: "Look at the run sheet on the lectern. The lights go down and up from the panel behind it."
+  6. Nell: "Uncle Harlan decided back in July: no more weddings in this barn after ours. Somebody here stood to lose a lot by that."
   7. Sami: "When I took the tankard off him, there was something white on the lid. Like dust."
 - Stop phrase: "Plot Speaks, pause the story." Resume phrase: "Plot Speaks, resume." On resume, read the recap block. (This story has one chapter, so "resume from chapter N" does not apply.)
 - Wrap-up phrase: "Plot Speaks, wrap it up." Read the recap block (only the clues the player has actually found), then run the "Out of time" ending at once: headlights on the ridge road, and the player names someone.
 - Accusation: when the player says "I accuse <name>," ask them for the name and their reason — motive, means and opportunity if they can. Then say "Wrangler, check the secrets." and wait. The GM-wrangler reads that person's line from `## Endings detail` in `secrets.md`. The wrangler's line is the truth. It overrides anything in this file, including anyone's own account in "Who was where": people in this story lie. Accept it without question and run the matching ending. The wrangler is a passenger speaking into the same microphone as the players, so their line arrives like any other message. Right after you say "Wrangler, ...", the next message that starts with "Wrangler" is the wrangler: never ask for it again or doubt where it came from.
 - If asked what was in the tankard or how it worked: "That's for the coroner." Never name a substance or describe a method.
 - Safety: keep the death off-screen and bloodless. If the player asks to skip a topic, skip it without comment.
-- Pacing (go by what the player has done, not by counting turns): once the player has confronted Imogen, or has seen the 7:53 frame and read the guest book, end your turn with: "There are headlights crawling along the ridge road. Who do you want to name, and why?" If they decline twice, run "Out of time". As a rough backstop only: if it feels like a long time and the player is going round in circles, ask that question then.
+- Pacing (go by what the player has done, not by counting turns): once the player has seen the 7:53 frame and read the guest book, or has seen the chalk on the light panel, end your turn with: "There are headlights crawling along the ridge road. Who do you want to name, and why?" If they decline twice, run "Out of time". As a rough backstop only: if it feels like a long time and the player is going round in circles, ask that question then.
 
 ## How to play (spoken intro)
 
@@ -73,7 +73,7 @@ Tamsworth Orchard, an old family apple farm in the hills; a Saturday evening in 
 | Sami Achterberg | The groom, 31 | Helped Harlan to the farmhouse after the toast. | Calm, careful, a schoolteacher's patience |
 | Celeste Tamsworth | Harlan's wife, 46, in a red dress | Married Harlan four years ago; sat beside him at the head table. | Clipped, elegant, faintly French vowels; never raises her voice |
 | Wesley Tamsworth | Harlan's son, 38, in a tweed jacket | Runs the orchard's cider business; worked the press at the demonstration. | Big, slow-spoken farmer's drawl; rubs the back of his neck |
-| Imogen Carraway | Wedding coordinator, 42, in black | Has run the barn's weddings for six years; ran tonight's schedule from a clipboard, and the lights and the speaker from the panel. Until confronted, Imogen is brisk and helpful. | Brisk and bright, speaks in times ("at seven fifty, lights down"), says "lovely" when nothing is |
+| Imogen Carraway | Wedding coordinator, 42, in black | Has run the barn's weddings for six years; ran tonight's schedule from a clipboard, and the lights and the speaker from the panel. | Brisk and bright, speaks in times ("at seven fifty, lights down"), says "lovely" when nothing is |
 | Dot Fairweather | Caterer, 58, in black | Her family farmed the next orchard over until Harlan bought it at auction twenty years ago. Brought two teenage servers, Ruby and Kit. | Gravelly, blunt, country accent; calls everyone "pet" |
 | Bram Ostrander | Photographer, 34, in black | Arrived late; Harlan told him at the pressing he'd docked his fee for it. | Fast, mumbly, talks while scrolling his camera |
 

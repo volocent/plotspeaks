@@ -3,6 +3,7 @@
 // Every check returns an array of findings: { severity: 'ERROR'|'WARN', line, rule, message, file? }.
 // `line` is 1-based within the string passed in. `file` is only set when a check spans files.
 
+export const TONES = ['classic', 'dark', 'cozy'];
 export const GENRES = ['murder-mystery', 'adventure', 'horror', 'heist', 'kids'];
 export const LICENSES = ['CC-BY-NC-4.0', 'CC-BY-4.0', 'All-Rights-Reserved'];
 export const RATINGS = ['G', 'PG', 'PG-13', 'R'];
@@ -113,6 +114,8 @@ export function checkFrontMatter(text, opts = {}) {
     oneOf('voice_ready', ['true', 'false']);
     oneOf('rules_system', RULES_SYSTEMS);
     oneOf('ai_disclosure', AI_DISCLOSURES);
+    // Optional: sorts mysteries into a category on the site (dark = grimmer themes, still no gore or method).
+    if (metadata.tone !== undefined && !TONES.includes(metadata.tone)) out.push(err(at('metadata.tone'), 'front-matter', `metadata.tone must be one of ${TONES.join('|')}; found "${metadata.tone}"`));
     if (metadata.genre === 'adventure' && metadata.rules_system === 'none') out.push(warn(at('metadata.rules_system'), 'front-matter', 'genre adventure with rules_system none: adventures normally use srd-5.2.1 or orc'));
     if (metadata.rules_system === 'srd-5.2.1' && !SRD_ATTRIBUTION.every((re) => re.test(normalize(text)))) {
       out.push(err(at('metadata.rules_system'), 'srd-attribution', 'rules_system srd-5.2.1 requires the attribution text ("System Reference Document 5.2.1" and "Creative Commons Attribution 4.0") in story.md'));
@@ -464,4 +467,35 @@ export function checkStoryText(storyText, { slug, denylist = [] } = {}) {
     ...checkSpoilerHints(storyText),
     ...checkHiddenClues(storyText, { genre: meta.genre }),
   ];
+}
+
+/** Rule `culprit-tell`: story.md is public and the narrator reads all of it, so the GM instructions
+ *  must not name the culprit (e.g. "once the player has confronted <culprit>"), and the cast table
+ *  must not describe the culprit in a way no other suspect is described ("Until confronted, …").
+ *  Both were found in published stories on 2026-10-16. Needs secrets.md's "**Culprit:**" line. */
+export function checkCulpritTells(storyText, secretsText) {
+  const m = /\*\*Culprit:\*\*\s*([^\n]+)/.exec(secretsText || '');
+  if (!m) return [];
+  const name = m[1].replace(/^(?:Mr|Mrs|Ms|Miss|Dr|Sir|Lady|Madame)\.?\s+/i, '').split(/[,(.;]/)[0].trim();
+  const parts = name.split(/\s+/).filter((w) => /^[A-Z][\p{L}'-]{2,}$/u.test(w));
+  if (!parts.length) return [];
+  const out = [];
+  const lines = storyText.split(/\r?\n/);
+  const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(`\\b(?:${parts.map(esc).join('|')})\\b`);
+  let inGm = false;
+  lines.forEach((line, i) => {
+    if (/^##\s/.test(line)) inGm = /^##\s+How to run this/i.test(line);
+    else if (inGm && re.test(line)) {
+      // A trigger on confronting the culprit is always a tell; any other mention (a lead, a fixed fact) needs a human look.
+      if (/confront/i.test(line)) out.push(err(i + 1, 'culprit-tell', `a GM trigger names the culprit (${name}); trigger pacing on clues found, never on a person`));
+      else out.push(warn(i + 1, 'culprit-tell', `the GM instructions mention the culprit (${name}); fine for a neutral fact, but a lead should point at a place or thing, not at them`));
+    }
+  });
+  const castRows = lines.map((l, i) => ({ l, i })).filter(({ l }) => /^\|/.test(l) && !/^\|\s*-/.test(l));
+  const flagged = castRows.filter(({ l }) => /until confronted/i.test(l));
+  if (flagged.length && flagged.every(({ l }) => re.test(l.split('|')[1] || ''))) {
+    for (const { i } of flagged) out.push(err(i + 1, 'culprit-tell', 'only the culprit\'s cast row says "until confronted"; describe every suspect the same way or drop it'));
+  }
+  return out;
 }

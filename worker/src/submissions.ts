@@ -1,0 +1,451 @@
+// Story submissions and the review queue (Phase 2, M5). No sign-in, no new accounts.
+//
+// Exported for the catalog site (site.ts may import these; both read D1 only):
+//
+//   listApprovedSubmissions(db: D1Database | undefined): Promise<{ slug: string; story: string }[]>
+//     Approved submissions in the same { slug, story } shape as the built-in PublicStory list:
+//     the public story.md text only, never secrets_md, contact or moderation data. Returns [] when
+//     db is missing, the table doesn't exist yet, or the query fails. Covers for these slugs are
+//     served by the Worker at /covers/<slug>.jpg, the same path as the built-in covers.
+//
+// Used by index.ts:
+//   submitStory(env, ip, args)            the submit_story tool
+//   loadApprovedStories(db)               approved submissions in the play-tool Story shape
+//   handleAdmin(request, env, builtins)   /admin/* (key-gated; 404 when no admin key is set)
+//   serveSubmissionCover(db, slug)        /covers/<slug>.jpg for an approved submission
+//
+// Flow of submit_story: size caps (zod, in index.ts) -> check_story lint (refuse on any ERROR) ->
+// per-IP and site-wide daily caps -> Llama Guard 3 on story_md and secrets_md -> cover -> D1 row
+// with status 'pending'. Nothing is public until Ben approves it at /admin/submissions.
+import { checkSubmitted } from "./studio";
+import { generateCover } from "./covers";
+import { parseEndings, extractCue } from "../../tools/playtest/lib.mjs";
+import { parseFrontMatter } from "../../tools/check-story/rules.mjs";
+
+export const GUARD_MODEL = "@cf/meta/llama-guard-3-8b";
+export const PER_IP_DAILY = 3;
+const DAY = 24 * 60 * 60 * 1000;
+
+type Ai = { run: (model: string, input: Record<string, unknown>) => Promise<any> };
+export type SubEnv = {
+  ENVIRONMENT?: string; DEV_ACCESS_KEY?: string; ADMIN_KEY?: string; IP_SALT?: string; SUBMIT_DAILY_CAP?: string;
+  DB?: D1Database; AI?: Ai;
+};
+type Ending = { name: string; verdict: string; text: string };
+type Cue = { read_aloud: string; narrator_only: string | null };
+export type PlayStory = {
+  slug: string; title: string; genre: string; players: string; duration_minutes: number | null;
+  story: string; endings: Ending[]; cues: Record<string, Cue>; listen_for: string | null;
+};
+export type Builtins = { slugs: Set<string>; storyFor: (slug: string) => string | null };
+
+const log = (event: string, data: Record<string, unknown>) => console.log(JSON.stringify({ event, ...data }));
+const esc = (s: unknown) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+const nl = (s: string) => s.replace(/\r\n?/g, "\n");
+
+// ------------------------------------------------------------------ moderation (Llama Guard 3)
+
+// Llama Guard 3's hazard categories, in plain words for the refusal message.
+const CATEGORY: Record<string, string> = {
+  S1: "violent crimes", S2: "non-violent crimes", S3: "sex-related crimes", S4: "child sexual exploitation",
+  S5: "defamation of real people", S6: "specialized advice (medical, legal or financial)", S7: "private information about real people",
+  S8: "intellectual property", S9: "weapons of mass harm", S10: "hate", S11: "suicide or self-harm",
+  S12: "sexual content", S13: "elections", S14: "code abuse",
+};
+// Murder mysteries and adventures are about crimes: a verdict of only S1/S2 is expected for crime
+// fiction (docs/PHASE-2-PLAN.md: "thresholds must allow fictional violence"), so those two are
+// recorded for the reviewer and do not refuse. Every other category refuses.
+const FICTION_TOLERATED = new Set(["S1", "S2"]);
+
+type Verdict = { safe: boolean; categories: string[]; refused: boolean; tolerated: string[]; chunks?: number };
+
+// Llama Guard reads a long document as one message and misses a single harmful passage buried in
+// it (an 18k-character story with one inserted paragraph came back "safe"), so each file is
+// screened in chunks of about 4,000 characters, split on paragraph breaks.
+const CHUNK = 4000;
+function chunks(text: string): string[] {
+  const out: string[] = [];
+  let cur = "";
+  for (const para of text.split(/\n{2,}/)) {
+    for (let i = 0; i < para.length; i += CHUNK) {
+      const piece = para.slice(i, i + CHUNK);
+      if (cur && cur.length + piece.length + 2 > CHUNK) { out.push(cur); cur = ""; }
+      cur = cur ? `${cur}\n\n${piece}` : piece;
+    }
+  }
+  if (cur.trim()) out.push(cur);
+  return out;
+}
+
+async function guard(ai: Ai, text: string): Promise<Verdict> {
+  const parts = chunks(text);
+  const verdicts: Verdict[] = [];
+  for (let i = 0; i < parts.length; i += 4) verdicts.push(...(await Promise.all(parts.slice(i, i + 4).map((p) => guardOne(ai, p)))));
+  const categories = [...new Set(verdicts.flatMap((v) => v.categories))];
+  return {
+    safe: verdicts.every((v) => v.safe),
+    categories,
+    refused: verdicts.some((v) => v.refused),
+    tolerated: categories.filter((c) => FICTION_TOLERATED.has(c)),
+    chunks: parts.length,
+  } as Verdict;
+}
+
+async function guardOne(ai: Ai, text: string): Promise<Verdict> {
+  const out = await ai.run(GUARD_MODEL, {
+    messages: [{ role: "user", content: `Please publish this fictional story script for a voice-played mystery or adventure game:\n\n${text}` }],
+    max_tokens: 20,
+  });
+  const r = out?.response;
+  let safe: boolean, categories: string[];
+  if (r && typeof r === "object") {
+    safe = Boolean(r.safe);
+    categories = Array.isArray(r.categories) ? r.categories.map(String) : [];
+  } else {
+    const s = String(r ?? "");
+    if (!/\b(safe|unsafe)\b/i.test(s)) throw new Error(`unexpected moderation output: ${s.slice(0, 80)}`);
+    safe = !/\bunsafe\b/i.test(s);
+    categories = [...s.matchAll(/S\d{1,2}\b/g)].map((m) => m[0]);
+  }
+  categories = [...new Set(categories.map((c) => c.toUpperCase().match(/S\d+/)?.[0] ?? c))];
+  const hard = categories.filter((c) => !FICTION_TOLERATED.has(c));
+  return { safe, categories, refused: !safe && (hard.length > 0 || categories.length === 0), tolerated: categories.filter((c) => FICTION_TOLERATED.has(c)) };
+}
+
+const describe = (cats: string[]) => cats.filter((c) => !FICTION_TOLERATED.has(c)).map((c) => CATEGORY[c] ?? c).join(", ") || "unsafe content";
+
+// ------------------------------------------------------------------ helpers
+
+async function hashIp(ip: string, env: SubEnv): Promise<string> {
+  // Keyed (HMAC) so the IPv4 space can't simply be hashed and matched back.
+  const salt = env.IP_SALT || env.ADMIN_KEY || env.DEV_ACCESS_KEY || "plotspeaks-ip";
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(salt), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(ip)));
+  return [...sig].map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 32);
+}
+
+const slugify = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48);
+
+function meta(storyMd: string) {
+  const fm = parseFrontMatter(storyMd) as { ok: boolean; name?: string; metadata?: Record<string, unknown>; data?: Record<string, unknown> };
+  const m = (fm.ok && fm.metadata) || {};
+  const raw = (/^---\n([\s\S]*?)\n---/.exec(nl(storyMd)) || [, ""])[1];
+  const field = (k: string) => ((new RegExp(`^\\s*${k}:\\s*(.+)$`, "m").exec(raw) || [, ""])[1]).replace(/\s+#.*$/, "").replace(/^["']|["']$/g, "").trim();
+  const title = String(m.title ?? field("title") ?? "").trim() || "Untitled";
+  const name = field("name");
+  return {
+    title,
+    slugWanted: slugify(name.replace(/^plotspeaks-/, "")) || slugify(title) || "story",
+    genre: String(m.genre ?? field("genre") ?? ""),
+    players: String(m.players ?? field("players") ?? ""),
+    duration: Number(m.duration_minutes ?? field("duration_minutes")) || null,
+  };
+}
+
+// Same extraction as tools/worker-data/build.mjs, so an approved submission plays exactly like a
+// built-in story: reveal returns one ending line, get_cue one cue.
+function playData(secrets: string) {
+  const s = nl(secrets);
+  const wranglerOnly = (id: string) => {
+    const sec = new RegExp(`^##\\s+S${id}\\b[^\\n]*\\n([\\s\\S]*?)(?=^##\\s|(?![\\s\\S]))`, "im").exec(s);
+    if (!sec) return null;
+    const m = /\*\*Wrangler only[^*]*:\*\*\s*([\s\S]*?)(?=^\*\*[A-Z][^\n]*:\*\*|(?![\s\S]))/im.exec(sec[1]);
+    return m ? m[1].trim() : null;
+  };
+  const cues: Record<string, Cue> = {};
+  for (const m of s.matchAll(/^##\s+S(\d+[a-z]?)\b/gim)) {
+    const c = extractCue(s, m[1]);
+    if (c) cues[`S${m[1]}`.toUpperCase()] = { read_aloud: c, narrator_only: wranglerOnly(m[1]) };
+  }
+  const listen = (/^#{2,3}\s+Listen for[^\n]*\n([\s\S]*?)(?=^#{2,3}\s)/im.exec(s) || [, null])[1];
+  const endings = (parseEndings(s) as Ending[]).map(({ name, verdict, text }) => ({ name, verdict, text }));
+  return { endings, cues, listen_for: listen ? listen.trim() : null };
+}
+
+// ------------------------------------------------------------------ submit_story
+
+export async function submitStory(
+  env: SubEnv,
+  ip: string,
+  builtins: Builtins,
+  args: { story_md: string; secrets_md?: string; contact?: string },
+): Promise<string> {
+  const story = nl(args.story_md);
+  const secrets = args.secrets_md ? nl(args.secrets_md) : undefined;
+  const lint = checkSubmitted(story, secrets);
+  if (lint.errors) {
+    log("submit_story", { outcome: "lint", errors: lint.errors });
+    return `Not submitted: the story has ${lint.errors} format error(s). Fix them and submit again (check_story shows the same list).\n\n${lint.report}`;
+  }
+  const db = env.DB, ai = env.AI;
+  if (!db || !ai) return "Submissions are switched off on this server right now. Nothing was stored.";
+
+  const ipHash = await hashIp(ip || "unknown", env);
+  const since = Date.now() - DAY;
+  const cap = Number(env.SUBMIT_DAILY_CAP) || 8;
+  try {
+    const mine = await db.prepare("SELECT COUNT(*) AS n FROM submission_attempts WHERE ip_hash = ? AND at > ?").bind(ipHash, since).first<{ n: number }>();
+    if ((mine?.n ?? 0) >= PER_IP_DAILY) return `Not submitted: there's a limit of ${PER_IP_DAILY} submissions a day from one connection, and it has been reached. Please try again tomorrow.`;
+    const all = await db.prepare("SELECT COUNT(*) AS n FROM submission_attempts WHERE at > ?").bind(since).first<{ n: number }>();
+    if ((all?.n ?? 0) >= cap) return "Not submitted: Plot Speaks has taken all the submissions it can screen today. Please try again tomorrow.";
+  } catch (e) {
+    log("db_error", { where: "submit_caps", message: String(e) });
+    return "Submissions aren't available right now (the review queue isn't set up on this server). Nothing was stored.";
+  }
+
+  const attempt = (outcome: string, id: string | null) =>
+    db.prepare("INSERT INTO submission_attempts (ip_hash, at, outcome, submission_id) VALUES (?, ?, ?, ?)").bind(ipHash, Date.now(), outcome, id).run();
+
+  // Moderation. Failing closed: if the screener can't run, nothing is stored.
+  let mod: { story: Verdict; secrets: Verdict | null };
+  try {
+    mod = { story: await guard(ai, story), secrets: secrets ? await guard(ai, secrets) : null };
+  } catch (e) {
+    log("submit_story", { outcome: "moderation_error", message: String(e).slice(0, 200) });
+    await attempt("error", null).catch(() => {});
+    return "Not submitted: the safety screener couldn't run just now (it may be over today's free allowance). Nothing was stored; please try again tomorrow.";
+  }
+  const refusedBy = [mod.story.refused ? "story" : null, mod.secrets?.refused ? "secrets" : null].filter(Boolean);
+  if (refusedBy.length) {
+    const cats = [...mod.story.categories, ...(mod.secrets?.categories ?? [])];
+    log("submit_story", { outcome: "refused", categories: cats });
+    await attempt("refused", null).catch(() => {});
+    return `Not submitted: the automatic safety screener flagged the ${refusedBy.join(" and ")} text for ${describe(cats)}. ` +
+      "Plot Speaks can't take stories with that content. Nothing was stored. If you think this is a mistake, change the passages that could read that way and submit again.";
+  }
+
+  const m = meta(story);
+  const id = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
+  let slug = m.slugWanted;
+  const taken = async (s: string) => builtins.slugs.has(s) || Boolean(await db.prepare("SELECT 1 FROM submissions WHERE slug = ?").bind(s).first());
+  if (await taken(slug)) slug = `${slug.slice(0, 40)}-${id.slice(0, 6)}`;
+
+  let cover: { bytes: Uint8Array; contentType: string; prompt: string } | null = null;
+  try {
+    cover = await generateCover(ai, { story });
+  } catch (e) {
+    log("cover_error", { message: String(e).slice(0, 200) });
+  }
+
+  const devMarker = env.ENVIRONMENT === "dev" && slug.startsWith("smoke-test") ? 1 : 0;
+  const lintSummary = JSON.stringify({ errors: lint.errors, warnings: lint.warnings, summary: lint.report.split("\n")[0], report: lint.report.slice(0, 4000) });
+  const moderation = JSON.stringify({ model: GUARD_MODEL, at: Date.now(), story: mod.story, secrets: mod.secrets });
+  await db.prepare(
+    `INSERT INTO submissions (id, created_at, status, title, slug, genre, players, duration_minutes, story_md, secrets_md, contact,
+       moderation, lint, cover, cover_type, cover_prompt, ip_hash, dev_marker)
+     VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(id, Date.now(), m.title, slug, m.genre, m.players, m.duration, story, secrets ?? null, args.contact?.trim() || null,
+    moderation, lintSummary, cover ? cover.bytes : null, cover?.contentType ?? null, cover?.prompt ?? null, ipHash, devMarker).run();
+  await attempt("stored", id);
+  log("submit_story", { outcome: "stored", id, story_chars: story.length, secrets_chars: secrets?.length ?? 0, warnings: lint.warnings, cover: Boolean(cover) });
+
+  return [
+    `Thank you! "${m.title}" was received. Submission id: ${id}.`,
+    "A person reviews every submission before it's published, so it is not public yet and can't be played or found in the catalog until it's approved.",
+    secrets ? "The secrets file is kept private on the server: players only ever get one verdict line at a time." : "No secrets file was included; a mystery needs one (with an Endings detail section) before it can be approved.",
+    lint.warnings ? `The format check passed with ${lint.warnings} warning(s); the reviewer will see them.` : "The format check passed with no warnings.",
+    args.contact ? "Your contact details are seen only by the reviewer." : "",
+  ].filter(Boolean).join("\n");
+}
+
+// ------------------------------------------------------------------ approved submissions
+
+type Row = { slug: string; title: string; genre: string | null; players: string | null; duration_minutes: number | null; story_md: string; secrets_md: string | null };
+
+async function approvedRows(db: D1Database | undefined): Promise<Row[]> {
+  if (!db) return [];
+  try {
+    const { results } = await db.prepare(
+      "SELECT slug, title, genre, players, duration_minutes, story_md, secrets_md FROM submissions WHERE status = 'approved' ORDER BY reviewed_at, created_at",
+    ).all<Row>();
+    return results ?? [];
+  } catch (e) {
+    log("db_error", { where: "approved_submissions", message: String(e) });
+    return [];
+  }
+}
+
+export async function loadApprovedStories(db: D1Database | undefined): Promise<PlayStory[]> {
+  return (await approvedRows(db)).map((r) => ({
+    slug: r.slug, title: r.title, genre: r.genre ?? "", players: r.players ?? "", duration_minutes: r.duration_minutes,
+    story: r.story_md, ...playData(r.secrets_md ?? ""),
+  }));
+}
+
+export async function listApprovedSubmissions(db: D1Database | undefined): Promise<{ slug: string; story: string }[]> {
+  return (await approvedRows(db)).map((r) => ({ slug: r.slug, story: r.story_md }));
+}
+
+export async function serveSubmissionCover(db: D1Database | undefined, slug: string): Promise<Response | null> {
+  if (!db) return null;
+  try {
+    const row = await db.prepare("SELECT cover, cover_type FROM submissions WHERE slug = ? AND status = 'approved' AND cover IS NOT NULL").bind(slug).first<{ cover: ArrayBuffer | number[]; cover_type: string }>();
+    if (!row) return null;
+    return new Response(new Uint8Array(row.cover as ArrayBuffer), { headers: { "content-type": row.cover_type || "image/jpeg", "cache-control": "public, max-age=3600" } });
+  } catch {
+    return null;
+  }
+}
+
+// ------------------------------------------------------------------ admin (key-gated)
+
+function sameKey(a: string, b: string): boolean {
+  const ea = new TextEncoder().encode(a), eb = new TextEncoder().encode(b);
+  if (ea.length !== eb.length) return false;
+  let diff = 0;
+  for (let i = 0; i < ea.length; i++) diff |= ea[i] ^ eb[i];
+  return diff === 0;
+}
+
+/** ADMIN_KEY (a secret); in dev, DEV_ACCESS_KEY from .dev.vars also works. None set -> /admin/* is 404. */
+function adminKeys(env: SubEnv): string[] {
+  const keys: string[] = [];
+  if (env.ADMIN_KEY) keys.push(env.ADMIN_KEY);
+  if (env.ENVIRONMENT === "dev" && env.DEV_ACCESS_KEY) keys.push(env.DEV_ACCESS_KEY);
+  return keys;
+}
+
+function presentedKey(request: Request): string {
+  const h = request.headers.get("x-admin-key");
+  if (h) return h.trim();
+  const auth = request.headers.get("authorization") ?? "";
+  const bearer = /^Bearer\s+(.+)$/i.exec(auth);
+  if (bearer) return bearer[1].trim();
+  const basic = /^Basic\s+(.+)$/i.exec(auth);
+  if (basic) {
+    try { const dec = atob(basic[1].trim()); return dec.slice(dec.indexOf(":") + 1); } catch { return ""; }
+  }
+  return "";
+}
+
+const notFound = () => new Response("Not found\n", { status: 404, headers: { "content-type": "text/plain" } });
+const forbidden = () => new Response("Forbidden\n", { status: 403, headers: { "content-type": "text/plain" } });
+const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
+
+export async function handleAdmin(request: Request, env: SubEnv, builtins: Builtins): Promise<Response | null> {
+  const url = new URL(request.url);
+  if (url.pathname !== "/admin" && !url.pathname.startsWith("/admin/")) return null;
+  const keys = adminKeys(env);
+  if (!keys.length) return notFound();
+  const given = presentedKey(request);
+  const authed = Boolean(given) && keys.some((k) => sameKey(given, k));
+  // A browser can't add headers, so /admin/login asks for HTTP Basic credentials (any user name,
+  // the key as password); the browser then sends them with every /admin/ request.
+  if (url.pathname === "/admin" || url.pathname === "/admin/login") {
+    if (!authed) return new Response("Sign in with any user name and the admin key as the password.\n", { status: 401, headers: { "www-authenticate": 'Basic realm="Plot Speaks admin", charset="UTF-8"', "content-type": "text/plain" } });
+    return Response.redirect(new URL("/admin/submissions", url).toString(), 303);
+  }
+  if (!authed) return forbidden();
+  // Basic credentials ride along on cross-site form posts too, so a POST must come from this origin.
+  const origin = request.headers.get("origin");
+  if (request.method === "POST" && origin && origin !== url.origin) return forbidden();
+  const db = env.DB;
+  if (!db) return json({ error: "no database" }, 500);
+
+  if (url.pathname === "/admin/cover" && request.method === "POST") {
+    if (!env.AI) return json({ error: "no AI binding" }, 500);
+    let body: { slug?: string; title?: string; description?: string; prompt?: string; seed?: number };
+    try { body = await request.json(); } catch { return json({ error: "send JSON: {slug} or {title, description, prompt}" }, 400); }
+    let story: string | undefined;
+    if (body.slug) {
+      story = builtins.storyFor(body.slug) ?? undefined;
+      if (!story) {
+        const row = await db.prepare("SELECT story_md FROM submissions WHERE slug = ?").bind(body.slug).first<{ story_md: string }>();
+        story = row?.story_md;
+      }
+      if (!story && !body.prompt) return json({ error: `no story with slug ${body.slug}` }, 404);
+    }
+    if (!story && !body.prompt && !body.title) return json({ error: "send {slug} or {title, description, prompt}" }, 400);
+    try {
+      const c = await generateCover(env.AI, { prompt: body.prompt, title: body.title, description: body.description, story, seed: body.seed });
+      log("admin_cover", { slug: body.slug ?? null, bytes: c.bytes.length });
+      return new Response(c.bytes, { headers: { "content-type": c.contentType, "x-cover-prompt": encodeURIComponent(c.prompt).slice(0, 2000) } });
+    } catch (e) {
+      return json({ error: String(e).slice(0, 300) }, 502);
+    }
+  }
+
+  const coverM = /^\/admin\/submissions\/([a-z0-9]+)\/cover$/.exec(url.pathname);
+  if (coverM && request.method === "GET") {
+    const row = await db.prepare("SELECT cover, cover_type FROM submissions WHERE id = ? AND cover IS NOT NULL").bind(coverM[1]).first<{ cover: ArrayBuffer; cover_type: string }>();
+    if (!row) return notFound();
+    return new Response(new Uint8Array(row.cover as ArrayBuffer), { headers: { "content-type": row.cover_type || "image/jpeg", "cache-control": "private, no-store" } });
+  }
+
+  const act = /^\/admin\/submissions\/([a-z0-9]+)\/(approve|reject|delete)$/.exec(url.pathname);
+  if (act && request.method === "POST") {
+    const [, id, action] = act;
+    const row = await db.prepare("SELECT id, slug, status FROM submissions WHERE id = ?").bind(id).first<{ id: string; slug: string; status: string }>();
+    if (!row) return json({ error: "no such submission" }, 404);
+    if (action === "delete") {
+      await db.batch([
+        db.prepare("DELETE FROM submissions WHERE id = ?").bind(id),
+        db.prepare("DELETE FROM submission_attempts WHERE submission_id = ?").bind(id),
+      ]);
+    } else {
+      if (action === "approve" && builtins.slugs.has(row.slug)) return json({ error: `slug ${row.slug} is now a built-in story; change it before approving` }, 409);
+      await db.prepare("UPDATE submissions SET status = ?, reviewed_at = ? WHERE id = ?").bind(action === "approve" ? "approved" : "rejected", Date.now(), id).run();
+    }
+    log("admin_submission", { id, action });
+    const fromForm = /application\/x-www-form-urlencoded|multipart\/form-data/.test(request.headers.get("content-type") ?? "");
+    return fromForm ? Response.redirect(new URL("/admin/submissions", url).toString(), 303) : json({ ok: true, id, action, slug: row.slug });
+  }
+
+  if (url.pathname === "/admin/submissions" && request.method === "GET") {
+    const all = url.searchParams.get("status") === "all";
+    const { results } = await db.prepare(
+      `SELECT id, created_at, status, title, slug, genre, story_md, secrets_md, contact, moderation, lint, cover_prompt, dev_marker,
+              cover IS NOT NULL AS has_cover
+       FROM submissions ${all ? "" : "WHERE status = 'pending'"} ORDER BY created_at DESC LIMIT 50`,
+    ).all<Record<string, any>>();
+    if ((request.headers.get("accept") ?? "").includes("application/json")) {
+      return json((results ?? []).map(({ story_md, secrets_md, ...r }) => r));
+    }
+    return new Response(adminPage(results ?? [], all), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "private, no-store" } });
+  }
+  return notFound();
+}
+
+function adminPage(rows: Record<string, any>[], all: boolean): string {
+  const verdict = (v: any) => !v ? "not checked" : v.safe ? "safe" : `flagged ${v.categories.join(", ")}${v.refused ? "" : " (tolerated for crime fiction)"}`;
+  const items = rows.map((r) => {
+    let mod: any = {}, lint: any = {};
+    try { mod = JSON.parse(r.moderation); } catch {}
+    try { lint = JSON.parse(r.lint); } catch {}
+    const form = (action: string, label: string) =>
+      `<form method="post" action="/admin/submissions/${esc(r.id)}/${action}"${action === "delete" ? ' onsubmit="return confirm(\'Delete for good?\')"' : ""}><button>${label}</button></form>`;
+    return `<article>
+  <div class="head">
+    ${r.has_cover ? `<img src="/admin/submissions/${esc(r.id)}/cover" alt="" width="160" height="160">` : '<div class="nocover">no cover</div>'}
+    <div>
+      <h2>${esc(r.title)} <small>${esc(r.slug)} · ${esc(r.genre)} · ${esc(r.status)}${r.dev_marker ? " · smoke test" : ""}</small></h2>
+      <p>Submitted ${esc(new Date(r.created_at).toISOString().replace("T", " ").slice(0, 16))} UTC · id ${esc(r.id)}${r.contact ? ` · contact: ${esc(r.contact)}` : ""}</p>
+      <p><b>Lint:</b> ${esc(lint.summary ?? "")}</p>
+      <p><b>Moderation (${esc(mod.model ?? "")}):</b> story ${esc(verdict(mod.story))}; secrets ${esc(mod.secrets ? verdict(mod.secrets) : "none submitted")}</p>
+      ${r.cover_prompt ? `<p><b>Cover prompt:</b> ${esc(r.cover_prompt)}</p>` : ""}
+      <div class="actions">${r.status !== "approved" ? form("approve", "Approve and publish") : ""}${r.status !== "rejected" ? form("reject", "Reject") : ""}${form("delete", "Delete")}</div>
+    </div>
+  </div>
+  ${lint.report ? `<details><summary>Lint report</summary><pre>${esc(lint.report)}</pre></details>` : ""}
+  <details><summary>story.md (${r.story_md.length.toLocaleString()} chars)</summary><pre>${esc(r.story_md)}</pre></details>
+  ${r.secrets_md ? `<details><summary>secrets.md (${r.secrets_md.length.toLocaleString()} chars, private)</summary><pre>${esc(r.secrets_md)}</pre></details>` : "<p><b>No secrets.md.</b></p>"}
+</article>`;
+  }).join("\n");
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex"><title>Submissions · Plot Speaks admin</title>
+<style>
+:root{--ink:#12355B;--accent:#F07A22;--bg:#fbf8f3;--line:#e3d9cc}
+@media (prefers-color-scheme: dark){:root{--ink:#eef3f8;--bg:#0d1b2a;--line:#2a3d55}}
+body{margin:0;padding:16px;font:15px/1.5 system-ui,sans-serif;color:var(--ink);background:var(--bg)}
+main{max-width:960px;margin:auto}h1{margin:.2em 0}h2{margin:0;font-size:1.15em}h2 small{font-weight:400;opacity:.7}
+article{border:1px solid var(--line);border-radius:10px;padding:12px;margin:14px 0}.head{display:flex;gap:14px;flex-wrap:wrap}
+img,.nocover{width:160px;height:160px;border-radius:8px;object-fit:cover;flex:none}.nocover{display:grid;place-items:center;border:1px dashed var(--line)}
+.head>div{flex:1;min-width:240px}p{margin:.3em 0}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+button{font:inherit;padding:6px 12px;border-radius:6px;border:1px solid var(--accent);background:transparent;color:inherit;cursor:pointer}
+pre{white-space:pre-wrap;word-break:break-word;max-height:480px;overflow:auto;font-size:13px;border-top:1px solid var(--line);padding-top:8px}
+</style></head><body><main>
+<h1>Submissions</h1>
+<p>${all ? 'All (latest 50). <a href="/admin/submissions">Pending only</a>' : 'Pending. <a href="/admin/submissions?status=all">Show all</a>'}</p>
+${items || "<p>Nothing waiting for review.</p>"}
+</main></body></html>`;
+}

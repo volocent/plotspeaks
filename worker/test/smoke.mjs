@@ -151,5 +151,69 @@ for (const p of pages) {
 }
 ok(leaks === 0, `no answer-key line, Endings text or cue text on any of ${pages.length} pages (${needles.length} secret snippets checked${existsSync(genPath) ? '' : '; generated data not found, key-line check only'})`);
 
+// ---------------------------------------------------------------- covers and submissions (M5)
+const coverRes = await fetch(`${base}/covers/example-dinner-party.jpg`);
+await coverRes.arrayBuffer();
+ok(coverRes.status === 200 && /^image\//.test(coverRes.headers.get('content-type') ?? ''), `GET /covers/example-dinner-party.jpg is an image (${coverRes.status} ${coverRes.headers.get('content-type')})`);
+const noCover = await fetch(`${base}/covers/no-such-story.jpg`);
+await noCover.arrayBuffer();
+ok(noCover.status === 404, `an unknown cover is 404 (${noCover.status})`);
+
+for (const [method, path] of [['GET', '/admin/submissions'], ['POST', '/admin/cover'], ['POST', '/admin/submissions/abc123/approve']]) {
+  const r = await fetch(`${base}${path}`, { method, headers: { 'content-type': 'application/json' }, body: method === 'POST' ? '{"slug":"keepers-bell"}' : undefined });
+  await r.arrayBuffer();
+  ok(r.status === 403 || r.status === 404, `${method} ${path} without the admin key is refused (${r.status})`);
+}
+
+ok(tools.includes('submit_story'), 'tools/list includes submit_story');
+const lintFail = await call('submit_story', { story_md: broken });
+ok(/^Not submitted: the story has \d+ format error/.test(lintFail) && /\[stop-phrase\]/.test(lintFail), 'submit_story refuses a lint-failing story and returns the errors');
+const tooBig = await rpc('tools/call', { name: 'submit_story', arguments: { story_md: exampleMd, secrets_md: 'x'.repeat(30001) } });
+ok(Boolean(tooBig.json?.error) || tooBig.json?.result?.isError === true, 'submit_story rejects secrets over 30,000 characters');
+
+// A real submission, on dev only (the admin key is DEV_ACCESS_KEY there). The slug starts
+// "smoke-test" (the dev marker), and the row is deleted again through the admin endpoint.
+if (!openServer && key) {
+  const stamp = Date.now().toString(36);
+  const smokeMd = exampleMd
+    .replace(/^name:\s*.+$/m, `name: plotspeaks-smoke-test-${stamp}`)
+    .replace(/^(\s*title:\s*).+$/m, `$1Smoke Test ${stamp}`)
+    .replace(/^# The Last Toast\s*$/m, `# Smoke Test ${stamp}`);
+  const smokeSecrets = [
+    '# Smoke test secrets', '', '## Endings detail', '',
+    '- **Hale Winterbourne (wrong):** Innocent. Smoke test line for the innocent suspect.',
+    '- **Smoke Culprit (correct):** Correct. Smoke test line for the culprit.', '',
+  ].join('\n');
+  const admin = (path, method = 'POST') => fetch(`${base}${path}`, { method, headers: { 'x-admin-key': key, accept: 'application/json' } });
+  const receipt = await call('submit_story', { story_md: smokeMd, secrets_md: smokeSecrets, contact: 'smoke@example.invalid' });
+  const subId = (/Submission id: ([a-z0-9]+)/.exec(receipt) || [])[1];
+  ok(Boolean(subId) && /a person reviews every submission/i.test(receipt) && /not public yet/i.test(receipt), `submit_story accepts a valid story and returns a receipt (${subId ?? receipt.split('\n')[0].slice(0, 160)})`);
+  if (subId) {
+    const slug = `smoke-test-${stamp}`;
+    const pendingList = await call('list_stories', {});
+    ok(!pendingList.includes(slug), 'a pending submission is not listed');
+    const queue = await (await fetch(`${base}/admin/submissions`, { headers: { 'x-admin-key': key, accept: 'application/json' } })).json().catch(() => []);
+    const mine = Array.isArray(queue) ? queue.find((r) => r.id === subId) : null;
+    ok(Boolean(mine) && mine.dev_marker === 1 && !('secrets_md' in mine), `the admin queue lists it with the dev marker${mine ? `, cover: ${mine.has_cover ? 'yes' : 'no'}` : ''}`);
+    const page = await fetch(`${base}/admin/submissions`, { headers: { 'x-admin-key': key } });
+    ok(page.status === 200 && (await page.text()).includes(`Smoke Test ${stamp}`), 'the admin page shows the submission');
+    const approved = await admin(`/admin/submissions/${subId}/approve`);
+    ok(approved.status === 200, `approve (${approved.status})`);
+    ok((await call('list_stories', {})).includes(slug), 'an approved submission is listed by list_stories');
+    const subStart = await call('start_story', { slug });
+    ok(new RegExp(`narrator for "Smoke Test ${stamp}"`).test(subStart) && !/\((correct|wrong)\):\*\*/.test(subStart), 'start_story serves the approved submission without its answer key');
+    const subReveal = await call('reveal', { slug, accused: 'Hale Winterbourne' });
+    ok(/^Innocent\./.test(subReveal) && !/Smoke Culprit/.test(subReveal), 'reveal on a submission returns only the one ending line');
+    if (mine?.has_cover) {
+      const c = await fetch(`${base}/covers/${slug}.jpg`);
+      await c.arrayBuffer();
+      ok(c.status === 200 && /^image\//.test(c.headers.get('content-type') ?? ''), `the approved submission's cover is served from D1 (${c.status})`);
+    }
+    const del = await admin(`/admin/submissions/${subId}/delete`);
+    ok(del.status === 200, `the smoke submission is deleted again (${del.status})`);
+    ok(!(await call('list_stories', {})).includes(slug), 'the deleted submission is gone');
+  }
+}
+
 console.log(failed ? `\n${failed} check(s) failed` : '\nall checks passed');
 process.exit(failed ? 1 : 0);

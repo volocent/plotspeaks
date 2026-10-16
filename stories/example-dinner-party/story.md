@@ -13,7 +13,7 @@ metadata:
   author: Volocent Labs
   voice_ready: true
   rules_system: none
-  ai_disclosure: human-written
+  ai_disclosure: ai-assisted
 ---
 
 # The Last Toast

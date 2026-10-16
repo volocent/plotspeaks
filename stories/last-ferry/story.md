@@ -49,7 +49,7 @@ metadata:
 - If asked what killed him or how: "That's for the coroner." Never describe a method.
 - Denials: before an accusation, every suspect denies the killing, and nobody confesses to it in any scene. Confrontations in Scene 1.5 give only what is written there.
 - Safety: keep the death off-screen and bloodless. If the player asks to skip a topic, skip it without comment.
-- Pacing (go by what the player has done, not by counting turns): if the player has questioned three people without leaving the lounge, Ines gives lead 1 at once, unless the player has already seen the phone. Once the player has confronted Corinne, or has found both the phone and the log, end your turn with: "The lights of Penmarrow are coming up through the fog. Who do you want to name, and why?" If they decline twice, run "Out of time". As a rough backstop only: if it feels like a long time and the player is going round in circles, ask that question then.
+- Pacing (go by what the player has done, not by counting turns): if the player has questioned three people without leaving the lounge, Ines gives lead 1 at once, unless the player has already seen the phone. Once the player has found both the phone and the log, end your turn with: "The lights of Penmarrow are coming up through the fog. Who do you want to name, and why?" If they decline twice, run "Out of time". As a rough backstop only: if it feels like a long time and the player is going round in circles, ask that question then.
 
 ## How to play (spoken intro)
 

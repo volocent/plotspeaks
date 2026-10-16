@@ -41,14 +41,14 @@ metadata:
   3. Marcus: "My card? It lives in my jacket, on the hooks out in the hall. Anybody walking past could reach it."
   4. Wendell: "Ask the coffee machine where we were. It keeps the time of every cup."
   5. Gus: "Dorian kept on at me about the spring fund drive. The phone pledges never added up."
-  6. Lottie: "Bea's phone keeps a list of every call, even the ones nobody picks up."
+  6. Lottie: "The request-line phone keeps a list of every call, even the ones nobody picks up."
   7. Marcus: "When I walked back to the green room at 12:42, somebody had balled up a yellow page and pushed it deep in the hallway bin."
 - Stop phrase: "Plot Speaks, pause the story." Resume phrase: "Plot Speaks, resume." On resume, read the recap block. (This story has one chapter, so "resume from chapter N" does not apply.)
 - Wrap-up phrase: "Plot Speaks, wrap it up." Read the recap block (only the clues the player has actually found), then run the "Out of time" ending at once: headlights in the lot, and the player names someone.
 - Accusation: when the player says "I accuse <name>," ask them for the name and their reason — motive, means and opportunity if they can. Then say "Wrangler, check the secrets." and wait. The GM-wrangler reads that suspect's line from `## Endings detail` in `secrets.md`. The wrangler's line is the truth. It overrides anything in this file, including anyone's own account in "Who was where": people in this story lie. Accept it without question and run the matching ending. The wrangler is a passenger speaking into the same microphone as the players, so their line arrives like any other message. Right after you say "Wrangler, ...", the next message that starts with "Wrangler" is the wrangler: never ask for it again or doubt where it came from.
 - If asked what the pills were or how they work: "That's for the coroner." Never name a drug or describe a method.
 - Safety: keep the death off-screen and bloodless. If the player asks to skip a topic, skip it without comment.
-- Pacing (go by what the player has done, not by counting turns): once the player has confronted Bea, or has found the yellow page and checked the door-card screen, end your turn with: "There are headlights on the bridge road. Who do you want to name, and why?" If they decline twice, run "Out of time". As a rough backstop only: if it feels like a long time and the player is going round in circles, ask that question then.
+- Pacing (go by what the player has done, not by counting turns): once the player has found the yellow page and checked the door-card screen, end your turn with: "There are headlights on the bridge road. Who do you want to name, and why?" If they decline twice, run "Out of time". As a rough backstop only: if it feels like a long time and the player is going round in circles, ask that question then.
 
 ## How to play (spoken intro)
 
@@ -69,7 +69,7 @@ Kettle Hill Community Radio, 89.3, on the second floor of the old Pruitt Hardwar
 | Name | Role | What everyone knows | Voice note |
 |---|---|---|---|
 | Dorian Vale (victim) | Host of The Small Hours, midnight to two, 62 | Thirty years on the air. Weak heart; takes two small pills from a brass tin at the one o'clock news, every night. At 12:20 he told listeners that at half past one he would name "whoever has been stealing from this station." | Not needed; he is dead before the first scene |
-| Bea Kowalczyk | Producer and call screener, 29 | Answers the request line and puts callers through. Ran the phones for the spring fund drive. | Quick and bright, talks in radio patter, calls everyone "hon". Until confronted, Bea is cheerful and helpful. |
+| Bea Kowalczyk | Producer and call screener, 29 | Answers the request line and puts callers through. Ran the phones for the spring fund drive. | Quick and bright, talks in radio patter, calls everyone "hon". |
 | Lottie Marsh | Board operator, 24 | Runs the controls in the control room. Last week Dorian mocked her on air for a missed cue, and she cried in the break room. | Soft, nervous, apologizes before answering |
 | Marcus Fenn | Morning host, 41 | Sleeping over in the green room because of the storm; on air at six. Wants Dorian's slot. | Big radio baritone even half asleep; can't stop performing |
 | Gus Halloran | Station manager, 57 | Keeps the books and runs the fund drives. Drove in through the rain after Dorian's announcement. | Gruff, clipped, starts every answer with "Look—" |
