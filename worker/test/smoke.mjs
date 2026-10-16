@@ -1,4 +1,4 @@
-// Smoke test for the Plot Speaks MCP server: every tool, the access lock, and play recording.
+// Smoke test for the Plot Speaks MCP server: every tool, the story_template prompt, the access lock, and play recording.
 // Usage: node test/smoke.mjs [base-url] [--open]   (default http://127.0.0.1:8799; reads the key from .dev.vars)
 //   --open: the server has no access key (production). Story calls must work without one; the key
 //   is still sent with the other calls so smoke plays are flagged as tester plays, not strangers.
@@ -72,6 +72,33 @@ const rated = await call('rate_story', { slug: 'example-dinner-party', stars: 5,
 ok(/rating saved/i.test(rated), 'rate_story saves a rating');
 const badRate = await rpc('tools/call', { name: 'rate_story', arguments: { slug: 'example-dinner-party', stars: 9 } });
 ok(Boolean(badRate.json?.error) || /error|invalid/i.test(JSON.stringify(badRate.json?.result ?? '')), 'rate_story rejects 9 stars');
+
+// ---------------------------------------------------------------- Story Studio (M4)
+const prompts = (await rpc('prompts/list', {})).json?.result?.prompts?.map((p) => p.name) ?? [];
+ok(prompts.includes('story_template'), `prompts: ${prompts.join(', ')}`);
+const tmpl = (await rpc('prompts/get', { name: 'story_template', arguments: { genre: 'murder-mystery', length: '30' } })).json?.result?.messages?.[0]?.content?.text ?? '';
+ok(/Wrangler, check the secrets/.test(tmpl) && /jump straight in/.test(tmpl) && /check_story/.test(tmpl), `story_template returns the interview and GM block (${tmpl.length} chars)`);
+for (const [genre, length] of [['kids', '20'], ['adventure', '2-chapter']]) {
+  const t = (await rpc('prompts/get', { name: 'story_template', arguments: { genre, length } })).json?.result?.messages?.[0]?.content?.text ?? '';
+  ok(t.length > 2000 && t.length < 7000 && /jump straight in/.test(t), `story_template ${genre}/${length} (${t.length} chars)`);
+}
+ok(tools.includes('check_story'), 'tools/list includes check_story');
+const broken = [
+  '---', 'name: plotspeaks-broken', 'description: A broken draft.', 'license: CC-BY-NC-4.0', 'metadata:', '  title: Broken',
+  '  genre: murder-mystery', '  duration_minutes: 30', '  chapters: 1', '  players: 1-4', '  rating: PG-13', '  version: 0.1.0',
+  '  author: Smoke', '  voice_ready: true', '  rules_system: none', '  ai_disclosure: ai-assisted', '---', '', '# Broken', '',
+  '## How to run this (GM instructions)', '', '- Be a good narrator.', '', '## Cast (public information only)', '',
+  '## Chapter 1 — Start (≈30 min)', '', '**Read aloud:** One. Two. Three. Four. Five.', '', '[thunder] Colonel Mustard enters.', '',
+  '## Endings', '', '- Correct accusation: well done.',
+].join('\n');
+const brokenReport = await call('check_story', { story_md: broken });
+ok(/^\d+ error/.test(brokenReport) && /\[read-aloud\]/.test(brokenReport) && /\[stop-phrase\]/.test(brokenReport) && /\[no-audio-cues\]/.test(brokenReport) && /\[denylist\]/.test(brokenReport),
+  `check_story flags a broken draft (${(/^\d+ error\(s\)/.exec(brokenReport) || ['no summary'])[0]})`);
+const exampleMd = readFileSync(new URL('../../stories/example-dinner-party/story.md', import.meta.url), 'utf8');
+const exampleReport = await call('check_story', { story_md: exampleMd, slug: 'example-dinner-party' });
+ok(/^0 errors/.test(exampleReport), `check_story passes the example story (${exampleReport.split('\n')[0]})`);
+const tooLong = await rpc('tools/call', { name: 'check_story', arguments: { story_md: 'x'.repeat(60001) } });
+ok(Boolean(tooLong.json?.error) || tooLong.json?.result?.isError === true, 'check_story rejects a story over 60,000 characters');
 
 // ---------------------------------------------------------------- catalog site (M3)
 // The pages are public, so they must carry no secret: fetch every page and assert that no

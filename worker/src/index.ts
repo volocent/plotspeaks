@@ -13,6 +13,7 @@ import { createMcpHandler } from "agents/mcp/server";
 import { z } from "zod";
 import stories from "./generated/stories.json";
 import { handleSite, type PublicStory } from "./site";
+import { storyTemplate, checkSubmitted, GENRES, LENGTHS } from "./studio";
 
 type Ending = { name: string; verdict: string; text: string };
 type Cue = { read_aloud: string; narrator_only: string | null };
@@ -34,6 +35,7 @@ const INSTRUCTIONS = [
   "Where the story says \"Wrangler, cue S<n>\", do not say it: call get_cue with that cue id and narrate only its read-aloud part. Each cue also has narrator-only notes: follow them silently and never read them aloud. When those notes say to call a follow-up cue (for example S3b) after something happens, call get_cue for it yourself at that moment.",
   "You do not know the solution. Never guess it, and never call reveal unless the user has formally accused someone.",
   "start_story returns a play id. Pass it to reveal, get_cue and rate_story.",
+  "If the user wants to write their own story, follow the story_template prompt (it interviews them, then you write story.md and secrets.md), and run check_story on every draft until it reports 0 errors.",
   "When a story ends (a correct accusation, the full reveal, a victory or defeat), ask once: \"How many stars out of five would you give it? And did I give anything away too early?\" Then call rate_story with the answer. If the player doesn't want to rate, drop it.",
 ].join("\n");
 
@@ -208,6 +210,42 @@ function createServer(ctx: Ctx) {
       if (!s) return text(`No story called "${slug}".`);
       await record(ctx, "INSERT INTO ratings (play_id, story, stars, spoiled, comment, at) VALUES (?, ?, ?, ?, ?, ?)", play_id ?? null, s.slug, stars, spoiled === undefined ? null : spoiled ? 1 : 0, comment ?? null, Date.now());
       return text("Thanks, rating saved.");
+    },
+  );
+
+  // ------------------------------------------------------------ Story Studio (read side, M4)
+  server.registerPrompt(
+    "story_template",
+    {
+      title: "Write a Plot Speaks story",
+      description: "Interview the writer, then write story.md and secrets.md in the Plot Speaks format, and check them with check_story.",
+      argsSchema: z.object({
+        genre: z.enum(GENRES).optional().describe("murder-mystery (default), kids, or adventure"),
+        length: z.enum(LENGTHS).optional().describe("20 or 30 (minutes, one chapter; default 30), or 2-chapter"),
+      }),
+    },
+    ({ genre, length }) => {
+      log("story_template", { genre: genre ?? null, length: length ?? null });
+      return { messages: [{ role: "user" as const, content: { type: "text" as const, text: storyTemplate(genre, length) } }] };
+    },
+  );
+
+  server.registerTool(
+    "check_story",
+    {
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      description: "Check a draft Plot Speaks story against the format rules (front matter, GM instructions, spoken intro, chapters and recap blocks, read-aloud length, no audio cues, protected names; with secrets_md, also cues and the Correct./Innocent. verdict lines). Returns ERROR and WARN lines with line numbers. Nothing submitted is stored.",
+      inputSchema: {
+        story_md: z.string().max(60000).describe("The full text of story.md"),
+        secrets_md: z.string().max(60000).optional().describe("The full text of secrets.md, if written"),
+        slug: z.string().max(64).optional().describe("The story's folder name, e.g. the-last-toast; checks that name is plotspeaks-<slug>"),
+      },
+    },
+    async ({ story_md, secrets_md, slug }) => {
+      const { report, errors, warnings } = checkSubmitted(story_md, secrets_md, slug);
+      // Counts only: never the submitted text, title or slug.
+      log("check_story", { story_chars: story_md.length, secrets_chars: secrets_md?.length ?? 0, errors, warnings });
+      return text(report);
     },
   );
 

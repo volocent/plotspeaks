@@ -1,6 +1,6 @@
 # Plot Speaks server
 
-A stateless MCP server on a Cloudflare Worker (`createMcpHandler` from the `agents` package). Tools:
+A stateless MCP server on a Cloudflare Worker (`createMcpHandler` from the `agents` package). Tools and prompts:
 
 | Tool | What it does |
 |---|---|
@@ -9,6 +9,8 @@ A stateless MCP server on a Cloudflare Worker (`createMcpHandler` from the `agen
 | `reveal` | Checks one formal accusation; returns that suspect's verdict line (starts "Correct." or "Innocent.") |
 | `get_cue` | An adventure cue: text to narrate, plus narrator-only notes never read aloud |
 | `rate_story` | Saves a 1-5 star rating, whether anything was given away early, and an optional comment |
+| `story_template` (prompt) | Story Studio: interviews a writer, then has their own assistant write `story.md` and `secrets.md` in the Plot Speaks format |
+| `check_story` | Story Studio: lints a draft with the rules in `tools/check-story/rules.mjs` (plus the Correct./Innocent. verdict lines when `secrets_md` is given); returns ERROR/WARN lines. Nothing submitted is stored or logged, only counts |
 
 Answer keys are compiled into the Worker at deploy time by `tools/worker-data/build.mjs` from private `secrets.md` files, which are not in this repository. A fresh clone therefore won't build until you add your own stories with secrets.
 
