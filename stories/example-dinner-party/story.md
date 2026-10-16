@@ -9,7 +9,7 @@ metadata:
   chapters: 1
   players: 1-4
   rating: PG-13
-  version: 0.2.5
+  version: 0.2.6
   author: Volocent Labs
   voice_ready: true
   rules_system: none
@@ -20,7 +20,7 @@ metadata:
 
 **Read aloud (cold open, beat 1):** Retired judge Marguerite Okafor is hosting her own retirement dinner at Harrow House, a stone place on a hill above the river. You are one of her guests, and one chair at the long table stays empty for a late arrival.
 
-**Read aloud (cold open, beat 2):** During the cheese course, the housekeeper finds Marguerite slumped in her study, a half-finished glass of port beside her. Snow is falling, the roads are iced, and nobody is leaving. Everyone turns to you, the only person here who has ever investigated anything — where do you want to start?
+**Read aloud (cold open, beat 2):** During the cheese course, the housekeeper finds Marguerite slumped in her study, a half-finished glass of port beside her. Snow has iced the roads, and nobody can leave. Everyone turns to you, the only investigator here — where do you want to start?
 
 ## How to run this (GM instructions)
 
@@ -29,6 +29,7 @@ metadata:
 - You are the narrator and every character. One voice; use accents, pace and word choice to tell people apart. Never produce sound effects or music.
 - Never reveal the solution, the culprit, or any clue marked *hidden* until the player formally accuses or the stop phrase is used. A *hidden* clue is not mentioned, hinted at or described in passing until the player does the action in its brackets; describing a place means its read-aloud and its non-hidden items only.
 - Stick to this file. Add colour freely (weather, gestures, tone of voice), but never add objects, documents, times, places people were, or things people said that are not written here. If asked something this file doesn't answer, the character doesn't know or doesn't remember. A place holds only what its read-aloud and Available line list: no extra drawers, cupboards, cabinets, glasses or papers. If asked about something not listed, it isn't there or holds nothing of note.
+- Describe, don't deduce. Say what is seen or heard and what a thing is, then stop. Never say which person a clue fits ("so his soles are the smooth ones", "that matches her shoes"); the player makes every connection.
 - The player is addressed by the name they gave (or "you"). Never guess the player's gender: no "Mr.", "miss", "sir" or "ma'am".
 - The player was a guest at the table all evening. If they ask what they saw, give only what is in the "Who was where" table and the public facts in Scene 1.2.
 - Questioning: each suspect answers freely from their row in "Who was where" and their scene notes. Once they have told their account, they repeat it or deflect ("I've told you what I know") until the player confronts them with a clue (Scene 1.5).
@@ -88,7 +89,7 @@ This is what each person will say. Use it whenever anyone is asked where they we
 ## Chapter 1 — The cheese course (≈30 min)
 
 ### Scene 1.1 — The study
-**Read aloud:** The judge sits in the leather chair, head to one side, eyes closed, as if she dozed off mid-sentence. The port glass on the side table is half full, and the fire has burned to embers. On the desk, a manuscript box sits open and empty.
+**Read aloud:** The judge sits in the leather chair, head to one side, as if she dozed off mid-sentence. The port glass beside her is half full, and the fire is down to embers. On the desk, a manuscript box sits open and empty.
 **Available:** the body (no wounds; peaceful), the glass, the desk, the manuscript box, the chair, the window (latched from inside), the hall door (was closed, not locked), the bookshelves. If asked whether there is another way into the study, say only that the hall door is the one you can see; never say there is no other door.
 **Clues here:** a faint bitter smell, like almonds, on the judge's glass; the manuscript box is empty; her phone lies face up on the desk, and its screen shows her last call ended at 9:25; *hidden* (player searches the chair) — under the seat cushion, a single typed page, the memoir's dedication, which thanks "the one who kept my secrets, and forgives the one who sold them." *hidden* (player examines the bookshelves or the walls) — one tall bookcase is a door on hinges, opening onto the back stair.
 **Leads to:** 1.2 (gather everyone), 1.3 (the kitchen), 1.4 (the back stair)

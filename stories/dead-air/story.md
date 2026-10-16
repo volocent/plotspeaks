@@ -9,7 +9,7 @@ metadata:
   chapters: 1
   players: 1-4
   rating: PG-13
-  version: 0.1.2
+  version: 0.1.3
   author: Volocent Labs
   voice_ready: true
   rules_system: none
@@ -18,9 +18,9 @@ metadata:
 
 # Dead Air
 
-**Read aloud (cold open, beat 1):** You are the night security guard at the old Pruitt building, where a little community station broadcasts from the second floor. You keep the station on low at the lobby desk and have called in to The Small Hours twice tonight, as you do most nights, and Dorian Vale, the host, knows you by name.
+**Read aloud (cold open, beat 1):** You're the night guard at the old Pruitt building, where a little community radio station broadcasts upstairs. You keep it on low at the lobby desk, and have called in to The Small Hours twice tonight. The host, Dorian Vale, knows you by name.
 
-**Read aloud (cold open, beat 2):** At twenty-two minutes past one, in the middle of a sentence, Dorian stopped talking, and the station went silent. Now he is slumped over his desk, the storm has flooded the river road, and the police are forty minutes away by the long way round. The station's people are all looking at you, the one with the keys — where do you want to start?
+**Read aloud (cold open, beat 2):** At twenty-two minutes past one, mid-sentence, Dorian stopped talking and the station went silent. He is slumped over his desk, and the flooded river road puts the police forty minutes out. All eyes are on you, the one with the keys: where do you start?
 
 ## How to run this (GM instructions)
 
@@ -29,6 +29,7 @@ metadata:
 - You are the narrator and every character. One voice; use accents, pace and word choice to tell people apart. Never produce sound effects or music. Describe the radio in words: the on-air sign, the clock, the screens, the logs.
 - Never reveal the solution, the culprit, or any clue marked *hidden* until the player formally accuses or the stop phrase is used. A *hidden* clue is not mentioned, hinted at or described in passing until the player does the action in its brackets; describing a place means its read-aloud and its non-hidden items only.
 - Stick to this file. Add colour freely (rain, gestures, tone of voice), but never add objects, documents, times, places people were, or things people said that are not written here. If asked something this file doesn't answer, the character doesn't know or doesn't remember. A place holds only what its read-aloud and Available line list: no extra drawers, cupboards, cameras, notes or pill bottles. If asked about something not listed, it isn't there or holds nothing of note.
+- Describe, don't deduce. Say what is seen or heard and what a thing is, then stop. Never say which person a clue fits ("so his soles are the smooth ones", "that matches her shoes"); the player makes every connection.
 - One-step reveals: when the player examines or searches something that holds a clue, give the clue and any explanation written with it in that same turn. Never make them ask twice.
 - The player is addressed by the name they gave (or "you"). Never guess the player's gender: no "Mr.", "miss", "sir" or "ma'am".
 - The player sat at the lobby desk all night. If they ask what they saw or did, give only the "You" row in "Who was where" and the public facts in Scene 1.2.
@@ -91,13 +92,13 @@ This is what each person will say. It is their account, not necessarily the trut
 ## Chapter 1 — Dead air (≈30 min)
 
 ### Scene 1.1 — The studio
-**Read aloud:** Dorian lies forward over the desk, headphones knocked askew, as if he has laid his head down for a moment. The ON AIR sign above the door is dark; Lottie has put the station on its recorded loop of station names. A brass pill tin sits open and empty beside a mug of cold coffee.
+**Read aloud:** Dorian lies forward over the desk, headphones askew, as if resting his head. The ON AIR sign is dark; Lottie has put the station on its recorded loop of station names. A brass pill tin sits open and empty beside a mug of cold coffee.
 **Available:** the body (no wounds; peaceful), the desk, the pill tin, the mug, the microphone, the studio clock (a big round clock over the window), the light switch by the door, the window into the control room, the door (self-locking; a card reader outside).
 **Clues here:** the pill tin is empty; the mug holds plain cold coffee; *hidden* (player looks under the desk or on the floor) — a small pale blue pill on the carpet by Dorian's chair, one of his usual ones.
 **Leads to:** 1.2, 1.3, 1.4, 1.5
 
 ### Scene 1.2 — The control room
-**Read aloud:** Two screens glow over a long desk of sliders, and the window shows the studio and the slumped shape inside it. Lottie sits at the board with her headphones round her neck; Bea stands behind her by the screener desk, arms folded tight. Who do you want to talk to?
+**Read aloud:** Two screens glow over a desk of sliders, and the window shows the slumped shape in the studio. Lottie sits at the board, headphones round her neck; Bea stands behind her by the screener desk, arms folded. Who do you want to talk to?
 **Available:** question anyone; the board, the automation screen, the program log, the screener desk, the caller sheet, the yellow notepad, the screener phone, the window.
 **Public facts they volunteer:**
 - At 12:25, on air, Dorian opened his tin and joked, "Two little pills at one o'clock and I'll outlive the lot of you." Lottie saw two blue pills in it.
@@ -123,7 +124,7 @@ This is what each person will say. It is their account, not necessarily the trut
 **Leads to:** 1.4, 1.5, 1.6
 
 ### Scene 1.4 — The break room
-**Read aloud:** A kettle, a sagging sofa, and a coffee machine with a little green screen sit at the end of the hall. Wendell is in the armchair with his toolbag at his feet, and Marcus leans in the doorway in socks. Who do you want to talk to?
+**Read aloud:** A kettle, a sagging sofa and a coffee machine with a little green screen fill the end of the hall. Wendell sits in the armchair, toolbag at his feet; Marcus leans in the doorway in socks. Who do you want to talk to?
 **Available:** question Wendell or Marcus; the coffee machine, the sofa, the sink.
 **Clues here:** the coffee machine's screen lists tonight's cups: 12:32, 12:34, 12:37, and nothing after. Wendell: "Dorian at 12:32, me at 12:34, and Marcus wandered in at 12:36 and made his at 12:37. Marcus griped about the morning show until 12:42 and left. Dorian left with his mug at 12:44."
 - Gus's phone call (said freely if asked about Gus, or where anyone was): Wendell: "Gus was on the phone in his office, door open, when I came past about 12:33." Marcus: "Still on it when I went back by at 12:42. Waving his free hand about."

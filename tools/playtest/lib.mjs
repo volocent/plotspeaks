@@ -71,8 +71,11 @@ export function extractCue(secretsMd, id) {
     const pm = body.match(r);
     return pm ? pm[1].trim().replace(/^"|"$/g, '') : null;
   };
-  const read = part('Read aloud to the narrator');
-  if (!read) return null;
+  if (!part('Read aloud to the narrator')) return null;
+  // A long cue may be split into further "**Read aloud (…, beat 2/2):**" parts; keep them all, in order.
+  const reads = [...body.matchAll(/^\*\*Read aloud[^*]*:\*\*\s*([\s\S]*?)(?=^\*\*[A-Z][^\n]*:\*\*|(?![\s\S]))/gim)]
+    .map((pm) => pm[1].trim().replace(/^"|"$/g, ''));
+  const read = reads.join('\n');
   const nums = part('Numbers \\(read these aloud too');
   return nums ? `${read}\n${nums}` : read;
 }
@@ -139,13 +142,17 @@ export function wranglerBrief(secretsMd) {
   return { listenFor: lf ? lf[1].trim() : '', wranglerOnly: parts.join('\n\n') };
 }
 
-/** Parse the passenger model's reply: NONE, or a valid, not-yet-called follow-up id such as "S3b". */
-export function parseCueChoice(text, validIds, called = []) {
+/** Parse the passenger model's reply: NONE, or a valid, not-yet-called follow-up id such as "S3b".
+ *  When `mainCalled` is given, a follow-up is allowed only after its main cue (S3b needs S3): a
+ *  simulated passenger once called a bridge-fight cue while the party was still on the road. */
+export function parseCueChoice(text, validIds, called = [], mainCalled = null) {
   if (!text) return null;
   const valid = new Set(validIds.map((s) => s.toLowerCase()));
   const done = new Set(called.map((s) => s.toLowerCase()));
+  const mains = mainCalled ? new Set([...mainCalled].map((s) => String(s).toLowerCase())) : null;
   for (const m of String(text).matchAll(/\bS?(\d+[a-z])\b/gi)) {
     const id = m[1].toLowerCase();
+    if (mains && !mains.has(id.replace(/[a-z]+$/, ''))) continue;
     if (valid.has(id) && !done.has(id)) return id;
   }
   return null;

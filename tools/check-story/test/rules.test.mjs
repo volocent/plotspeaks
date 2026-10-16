@@ -75,6 +75,12 @@ const GOOD = `## How to run this (GM instructions)
 ## Endings
 `;
 
+test('read-aloud-length: beats over 45 words warn', () => {
+  const long = '**Read aloud:** Word ' + 'word '.repeat(30) + 'end. More ' + 'more '.repeat(20) + 'done.';
+  assert.deepEqual(checkReadAloud(long).map((f) => f.rule), ['read-aloud-length']);
+  assert.deepEqual(checkReadAloud('**Read aloud:** A short beat. Then a second one.'), []);
+});
+
 test('spoken-intro: the offer and the section are both required', () => {
   const noOffer = GOOD.replace(/^- Spoken intro:.*\n/m, '');
   assert.ok(checkSections(noOffer).some((f) => f.rule === 'spoken-intro'));

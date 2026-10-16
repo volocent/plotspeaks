@@ -9,7 +9,7 @@ metadata:
   chapters: 2
   players: 1-4
   rating: PG-13
-  version: 0.4.5
+  version: 0.4.6
   author: Volocent Labs
   voice_ready: true
   rules_system: none
@@ -18,9 +18,9 @@ metadata:
 
 # The Weigh-In
 
-**Read aloud (cold open, beat 1):** Every February the little town of Ember Lake drives its pickups onto the ice, drills a few hundred holes, and spends one Saturday morning pretending the prize truck isn't the only thing anybody cares about. You're an off-duty deputy at the derby fish fry, and the fish is every bit as good as you were promised. Want to hear what happens at quarter past eleven?
+**Read aloud (cold open, beat 1):** Every February Ember Lake drives its pickups onto the ice for the derby, pretending the prize truck isn't the point. You're an off-duty deputy at the derby fish fry, and the fish is excellent. Want to hear what happens at quarter past eleven?
 
-**Read aloud (cold open, beat 2):** Arvid Lund has weighed every derby fish for thirty-one years, and every hour, at quarter past, he radios the weigh tent from his shack with an ice report. At 11:15 he missed one for the first time anyone can remember, and his daughter Tess is holding out her snowmobile keys and a spare radio and asking you to go and look. Will you ride out to his shack?
+**Read aloud (cold open, beat 2):** Arvid Lund, weighmaster for thirty-one years, radios an ice report from his shack at quarter past every hour. At 11:15 he missed one for the first time. His daughter Tess hands you her snowmobile keys and a spare radio: will you ride out?
 
 ## How to run this (GM instructions)
 
@@ -29,6 +29,7 @@ metadata:
 - You are the narrator and every character. One voice; use accents, pace and word choice to tell people apart. Never produce sound effects or music.
 - Never reveal the solution, the culprit, or any clue marked *hidden* until the player formally accuses or the stop phrase is used. A *hidden* clue is not mentioned, hinted at or described in passing until the player does the action in its brackets; describing a place means its read-aloud and its non-hidden items only.
 - Stick to this file. Add colour freely (weather, gestures, tone of voice), but never add objects, documents, times, places people were, or things people said that are not written here. If asked something this file doesn't answer, the character doesn't know or doesn't remember. A place holds only what its read-aloud and Available line list: no extra drawers, cupboards, cabinets, glasses or papers. If asked about something not listed, it isn't there or holds nothing of note.
+- Describe, don't deduce. Say what is seen or heard and what a thing is, then stop. Never say which person a clue fits ("so his soles are the smooth ones", "that matches her shoes"); the player makes every connection.
 - The player is addressed by the name they gave (or "you"). Never guess the player's gender: no "Mr.", "miss", "sir" or "ma'am".
 - Nobody volunteers a statement the player didn't ask for, except a "Keeping it moving" lead, a scene's read-aloud, or what a scene lists under "says freely" once the player questions that person.
 - Running dry: once a character has given everything under their "says freely" and the player has had their lie or their Scene 2.4 lines, they have nothing more, and say so in a few words in their own voice ("Well. That's all I've got."). Never end a turn by offering more questions to the same person twice in a row; when a person or place is spent, the closing question offers two places from that scene's "Leads to."
@@ -95,8 +96,8 @@ Ember Lake, a town of six hundred, on the Saturday of the 52nd Ember Lake Ice De
 The story clock starts at 11:20. Chapter 1 runs to the noon horn, which sounds when Chapter 1 ends (see GM instructions).
 
 ### Scene 1.1 — The weighmaster's shack
-**Read aloud:** The red-and-white shack everyone calls the Lighthouse sits on the Hump with its stovepipe dark, and you have to shove its door through a smooth, hand-high drift of fresh snow to get in. Inside, Arvid Lund is slumped against his bench beside a fishing hole that has skinned over with new ice, as if he's only leaning in to watch his line. He's gone, and the little woodstove beside him has burned down to gray coals.
-**Available:** the body, the stove and the hole, the shelf, the clipboard, the ice chisel in the corner, the door and the snow outside, Ray's shack 40 yards north, your radio (Unit 7) to call Tess, the ride back to shore.
+**Read aloud:** You shove the door of the Lighthouse, Arvid's red-and-white shack, through a smooth, hand-high drift of fresh snow. Inside, Arvid Lund is slumped against his bench beside a fishing hole skinned with new ice. He's gone, and his woodstove is down to gray coals.
+**Available:** the body, the stove and the hole, the stovepipe (dark), the shelf, the clipboard, the ice chisel in the corner, the door and the snow outside, Ray's shack 40 yards north, your radio (Unit 7) to call Tess, the ride back to shore.
 **Clues here:**
 - He was struck once from behind; nothing else is disturbed but a tipped-over minnow bucket. A heavy iron ice chisel leans in the corner, its heavy iron head wiped clean.
 - The stove is out and barely warm. The fishing hole has a skin of ice as thick as a coin; Arvid always kept it open.
@@ -109,14 +110,14 @@ The story clock starts at 11:20. Chapter 1 runs to the noon horn, which sounds w
 **Leads to:** 1.2, 1.3, 1.4
 
 ### Scene 1.2 — Ray's shack
-**Read aloud:** Ray Haugen's green shack is forty yards north, and Ray is standing in its doorway with his radio in his hand, as if he's been waiting for somebody to come. He heard you on the derby channel. He takes off his cap and does not seem to know what to do with it.
+**Read aloud:** Ray Haugen's green shack is forty yards north, and Ray stands in its doorway, radio in hand, as if waiting for somebody. He heard you on the derby channel. He takes off his cap and doesn't seem to know what to do with it.
 **Available:** question Ray; his shack; the view from his window, which looks straight at the Lighthouse door.
 **Ray says freely:** he and Arvid argued at the weigh tent at about 8:30, "same as every year," over the Hump. He came to the weigh tent at about 10:05 to weigh a northern pike, stayed for coffee, waited out the squall, and walked back at about 10:50. He heard Arvid's 10:55 call on his own radio, Unit 6, while he was walking out: "Sounded like him, near enough. Wind was in it." He was inside his shack by about 10:57.
 **Ray's lie:** he says he never went near the Lighthouse after he got back. Broken by the fresh tracks (Scene 2.1).
 **Leads to:** 1.1, 1.3, 1.4
 
 ### Scene 1.3 — The weigh tent
-**Read aloud:** The weigh tent is a canvas box at the landing, with a hanging scale, a whiteboard leaderboard and a base radio on a folding table. Tess Lund stands behind the scale with her arms folded tight, and Gordie Sandquist hovers by the loudspeaker microphone like he's forgotten what it's for. Out past the tent flap, the flurries keep coming.
+**Read aloud:** The weigh tent at the landing holds a hanging scale, a whiteboard leaderboard and a base radio on a folding table. Tess Lund stands behind the scale, arms folded tight, and Gordie Sandquist hovers by the loudspeaker microphone. Outside, the flurries keep coming.
 **Available:** question Tess or Gordie; Tess's radio log; the leaderboard; the base radio.
 **Tess's radio log (she reads any entry on request):**
 - 9:15, Unit 1: ice report.
@@ -135,7 +136,7 @@ The story clock starts at 11:20. Chapter 1 runs to the noon horn, which sounds w
 **Leads to:** 1.1, 1.2, 1.4
 
 ### Scene 1.4 — The warming house
-**Read aloud:** The warming house smells of hot oil and coffee, and a line of anglers in snow pants waits for paper boats of fried fish. Marit Engebretsen works the fryer at the back with flour to her elbows, and the cork board by the door is still papered with last night's Calcutta auction sheets. Nobody in line is talking about fish.
+**Read aloud:** The warming house smells of hot oil and coffee, and anglers line up for fried fish. Marit Engebretsen works the fryer at the back, flour to her elbows; by the door hang last night's Calcutta auction sheets. Nobody in line is talking about fish.
 **Available:** question Marit or Kip (Kip ended his stream at 11:30 and rode in from Birch Point; he sits by the stove while his phone charges in his truck. If this is the player's first stop at the landing, Kip is not here yet, and nobody at the landing has seen him since he rode out at 10:18; on any later visit he is here); the Calcutta sheets; the back door to the parking lot (Scene 2.3).
 **Marit says freely:** her coffee run left the landing about 10:05, did Shack Town first, then the Hump: "Arvid was grumpy as a wet cat, but fine." She was back before the snow and lit the fryer at about 10:45. "Ran out to the van for more batter at, oh, ten to eleven, back in a jiff." Her radio, Unit 4, has sat on the shelf by the fryer all morning.
 **Marit's lie:** she says she reached Arvid's "about quarter past ten." Broken by the 10:15 log entry and Gordie (no coffee and no Marit while he was there), or by Kip's replay (Scene 2.2).
@@ -149,7 +150,7 @@ The story clock starts at 11:20. Chapter 1 runs to the noon horn, which sounds w
 
 ### Scene 1.5 — The noon horn (chapter turn)
 Play this when Chapter 1 ends (see GM instructions), wherever the player is.
-**Read aloud:** At noon the derby horn sounds across the ice, long and flat, and nobody walks to the scale. Tess finds you with the base radio's call list in her hand and the look of someone who has been doing arithmetic. "That 10:55 call came in on Unit 1, Dad's radio," she says, "but Dad never said 'over' in his life, he signed off 'Lund out,' every single time."
+**Read aloud:** At noon the derby horn sounds, and nobody walks to the scale. Tess finds you with the base radio's call list. "That 10:55 call came in on Unit 1, Dad's radio," she says, "but Dad never said 'over'; he signed off 'Lund out,' every time."
 **What the player now knows:** the base radio lists Unit 1 at 10:55. Skip Tess's holster question if the player has already found the radio. Otherwise, if the player hasn't yet found the empty holster, Tess asks whether her father's radio was on him, and the narrator now states plainly that the holster is empty and the radio is not in the shack. Tess has called Unit 1 every five minutes since 11:15, and it has never answered.
 **Leads to:** the Chapter 1 recap.
 
@@ -188,7 +189,7 @@ The story clock runs from just after noon to the sheriff's arrival at 1:00.
 
 ### Scene 2.0 — Kip's phone (opens Chapter 2)
 Play this first in Chapter 2, wherever the player is, including after "resume from chapter 2."
-**Read aloud:** Just after noon, Kip Varga jogs up to you with his phone held high, charged at last, with his whole morning's stream on it. "Also, honestly, somebody dropped a derby radio out back, in the snowbank by the vehicles," he says, "I nearly stepped on it going out to get my phone." Do you want the replay first, or the radio?
+**Read aloud:** Just after noon, Kip Varga jogs up with his phone charged at last, his whole morning's stream on it. "And somebody dropped a derby radio in the snowbank by the vehicles out back," he says. Do you want the replay first, or the radio?
 **Kip says freely (Chapter 2):** at about 11:35 he walked round the side of the lot to plug his phone in at his truck and came into the warming house by the front, so he never passed the café van then. He went out the warming house's back door just after noon to fetch his phone from his truck, saw a derby handheld lying in the snowbank by the vehicles, and left it where it was; he didn't touch it or look to see whose it was. He has no derby radio of his own.
 **Leads to:** 2.2, 2.3
 
@@ -265,7 +266,7 @@ Play this first in Chapter 2, wherever the player is, including after "resume fr
 
 ### Scene 2.5 — The sheriff calls
 Play this once, at the time set in the GM instructions, wherever the player is.
-**Read aloud:** Your radio crackles, and the sheriff comes on the derby channel, slow and dry, like a man who has sat in a stopped car on the highway for two hours. He's past the jackknifed semi at last and wants to know what you've got before he reaches the landing. "Give it to me straight, Deputy."
+**Read aloud:** Your radio crackles: the sheriff, slow and dry, like a man who has sat two hours behind a jackknifed semi. He's past it at last and wants what you've got before he reaches the landing. "Give it to me straight, Deputy."
 **Then:** read the Chapter 2 recap core and only the conditional lines for what the player has actually found, as what the deputy has so far. Then the sheriff asks: "So who do I arrest when I pull in, and why?" If the player names someone, treat it as "I accuse <name>" and follow the accusation rule. If they aren't ready, the sheriff says, "Then you've got till one o'clock," and the next unfound Chapter 2 lead is volunteered at once.
 **Leads to:** Endings, or any earlier scene
 

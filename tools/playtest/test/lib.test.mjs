@@ -51,6 +51,19 @@ test('extractCue returns the read-aloud part, plus numbers, never the wrangler-o
   assert.equal(extractCue(fx, '9'), null);
 });
 
+test('parseCueChoice holds a follow-up until its main cue has been called', () => {
+  assert.equal(parseCueChoice('S2b', ['1b', '2b'], [], new Set()), null);
+  assert.equal(parseCueChoice('S2b', ['1b', '2b'], [], new Set(['1'])), null);
+  assert.equal(parseCueChoice('S2b', ['1b', '2b'], [], new Set(['2'])), '2b');
+  assert.equal(parseCueChoice('S2b', ['1b', '2b'], []), '2b'); // no main-cue list given: old behaviour
+});
+
+test('extractCue keeps a split cue\'s later read-aloud beats, in order', () => {
+  const md = '## S1 — Split\n\n**When:** x.\n\n**Read aloud to the narrator:** "Beat one."\n\n' +
+    '**Read aloud (to the narrator, beat 2/2):** "Beat two."\n\n**Wrangler only (don\'t read):** SECRET-WRANGLER-ONLY\n';
+  assert.equal(extractCue(md, '1'), 'Beat one.\nBeat two.');
+});
+
 test('wrangler trigger detection', () => {
   assert.ok(wranglerCheckRequested('Very well. Wrangler, check the secrets.'));
   assert.ok(wranglerCheckRequested('WRANGLER CHECK THE SECRETS'));

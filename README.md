@@ -7,7 +7,7 @@ Interactive story scripts you play by voice with your own AI assistant: murder m
 ## What's here
 
 ```
-stories/        three stories: The Last Toast and The Weigh-In (mysteries), The Keeper's Bell (adventure)
+stories/        the published stories (murder mysteries, family mysteries, SRD adventures); catalog.json lists them
 docs/FORMAT.md  the story format: front matter, GM instructions, scenes, recaps, endings
 docs/PLAY.md    how to play a story today
 tools/          check-story (lint), playtest (simulated play), solo, story-loader, wrangler-console
@@ -28,7 +28,7 @@ The lint needs Node 20+ and no installs. It checks the parts of the fair-play ru
 
 ## Licenses
 
-- **Stories** (`stories/`): CC BY-NC 4.0. Share and adapt with credit, not commercially. The Keeper's Bell includes SRD 5.2.1 material under CC BY 4.0; see `NOTICE`.
+- **Stories** (`stories/`): CC BY-NC 4.0. Share and adapt with credit, not commercially. The adventures include SRD 5.2.1 material under CC BY 4.0; see `NOTICE`.
 - **Docs** (`docs/`): CC BY 4.0.
 - **Tools** (`tools/`): MIT.
 - **Server** (`worker/`): AGPL-3.0.

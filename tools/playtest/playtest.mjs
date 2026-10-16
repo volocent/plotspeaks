@@ -166,6 +166,7 @@ async function main() {
       }
       const cue = wranglerCueId(narratorText);
       if (cue) {
+        mainCues.add(String(cue).toLowerCase().replace(/[a-z]+$/, ''));
         const body = extractCue(secretsMd, cue);
         const line = body ? `Wrangler: ${body}` : `Wrangler: (no script for cue S${cue}; carry on.)`;
         log('wrangler', line, `cue S${cue}${body ? '' : ' (not found)'}`);
@@ -179,6 +180,7 @@ async function main() {
   // Simulated passenger for follow-up cues (off unless --wrangler-model).
   const followups = followupIds(secretsMd);
   const calledCues = [];
+  const mainCues = new Set(); // main cues the narrator has asked for; a follow-up needs its main cue first
   const brief = wranglerBrief(secretsMd);
   const wranglerSystem = 'You are a passenger in a car holding the secrets file for a spoken story game. You hear the conversation between the player and the narrator. ' +
     'Below are your notes: when to call each follow-up cue. Reply with exactly one of: NONE, or the cue id you would call now (for example S3b). Nothing else.\n\n' +
@@ -189,7 +191,7 @@ async function main() {
     const valid = followups.map((f) => f.id);
     if (valid.every((v) => calledCues.includes(v))) return;
     const lastP = [...transcript].reverse().find((t) => t.role === 'player');
-    const prompt = `Already called: ${calledCues.length ? calledCues.map((c) => 'S' + c).join(', ') : 'none'}\nPlayer: ${lastP?.text ?? ''}\nNarrator: ${narratorText}\nWhich cue, if any, do you call now?`;
+    const prompt = `Main cues so far: ${mainCues.size ? [...mainCues].map((c) => 'S' + c).join(', ') : 'none'}\nAlready called: ${calledCues.length ? calledCues.map((c) => 'S' + c).join(', ') : 'none'}\nPlayer: ${lastP?.text ?? ''}\nNarrator: ${narratorText}\nWhich cue, if any, do you call now?`;
     let reply;
     if (dry) reply = 'NONE';
     else {
@@ -197,7 +199,7 @@ async function main() {
       calls.push({ role: 'wrangler', turn, model: r.model, ms: r.ms, usage: r.usage, cost: r.cost });
       reply = r.text;
     }
-    const id = parseCueChoice(reply, valid, calledCues);
+    const id = parseCueChoice(reply, valid, calledCues, mainCues);
     if (!id) return;
     const body = extractCue(secretsMd, id);
     if (!body) return;

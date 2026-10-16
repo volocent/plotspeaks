@@ -279,6 +279,10 @@ export function checkReadAloud(text) {
     if (n > 3) out.push(err(i + 1, 'read-aloud', `read-aloud beat has ${n} sentences (max 3)`));
     else if (n === 1) out.push(warn(i + 1, 'read-aloud', 'read-aloud beat has 1 sentence (format asks for 2-3)'));
     else if (n === 0) out.push(warn(i + 1, 'read-aloud', 'read-aloud beat is empty'));
+    // Narrators read beats at the length they're written; playtests showed turns over ~50 words
+    // drag in a car (2026-10-16). Recap blocks aren't "Read aloud" lines, so they're exempt.
+    const words = stripMd(body).trim().split(/\s+/).filter(Boolean).length;
+    if (words > 45) out.push(warn(i + 1, 'read-aloud-length', `read-aloud beat is ${words} words (aim for 45 or fewer)`));
   }
   return out;
 }

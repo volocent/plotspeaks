@@ -9,7 +9,7 @@ metadata:
   chapters: 2
   players: 1-4
   rating: PG
-  version: 0.3.3
+  version: 0.3.4
   author: Volocent Labs
   voice_ready: true
   rules_system: srd-5.2.1
@@ -18,9 +18,9 @@ metadata:
 
 # The Keeper's Bell
 
-**Read aloud (cold open, beat 1):** Every night at midnight a bell rings under the hill above Brackenhold, and no bell has hung in that village for a hundred years. Sheep have gone missing, a goblin was seen running from the old chapel ruin, and the shepherds have stopped going out after dark.
+**Read aloud (cold open, beat 1):** Every midnight a bell rings under the hill above Brackenhold, though no bell has hung in the village for a hundred years. Sheep are missing, a goblin was seen running from the old chapel ruin, and the shepherds no longer go out after dark.
 
-**Read aloud (cold open, beat 2):** Reeve Odile Marsh has put fifty gold on the table for each of you to go down under the hill and make the ringing stop. The lantern is lit, the chapel is a short climb away, and the bell has just begun to ring. Who is going up the hill tonight?
+**Read aloud (cold open, beat 2):** Reeve Odile Marsh will pay each of you fifty gold to go under the hill and stop the ringing. The chapel is a short climb away, and the bell has just begun to ring. Who is going up the hill tonight?
 
 ## How to run this (GM instructions)
 
@@ -32,6 +32,7 @@ metadata:
 - The player is addressed by the name they gave (or "you"). Never guess the player's gender: no "Mr.", "miss", "sir" or "ma'am".
 - Never reveal anything from `secrets.md`, or any detail marked *hidden*, before it is cued or found. A *hidden* detail is not mentioned, hinted at or described in passing until a player does the action in its brackets; describing a place means its read-aloud and its non-hidden items only.
 - **Stick to this file.** Add colour freely (frost, lamplight, gestures, tone of voice), but never add objects, creatures, rooms, exits, treasure, names or things people said that are not written here. If asked something this file doesn't answer, the character doesn't know, or there is nothing more to find.
+- **A cue belongs to its scene.** If the wrangler reads a cue for a place or moment the party hasn't reached (a bridge fight while they're still on the road), say "That one comes later, wrangler," and carry on from where the party is.
 - This is played by voice, often in a car. The driver never holds dice or a sheet; you keep every number for them.
 - **Wrangler cues.** A passenger (the GM-wrangler) holds `secrets.md`. When a scene says **Wrangler cue**, always say "Wrangler, cue S<n>." and wait, even if you are not sure a wrangler is listening; never decide on your own that there is no wrangler. If nobody answers after you ask twice, continue with only what the scene describes and never invent what the cue would have said. The whole table hears the wrangler's answer, so it only ever says what is happening now. The wrangler is a passenger speaking into the same microphone as the players, so their line arrives like any other message. Right after you say "Wrangler, ...", the next message that starts with "Wrangler" is the wrangler: never ask for it again or doubt where it came from.
 - Follow-up cues: the wrangler also listens to play, and may at any moment say "Narrator, cue S3b." (or another lettered section). When that happens, stop, listen to what the wrangler reads, and act on it. You never ask for a lettered section yourself.
@@ -106,14 +107,14 @@ Brackenhold is a sheep village of forty roofs in a cold valley of invented hill 
 ## Chapter 1 — Under the Rise (≈30 min)
 
 ### Scene 1.1 — The hill chapel
-**Read aloud:** The chapel on Brackenhold Rise is four broken walls with the sky for a roof, and an empty bell-arch leans over the doorway. Where the altar stood, a square slab has been levered aside, and worn steps go down into the dark. In the frost by the top step are small bare footprints, going in at a walk and coming out at a run.
+**Read aloud:** The chapel on Brackenhold Rise is four roofless walls and an empty bell-arch. Where the altar stood, a slab is levered aside from worn steps going down. In the frost, small bare footprints go in at a walk and come out at a run.
 **Available:** the brass plaque by the door; the empty bell-arch; the footprints; the stair down.
 **Clues here:** the plaque is engraved with a bell and a small old-fashioned hand-lamp, and lists the chapel's bellkeepers, the last being "Wenna Tallow, Keeper, forty-one years — she rang for the living and the dead"; the bell-arch is empty and long unused; the footprints are goblin-sized (Survival DC 10: the runners were carrying something heavy, like a sheep, and they ran out fast, as if chased).
 **Trap:** *hidden* (a player says they test or check the steps) — the third step is rotten; they find it and step over it, no roll. Otherwise do not mention it until it gives way: the first character down makes a Dexterity save (roll first; the DC is 12) or falls to the bottom for 1d6 damage.
 **Leads to:** 1.2
 
 ### Scene 1.2 — The ossuary
-**Read aloud:** The stair ends in a long, low room walled with niches, and every niche holds bones laid out neatly with folded hands. As your light reaches the middle of the room, the bones in the nearest niches begin to sit up. In the far niche one skeleton stays perfectly still, a coil of old bell-rope in its lap.
+**Read aloud:** The stair ends in a long, low room of niches, each holding bones with folded hands. As your light reaches the middle, the nearest bones sit up. In the far niche one skeleton stays still, a coil of old bell-rope in its lap.
 **Encounter:** Skeletons, one per character: exactly 1 for a solo character, then 2 / 3 / 4. Tactics: a lone skeleton shambles forward with its shortsword; with more, half shamble forward and the rest shoot from the niches. They never leave this room. The still skeleton in the far niche is not one of them and never rises.
 **Non-combat way through:** Hild's Turn Undead sends them scuttling into their niches; or the party backs up the stair and the skeletons lie down again after a minute.
 **Available:** the still skeleton in the far niche; the other niches; an archway east (to 1.3); the stair up.
@@ -129,7 +130,7 @@ Brackenhold is a sheep village of forty roofs in a cold valley of invented hill 
 **Leads to:** 1.4
 
 ### Scene 1.4 — The goblin barricade
-**Read aloud:** Benches and a broken table are stacked across the doorway of an old dining hall, and behind them a cookfire throws goblin shadows huge across the ceiling. A voice calls out in sharp, careful Common, "Not one more step, tall ones, or we shoot." Somewhere behind the barricade a sheep bleats, very unhappily.
+**Read aloud:** Benches and a broken table barricade the doorway of an old dining hall, where a cookfire throws huge goblin shadows. A voice calls in sharp, careful Common, "Not one more step, tall ones, or we shoot." Behind the barricade a sheep bleats, very unhappily.
 **Encounter:** Snagra, a goblin boss, plus goblin warriors (see table). Tactics: shortbows from behind the barricade (it gives them +2 AC); Snagra hides behind her warriors and darts away when cornered. Alone (one character), she shoots from behind the barricade and darts away when cornered.
 **Non-combat way through:** talk. Snagra will parley if nobody attacks first. Persuasion DC 12 opens her up; offering to deal with "whatever chased you" succeeds without a roll; Intimidation DC 14 makes the band surrender, but Snagra then tells only the first fact below.
 **What Snagra says if the parley works:** "We came in a month back to get out of the snow. Two weeks ago the hungry ones climbed up from under the bell and took two of my clan. The cold lady with the lamp rings the bell before the hungry ones climb; she never touches us, and when the bell goes, we bar the door." She admits taking the sheep ("we could not go out, tall ones, they wait in the dark"), hands over the three still alive, gives the party her own stolen Potion of Healing, and points to a stair at the back of the hall. If the hungry ones are dealt with, her band will leave the hill for good.
@@ -158,22 +159,22 @@ Read this in order. Say the quoted words exactly; do the numbered steps in your 
 **Leads to:** 2.2
 
 ### Scene 2.2 — The web gallery
-**Read aloud:** Beyond the door a narrow stone bridge crosses a deep chasm, and the whole gallery is hung with grey webs as thick as sailcloth. Halfway across, a sheep wrapped in silk dangles from the bridge rail, kicking feebly. High in the dark above, something with far too many legs shifts its weight.
+**Read aloud:** Beyond the door a narrow stone bridge crosses a deep chasm, hung all round with grey webs as thick as sailcloth. Halfway across, a sheep wrapped in silk dangles from the rail, kicking feebly. High above, something with far too many legs shifts its weight.
 **Encounter:** Giant spiders: exactly 1 for one or two characters, 2 for three or four. For one character it is weakened: 20 HP, and it webs once only, with no d6 roll afterwards (see Monsters). Tactics: one drops onto the bridge and webs whoever is in front, then bites whoever is stuck; they stay above anyone carrying open fire.
 **Non-combat way through:** the spiders are watching the sheep. A group Stealth check at DC 13 (succeeds if at least half the party passes) lets everyone slip across underneath; or setting the curtain webs alight with fire drives the spiders up into the dark for a minute, long enough to cross.
 **Available:** the sheep (cut it free and it trots back the way you came); the bridge, wide enough for one at a time; an archway on the far side (to 2.3).
 **Leads to:** 2.3
 
 ### Scene 2.3 — The belfry
-**Read aloud:** The gallery opens into a tall round chamber, and from a great oak beam at its centre hangs a bronze bell as big as a cart, green with age. Beneath it a ring of iron grating covers a dark pit, and cold air breathes up between the bars. As you step inside, a pale woman made of mist and lamplight drifts out of the wall and stands between you and the bell rope.
+**Read aloud:** In a tall round chamber, a bronze bell big as a cart hangs from an oak beam. Beneath it, iron grating covers a dark pit breathing cold air. A pale woman of mist and lamplight drifts from the wall, between you and the bell rope.
 **Wrangler cue:** S3 — the moment the pale woman appears, before anyone acts, say "Wrangler, cue S3." and wait. Until it is read, she only watches; she does not move toward anyone and does not speak. She never gives a name or tells her story unless the wrangler reads it to you. The wrangler may follow it with S3b or S3c.
-**Available:** the pale woman; the bell rope; the bell; the grating over the pit; the letters "W.T." carved into the beam.
+**Available:** the pale woman; the bell rope; the bell, green with age; the grating over the pit; the letters "W.T." carved into the beam.
 **Clues here:** the grating's bars are bent upward, pushed from below, not down from above; there are long scratches on the underside of the bars; the pale woman's lamp is the same old-fashioned hand-lamp engraved on the chapel plaque.
 **The bell rope:** if anyone rings the bell after the wrangler has said she allows it, or once she is gone from the belfry, call S4 at once; the fight then happens in the belfry.
 **Leads to:** 2.4
 
 ### Scene 2.4 — The pit
-**Read aloud:** Below the grating, rough-cut steps spiral down into a cave that smells of old earth and something worse. A fresh tunnel has been clawed out of the far wall, wide enough for a crouching person, and it runs off in the direction of the village. From inside it comes a sound of scraping, and then of many hands, coming closer.
+**Read aloud:** Below the grating, rough steps spiral down into a cave that smells of earth and worse. A fresh tunnel, wide enough to crouch in, has been clawed out of the far wall toward the village. From inside comes scraping, then many hands, coming closer.
 **Wrangler cue:** S4 — as soon as anyone steps down into the pit, or anyone rings the bell, say "Wrangler, cue S4." and wait. The wrangler may follow it with S4b or S4e.
 **Encounter:** as S4 says.
 **Available:** the steps back up; the tunnel mouth, propped with old timbers; a niche in the cave wall.

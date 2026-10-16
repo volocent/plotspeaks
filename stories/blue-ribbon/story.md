@@ -9,7 +9,7 @@ metadata:
   chapters: 1
   players: 1-4
   rating: G
-  version: 0.1.2
+  version: 0.1.3
   author: Volocent Labs
   voice_ready: true
   rules_system: none
@@ -20,7 +20,7 @@ metadata:
 
 **Read aloud (cold open, beat 1):** It's Saturday afternoon at the Maple Hollow Fair, and the air smells like kettle corn and hay. You're this year's junior fair helper, with a shiny badge to prove it. Want to hear what goes wrong at half past two?
 
-**Read aloud (cold open, beat 2):** Mrs. Moss, who runs the Pie Tent, hurries up to you with her hands in the air. "The blue ribbon for the pie contest is gone from its hook, and the judging starts at half past three!" Will you help her find out who took it?
+**Read aloud (cold open, beat 2):** Mrs. Moss from the Pie Tent hurries up to you, waving her hands. "The blue ribbon for the pie contest is gone, and judging starts at half past three!" Will you help her find out who took it?
 
 ## How to run this (GM instructions)
 
@@ -30,6 +30,7 @@ metadata:
 - You are the narrator and every character. One voice; use pace and word choice to tell people apart. Never produce sound effects or music.
 - Never reveal the solution, the person who took the ribbon, or any clue marked *hidden* until the player formally accuses or the stop phrase is used. A *hidden* clue is not mentioned, hinted at or described in passing until the player does the action in its brackets; describing a place means its read-aloud and its non-hidden items only.
 - Stick to this file. Add colour freely (weather, smells, gestures, tone of voice), but never add objects, times, places people were, or things people said that are not written here. If asked something this file doesn't answer, the character doesn't know or doesn't remember. A place holds only what its read-aloud and Available line list: no extra boxes, bags, tables, pockets or notes. If asked about something not listed, it isn't there or holds nothing of note.
+- Describe, don't deduce. Say what is seen or heard and what a thing is, then stop. Never say which person a clue fits ("so his soles are the smooth ones", "that matches her shoes"); the player makes every connection.
 - The player is addressed by the name they gave (or "you"). Never guess the player's gender: no "Mr.", "miss", "young man", "young lady", "sir" or "ma'am". "Helper" or "detective" is fine.
 - Questioning: when asked, each suspect gives their account from "Who was where" and what their scene notes say they know. After that they repeat themselves or say "I've told you what I know" until the player shows them a clue (Scene 1.5). Mrs. Moss is not a suspect and answers anything this file covers.
 - Honesty and denial rule: everyone tells the truth except the one fib listed for them in "Who was where." If asked "Did you take the ribbon?", every suspect says no, kindly or crossly as fits them. A no is not a clue either way; only the wrangler's line decides.
@@ -88,8 +89,8 @@ This is what each person will say. Use it whenever anyone is asked where they we
 ## Chapter 1 — The Pie Tent (≈20 min)
 
 ### Scene 1.1 — The Pie Tent
-**Read aloud:** The Pie Tent is full of long tables, and every table is covered in pies with little name cards. At the front stands the judges' board, with an empty hook right at the top where the big blue ribbon should hang. Mrs. Moss twists her apron and asks, "Where do you want to look first?"
-**Available:** the judges' board and its hook, the milk crate under the board, the pie tables, the back flap of the tent, the front flap, Mrs. Moss.
+**Read aloud:** The Pie Tent is full of pies. At the front, the judges' board has an empty hook up high, where the big blue ribbon should hang. Mrs. Moss twists her apron and asks, "Where should we look first?"
+**Available:** the judges' board and its hook, the milk crate under the board, the pie tables (long rows of pies, each with a little name card), the back flap of the tent, the front flap, Mrs. Moss.
 **Clues here:**
 - The ribbon, as Mrs. Moss describes it: a big blue ribbon flower with a gold button in the middle and long gold fringe. She straightened it on its hook at 2:15, and it was gone when she came back at 2:25.
 - The hook is high up, near the top of the board. A grown-up could reach it standing on the floor.
@@ -99,8 +100,8 @@ This is what each person will say. Use it whenever anyone is asked where they we
 **Leads to:** 1.2, 1.3, 1.4
 
 ### Scene 1.2 — The face-painting booth
-**Read aloud:** Right across from the Pie Tent's front flap, Lulu Ortega is painting tiger stripes on a little boy, with a line of kids waiting behind him. A blue ribbon bounces in her hair as she works. She waves her brush at you and asks, "Want to get painted, or are you here on fair business?"
-**Available:** Lulu, her paint tray, her hair ribbon, the line of kids, the view of the Pie Tent's front flap.
+**Read aloud:** Across from the Pie Tent's front flap, Lulu Ortega is painting a boy's face, with a line of kids waiting. A blue ribbon bounces in her hair. She asks, "Want your face painted, or are you on fair business?"
+**Available:** Lulu, the boy in her chair (getting tiger stripes), her paint tray, her hair ribbon, the line of kids, the view of the Pie Tent's front flap.
 **Clues here:**
 - Lulu can see the Pie Tent's front flap from her booth, but not the back. She saw Mr. Pike come out of the front flap at about ten past two, "wiping his mouth with a napkin."
 - Between two and half past, she saw only Mr. Pike, and Mrs. Moss going off for plates and coming back. Nobody else went in or out of the front flap.
@@ -110,8 +111,8 @@ This is what each person will say. Use it whenever anyone is asked where they we
 **Leads to:** 1.1, 1.3, 1.4
 
 ### Scene 1.3 — The announcer's stand
-**Read aloud:** Mr. Gordy Pike sits on the announcer's stand by the tractor field, so tall his knees poke up past the table. The tractor pull just finished, and he's putting the loudspeaker away. "Well now," he booms, "what can I do for our junior helper?"
-**Available:** Mr. Pike, his tie, his hands, the loudspeaker, the fairgoers by the tractor field.
+**Read aloud:** Mr. Gordy Pike sits on the announcer's stand by the tractor field, so tall his knees poke up past the table. He's putting the loudspeaker away. "Well now," he booms, "what can I do for our junior helper?"
+**Available:** Mr. Pike, his tie, his hands, the loudspeaker, the fairgoers by the tractor field (the tractor pull just finished).
 **Clues here:**
 - Pie crumbs on his tie (not hidden, but mention them only when the player looks at him closely or at his tie).
 - His fingertips are stained blue-purple, like berries (mention only if the player looks at his hands).
@@ -119,8 +120,8 @@ This is what each person will say. Use it whenever anyone is asked where they we
 **Leads to:** 1.1, 1.2, 1.4
 
 ### Scene 1.4 — The rabbit barn
-**Read aloud:** The rabbit barn is warm and smells of fresh straw, with rows of little pens and fluffy ears poking up everywhere. Theo Bramble sits by the pen of a grey rabbit named Pickles, swinging his feet. He glances down at his shoes and asks, "Are you here to see the rabbits?"
-**Available:** Theo, his face and hands, Pickles's pen and its latch, the straw in Pickles's pen, the barn door that faces the Pie Tent's back flap.
+**Read aloud:** The rabbit barn smells of fresh straw. Theo Bramble sits by the pen of a grey rabbit named Pickles, swinging his feet. He glances at his shoes and asks, "Are you here to see the rabbits?"
+**Available:** the rows of little rabbit pens, Theo, his face and hands, Pickles's pen and its latch, the straw in Pickles's pen, the barn door that faces the Pie Tent's back flap.
 **Clues here:**
 - The barn door is only a few steps from the Pie Tent's back flap.
 - Pickles's pen latch (not hidden, but mention it only when the player looks at the pen or the latch): two long gold threads are caught in it, like fringe.

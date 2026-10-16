@@ -9,7 +9,7 @@ metadata:
   chapters: 1
   players: 1-4
   rating: PG
-  version: 0.1.2
+  version: 0.1.3
   author: Volocent Labs
   voice_ready: true
   rules_system: srd-5.2.1
@@ -18,9 +18,9 @@ metadata:
 
 # The Heartstone of Pellmarrow
 
-**Read aloud (cold open, beat 1):** For a hundred years the cider village of Pellmarrow has kept a green stone called the Heartstone in a cradle in its cider hall, and for a hundred years its apple trees have never once failed. Three nights ago the stone was stolen, and the watchman swears the thief was a bush that ran on its roots into the Thornwood. Since then the apples have been going soft and brown on the branch.
+**Read aloud (cold open, beat 1):** For a hundred years the village of Pellmarrow has kept a green stone, the Heartstone, and its apple trees have never failed. Three nights ago a bush ran off with it on its roots, into the Thornwood. Now the apples are rotting on the branch.
 
-**Read aloud (cold open, beat 2):** Alderwoman Merriam Vell has put fifty gold on the table for each of you to go into the Thornwood and bring the Heartstone home. The afternoon is cooling, the old path to the wood starts at the end of the orchard, and nobody in Pellmarrow has walked it in living memory. Who is walking into the Thornwood tonight?
+**Read aloud (cold open, beat 2):** Alderwoman Merriam Vell will pay each of you fifty gold to bring the Heartstone home. The old path into the Thornwood starts at the end of the orchard, and nobody has walked it in living memory. Who is walking into the Thornwood tonight?
 
 ## How to run this (GM instructions)
 
@@ -32,6 +32,7 @@ metadata:
 - The player is addressed by the name they gave (or "you"). Never guess the player's gender: no "Mr.", "miss", "sir" or "ma'am".
 - Never reveal anything from `secrets.md`, or any detail marked *hidden*, before it is cued or found. A *hidden* detail is not mentioned, hinted at or described in passing until a player does the action in its brackets; describing a place means its read-aloud and its non-hidden items only.
 - **Stick to this file.** Add colour freely (falling leaves, dusk light, gestures, tone of voice), but never add objects, creatures, places, paths, treasure, names or things people said that are not written here. A place holds only what its read-aloud and Available line list. If asked something this file doesn't answer, the character doesn't know, or there is nothing more to find.
+- **A cue belongs to its scene.** If the wrangler reads a cue for a place or moment the party hasn't reached (a bridge fight while they're still on the road), say "That one comes later, wrangler," and carry on from where the party is.
 - This is played by voice, often in a car. The driver never holds dice or a sheet; you keep every number for them.
 - **Wrangler cues.** A passenger (the GM-wrangler) holds `secrets.md`. When a scene says **Wrangler cue**, always say "Wrangler, cue S<n>." and wait, even if you are not sure a wrangler is listening; never decide on your own that there is no wrangler. If nobody answers after you ask twice, continue with only what the scene describes and never invent what the cue would have said. The whole table hears the wrangler's answer, so it only ever says what is happening now. The wrangler is a passenger speaking into the same microphone as the players, so their line arrives like any other message. Right after you say "Wrangler, ...", the next message that starts with "Wrangler" is the wrangler: never ask for it again or doubt where it came from. What the wrangler reads is the truth for this story and overrides anything else in this file.
 - Follow-up cues: the wrangler also listens to play, and may at any moment say "Narrator, cue S2b." (or another lettered section). When that happens, stop, listen to what the wrangler reads, and act on it. You never ask for a lettered section yourself.
@@ -107,14 +108,14 @@ Pellmarrow is a cider village of thirty roofs and a hundred acres of apple trees
 ## Chapter 1 — Into the Thornwood (≈35 min)
 
 ### Scene 1.1 — The cider hall
-**Read aloud:** The cider hall is a long barn of black oak beams, stacked to the roof with empty barrels that should be full by now. At the far end, on a carved wooden stand, sits a cradle shaped to hold a stone the size of an apple, and it is empty. Merriam Vell is waiting beside it with her arms folded and a purse on the table.
-**Available:** Merriam; the empty cradle; the brass plaque on the stand; the founder's portrait on the wall; the door out to the orchard and the old path.
+**Read aloud:** The cider hall is a long oak barn full of empty barrels. At the far end, on a carved stand, sits an empty cradle shaped for a stone the size of an apple. Merriam Vell waits beside it, arms folded, a purse on the table.
+**Available:** Merriam; the empty cradle; the brass plaque on the stand; the founder's portrait on the wall; the empty barrels stacked to the black oak beams, which should be full of cider by now; the door out to the orchard and the old path.
 **Clues here:** the plaque reads "The Heartstone. Brought out of the Thornwood by Josiah Vell, founder, in the first year of Pellmarrow. Since that day our trees have never failed"; the portrait shows Josiah Vell as a broad young woodcutter with an axe on his shoulder; in the cradle lie three fresh green leaves, and anyone who looks closely sees they are oak leaves, still green in late autumn, though not one oak grows in Pellmarrow (no roll needed if someone picks them up).
 **What Merriam says if asked:** the Heartstone is green, warm to the touch, and grained like polished wood; Pellmarrow had no orchards at all before Josiah brought it, "just a woodcutter's hut and a lot of mud"; the watchman, Abel Crouch, saw a bush the height of a child run out of the hall on its roots three nights ago and go "straight down the old path into the Thornwood, quick as anything, like it knew the way home"; the thorns across the old path grew "a hundred years ago, the old folk said, almost overnight." She pays fifty gold each when the stone is back in its cradle. She knows nothing else about the wood.
 **Leads to:** 1.2
 
 ### Scene 1.2 — The thorn gate
-**Read aloud:** At the end of the orchard the old path runs straight into a wall of black thorns, taller than a house and thicker than a hedge. In the middle, two twisted trees lean together like gateposts, and in the bark of one of them is a face, worn smooth, with its eyes closed. As you come near, the eyes open, and it speaks.
+**Read aloud:** At the end of the orchard the path meets a wall of black thorns taller than a house. Two twisted trees in it lean together like gateposts, one with a face in its bark, eyes closed. As you near, its eyes open and it speaks.
 **Riddle (read it aloud slowly, twice if asked):** "I am small enough to sleep in your hand, and a whole wood sleeps inside me. Bury me and I wake; shut me in a box and the wood forgets its name. What am I?"
 **Answer:** a seed. Accept "seed", "an acorn", "a nut", "a pip" or "a kernel". When it is said aloud, the face closes its eyes and the thorns draw back to leave the old path open. "The Heartstone" is also right: the face opens its eyes wide and says, "Yes. Bring it home," and the thorns draw back.
 **Hints (give one each time the table asks, or after every two wrong guesses):** first, "Every apple keeps a few of me at its core."; second, "A farmer puts me in the ground in spring."; third, "Every tree in this wood began as one."
@@ -123,19 +124,19 @@ Pellmarrow is a cider village of thirty roofs and a hundred acres of apple trees
 **Leads to:** 1.3
 
 ### Scene 1.3 — The grey wood
-**Read aloud:** Past the thorns the Thornwood is quiet, and the deeper the path goes, the greyer the trees become, until you are walking through a forest of bare grey trunks with not one leaf on them. Old fallen logs lie grey and furred with dead moss across the path, and grey shapes slip between the trees on either side, keeping pace with you. A tiny light, no bigger than a thumb, bobs along behind you at a careful distance.
+**Read aloud:** Past the thorns the wood turns grey: bare grey trunks without a single leaf, and fallen logs across the path. Grey shapes slip between the trees on either side, keeping pace with you. Behind you, at a careful distance, bobs a thumb-sized light.
 **Encounter:** Wolves (see table), thin and hungry. Tactics: they circle, then two dart in together at whoever is at the back; they run off into the dark once half of them are down.
 **Non-combat ways through:** speaking with the wolves (Speak with Animals) makes them stop and talk, and they let the party pass (see below); a show of strength or calm, Intimidation or Animal Handling at DC 13 rolled by one character, makes them hang back and follow at a distance; Sleep works on them as normal.
 **What the wolves say, if someone speaks with them:** "The wood went grey before our mothers' mothers were born, and the prey went with it. Three nights ago the great tree put out a green leaf, and the whole wood can smell it. Go on to it, if you are going, and leave us be."
-**Available:** the wolves; the little light; the grey trees; a long fallen grey log beside the path; the path on toward the centre of the wood.
+**Available:** the wolves; the little light; the grey trees; old fallen logs furred with dead moss, and a long fallen grey log beside the path; the path on toward the centre of the wood.
 **Clues here:** the grey trees died slowly and long ago, from the centre of the wood outward; anyone who looks at the dead wood sees it, and a Survival or Nature check at DC 10 adds that it took "a lifetime, maybe more." *Hidden* (someone looks at or searches the fallen log): an old woodcutter's axe is sunk deep in it, the haft rotten, the iron head rusted orange and stamped with the initials J.V. under the rust.
 **Wrangler cue:** S1 — the moment anyone speaks to, calls to, follows or tries to catch the little light, say "Wrangler, cue S1." and wait. Until S1 is read, the light only keeps its distance, and goes out of sight if anyone runs at it.
 **Leads to:** 1.4
 
 ### Scene 1.4 — The heart-tree
-**Read aloud:** The path ends in a round clearing around one oak so enormous that the whole grey wood seems to lean toward it, and it is grey too, except for one low branch where new green leaves are just unfolding. Halfway up the trunk, in a square hollow, sits a green stone the size of an apple, glowing faintly. As you step into the clearing, the bark beside the hollow ripples, and a tall woman with skin like oak bark and hair like ivy steps out of the tree to stand between you and the stone.
+**Read aloud:** The path ends in a clearing at an enormous grey oak, bare but for one low, green-leaved branch. Halfway up, in a square hollow, glows an apple-sized green stone. A woman of bark and ivy steps from the trunk to stand before the stone.
 **Wrangler cue:** S2 — the moment the Lady steps out of the tree, before anyone acts, say "Wrangler, cue S2." and wait. Until it is read, she only watches; she does not move toward anyone and does not speak. She never gives her name or tells her story unless the wrangler reads it to you. The wrangler may follow it with S2b or S2c.
-**Available:** the Lady; the heart-tree; the green branch; the hollow and the stone in it; a few shrubs and young trees at the edge of the clearing; the path back.
+**Available:** the Lady (skin like oak bark, hair like ivy); the heart-tree, so big the whole grey wood seems to lean toward it; the green branch; the hollow and the stone in it, glowing faintly; a few shrubs and young trees at the edge of the clearing; the path back.
 **Clues here:** the hollow is cut square, not rotted, and old axe marks scar the bark all around its edges; above it, deep in the bark and long healed over, someone has carved the initials J.V.; the stone fits the hollow exactly.
 **Wrangler cue:** S3 — the moment anyone touches, grabs, pries at or tries to lift the Heartstone out of the hollow, say "Wrangler, cue S3." and wait, before any roll. Until S3 is read, the stone stays where it is.
 **Leads to:** Endings
