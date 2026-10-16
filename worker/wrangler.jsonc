@@ -11,13 +11,19 @@
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   "vars": { "ENVIRONMENT": "dev" },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "plotspeaks-dev", "database_id": "3c93a1ce-a864-405f-be55-01bd5ad3d565", "migrations_dir": "migrations" }
+  ],
   "observability": { "enabled": true },
   "env": {
     // Named dev env, so deploy commands can say --env=dev explicitly. Same Worker as the top level.
     "dev": {
       "name": "plotspeaks-dev",
       "workers_dev": true,
-      "vars": { "ENVIRONMENT": "dev" }
+      "vars": { "ENVIRONMENT": "dev" },
+      "d1_databases": [
+        { "binding": "DB", "database_name": "plotspeaks-dev", "database_id": "3c93a1ce-a864-405f-be55-01bd5ad3d565", "migrations_dir": "migrations" }
+      ]
     },
     "prod": {
       "name": "plotspeaks",

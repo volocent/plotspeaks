@@ -46,11 +46,21 @@ for (const slug of readdirSync(join(root, "stories")).sort()) {
   const cueIds = [...secrets.matchAll(/^##\s+S(\d+[a-z]?)\b/gim)].map(
     (m) => m[1],
   );
+  // Through the connector there is no passenger, so the narrator also gets each cue's
+  // "Wrangler only" notes (what to listen for, follow-up cues), marked never to be read aloud.
+  // Solo-mode playtests showed narrators keep such notes private (docs/DECISIONS.md).
+  const wranglerOnly = (id) => {
+    const sec = new RegExp(`^##\\s+S${id}\\b[^\\n]*\\n([\\s\\S]*?)(?=^##\\s|(?![\\s\\S]))`, "im").exec(secrets);
+    if (!sec) return null;
+    const m = /\*\*Wrangler only[^*]*:\*\*\s*([\s\S]*?)(?=^\*\*[A-Z][^\n]*:\*\*|(?![\s\S]))/im.exec(sec[1]);
+    return m ? m[1].trim() : null;
+  };
   const cues = {};
   for (const id of cueIds) {
     const c = extractCue(secrets, id);
-    if (c) cues[`S${id}`.toUpperCase()] = c;
+    if (c) cues[`S${id}`.toUpperCase()] = { read_aloud: c, narrator_only: wranglerOnly(id) };
   }
+  const listenFor = (/^#{2,3}\s+Listen for[^\n]*\n([\s\S]*?)(?=^#{2,3}\s)/im.exec(secrets) || [, null])[1];
   stories.push({
     slug,
     title: field(fm, "title") || slug,
@@ -64,6 +74,7 @@ for (const slug of readdirSync(join(root, "stories")).sort()) {
       text,
     })),
     cues,
+    listen_for: listenFor ? listenFor.trim() : null,
   });
 }
 
