@@ -1,0 +1,28 @@
+// Plot Speaks Worker.
+//
+// The unnamed top-level environment is DEV on purpose: a bare `npx wrangler deploy` can only
+// ever reach plotspeaks-dev on workers.dev. Production exists only as the named env.prod and
+// will be deployed through a script with its own pre-deploy checks.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "plotspeaks-dev",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "vars": { "ENVIRONMENT": "dev" },
+  "observability": { "enabled": true },
+  "env": {
+    // Named dev env, so deploy commands can say --env=dev explicitly. Same Worker as the top level.
+    "dev": {
+      "name": "plotspeaks-dev",
+      "workers_dev": true,
+      "vars": { "ENVIRONMENT": "dev" }
+    },
+    "prod": {
+      "name": "plotspeaks",
+      "workers_dev": false,
+      "vars": { "ENVIRONMENT": "production" }
+    }
+  }
+}

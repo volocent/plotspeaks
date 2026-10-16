@@ -1,0 +1,16 @@
+# Answer keys never go in this repository
+stories/**/secrets.md
+stories/**/secrets.json
+worker/src/generated/
+
+# Local and generated
+node_modules/
+.wrangler/
+dist/
+playtests/
+.env
+.env.*
+.dev.vars
+*.pem
+.DS_Store
+Thumbs.db

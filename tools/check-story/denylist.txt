@@ -1,0 +1,70 @@
+# check-story denylist. One entry per line; # starts a comment; blank lines ignored.
+# Matching is case-insensitive and whole-word/phrase. Use full phrases so short common
+# words ("Green", "White") never match on their own. There is no per-story override.
+
+# --- Clue / Cluedo cast and setting ---
+Colonel Mustard
+Miss Scarlet
+Miss Scarlett
+Professor Plum
+Mrs. Peacock
+Mrs Peacock
+Reverend Green
+Mr. Green
+Mrs. White
+Mrs White
+Dr. Black
+Mr. Boddy
+Tudor Mansion
+Cluedo
+
+# --- D&D IP outside SRD 5.2.1 (creatures, classes, species) ---
+beholder
+mind flayer
+illithid
+Strahd
+Orcus
+Tiamat
+Vecna
+Artificer
+Aasimar
+displacer beast
+carrion crawler
+githyanki
+githzerai
+slaad
+slaadi
+umber hulk
+yuan-ti
+kuo-toa
+
+# --- D&D IP outside SRD 5.2.1 (named characters) ---
+Mordenkainen
+Bigby
+Tasha
+Elminster
+Drizzt
+
+# --- D&D IP outside SRD 5.2.1 (settings) ---
+Forgotten Realms
+Faerûn
+Faerun
+Greyhawk
+Eberron
+Ravenloft
+Barovia
+Waterdeep
+Baldur's Gate
+Neverwinter
+Dragonlance
+Spelljammer
+Planescape
+Sword Coast
+
+# --- Famous fictional detectives ---
+Sherlock Holmes
+Hercule Poirot
+Miss Marple
+Jessica Fletcher
+Nancy Drew
+Lieutenant Columbo

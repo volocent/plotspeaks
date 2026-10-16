@@ -1,0 +1,18 @@
+{
+  "name": "plotspeaks-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "data": "node ../tools/worker-data/build.mjs",
+    "dev": "npm run data && wrangler dev",
+    "deploy:dev": "npm run data && wrangler deploy --env=dev"
+  },
+  "devDependencies": {
+    "wrangler": "^4.127.1"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "^2.3.1",
+    "agents": "^0.28.1",
+    "zod": "^4.6.7"
+  }
+}

@@ -1,0 +1,17 @@
+Plot Speaks is licensed in parts. Copyright (c) 2026 Volocent Labs LLC.
+
+| Path       | License            | Full text            |
+|------------|--------------------|----------------------|
+| stories/   | CC BY-NC 4.0       | stories/LICENSE      |
+| docs/      | CC BY 4.0          | docs/LICENSE         |
+| tools/     | MIT                | tools/LICENSE        |
+| worker/    | AGPL-3.0           | worker/LICENSE       |
+
+Exception: material from the System Reference Document 5.2.1 in
+stories/keepers-bell/ remains under CC BY 4.0, as described in NOTICE.
+The CC BY-NC terms apply only to the original material in that story.
+
+Story license summary (not a substitute for stories/LICENSE): you may share
+and adapt the stories, for non-commercial purposes, if you give appropriate
+credit ("Plot Speaks, by Volocent Labs LLC"), link to the license, and say if
+you changed anything.
