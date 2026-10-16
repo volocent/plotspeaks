@@ -22,6 +22,7 @@ import { checkSubmitted, DENYLIST } from "./studio";
 import { generateCover } from "./covers";
 import { parseEndings, extractCue } from "../../tools/playtest/lib.mjs";
 import { parseFrontMatter, checkDenylist } from "../../tools/check-story/rules.mjs";
+import { adminStats } from "./stats";
 
 export const GUARD_MODEL = "@cf/meta/llama-guard-3-8b";
 export const PER_IP_DAILY = 3;
@@ -558,6 +559,17 @@ export async function handleAdmin(request: Request, env: SubEnv, builtins: Built
     log("admin_submission", { id, action });
     const fromForm = /application\/x-www-form-urlencoded|multipart\/form-data/.test(request.headers.get("content-type") ?? "");
     return fromForm ? Response.redirect(new URL("/admin/submissions", url).toString(), 303) : json({ ok: true, id, action, slug: row.slug });
+  }
+
+  // Usage numbers for the admin dashboard and monitoring (src/stats.ts). JSON only, no story text.
+  if (url.pathname === "/admin/stats.json" && request.method === "GET") {
+    try {
+      const stats = await adminStats(db, env, url.searchParams.get("days"));
+      return new Response(JSON.stringify(stats), { headers: { "content-type": "application/json; charset=utf-8", "cache-control": "private, no-store", "x-robots-tag": "noindex" } });
+    } catch (e) {
+      log("stats_error", { message: String(e).slice(0, 200) });
+      return json({ error: "stats query failed" }, 500);
+    }
   }
 
   if (url.pathname === "/admin/submissions" && request.method === "GET") {

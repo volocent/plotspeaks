@@ -331,5 +331,30 @@ if (!openServer && key) {
   }
 }
 
+// Usage monitoring (2026-10-16): the public health check, and the key-gated stats the Volocent
+// admin dashboard and monitoring read. Prints counts' presence only.
+await new Promise((r) => setTimeout(r, 1500)); // tallies are written after each reply goes out
+const health = await fetch(`${base}/api/health`);
+const healthJson = await health.json().catch(() => null);
+ok(health.status === 200 && healthJson?.ok === true && healthJson?.db === 'ok' && Object.keys(healthJson).length === 3, `GET /api/health answers ok with the database up (${health.status})`);
+const statsNoKey = await fetch(`${base}/admin/stats.json`);
+await statsNoKey.arrayBuffer();
+ok(statsNoKey.status === 403 || statsNoKey.status === 404, `GET /admin/stats.json without the admin key is refused (${statsNoKey.status})`);
+if (!openServer && key) {
+  const st = await fetch(`${base}/admin/stats.json?days=7`, { headers: { 'x-admin-key': key } });
+  const raw = await st.text();
+  let sj = null;
+  try { sj = JSON.parse(raw); } catch {}
+  ok(st.status === 200 && sj?.gate2?.target === 500 && typeof sj?.plays?.testers?.retained === 'number' && sj?.days === 7, `GET /admin/stats.json with the key returns the stats (${st.status})`);
+  ok(sj?.plays?.testers?.retained > 0 && Array.isArray(sj?.assistants) && typeof sj?.submissions?.pending === 'number' && 'inWindow' in (sj?.ratings ?? {}), 'the stats count tester plays (this run included), assistants, submissions and ratings');
+  ok(!/Endings detail|read_aloud|story_md|secrets_md|claim_hash|ip_hash/.test(raw), 'the stats carry no story text, answer keys or hashes');
+  if (sj?.pageViews === null) console.log(`NOTE  page and MCP tallies are off: ${sj.countsNote}`);
+  else {
+    ok(sj?.pageViews?.crawlers > 0 && sj?.mcp?.testers?.requests > 0 && sj?.mcp?.testers?.calls?.some((c) => c.key === 'start_story'),
+      `the tallies count this run (script page views as crawlers: ${sj?.pageViews?.crawlers}; tester MCP requests: ${sj?.mcp?.testers?.requests})`);
+    ok(sj?.mcp?.testers?.errors > 0, `deliberate bad calls show as tester MCP errors (${sj?.mcp?.testers?.errors})`);
+  }
+}
+
 console.log(failed ? `\n${failed} check(s) failed` : '\nall checks passed');
 process.exit(failed ? 1 : 0);

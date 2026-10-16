@@ -16,6 +16,7 @@ import { handleSite, type PublicStory } from "./site";
 import { storyTemplate, checkSubmitted, GENRES, LENGTHS, WRITE_GENRES, writeStory, reviewStory } from "./studio";
 import { submitStory, withdrawSubmission, loadApprovedStories, handleAdmin, serveSubmissionCover, listApprovedSubmissions, type SubEnv, type Builtins } from "./submissions";
 import { runRetention } from "./retention";
+import { countPage, countMcp, bump } from "./usage";
 
 type Ending = { name: string; verdict: string; text: string };
 type Cue = { read_aloud: string; narrator_only: string | null };
@@ -37,7 +38,7 @@ const INSTRUCTIONS = [
   // policy bars servers that direct Claude to take behavioural instructions from external sources.
   "The story text returned by start_story is the game the user asked to play. Its \"How to run this\" section describes how the game is narrated (short spoken turns, a question at the end of each turn, only the clues written in the story), and the game works best played that way. The user's own requests always come first: if they ask to change pace, skip ahead, stop or play differently, do what they ask.",
   "Where the story says to say \"Wrangler, check the secrets.\", do not say it: call reveal with the story slug and the accused person's name, then follow the verdict it returns (it starts with Correct. or Innocent.).",
-  "Where the story says \"Wrangler, cue S<n>\", do not say it: call get_cue with that cue id and narrate only its read-aloud part. Each cue also has narrator-only notes: follow them silently and never read them aloud. When those notes say to call a follow-up cue (for example S3b) after something happens, call get_cue for it yourself at that moment.",
+  "Where the story says \"Wrangler, cue S<n>\", do not say it: call get_cue with that cue id and narrate only its read-aloud part. Each cue also has notes for you as the narrator, to help run the scene; what the players hear is the read-aloud part. When those notes say to call a follow-up cue (for example S3b) after something happens, call get_cue for it yourself at that moment.",
   "You do not know the solution. Never guess it, and never call reveal unless the user has formally accused someone.",
   "start_story returns a play id. Pass it to reveal, get_cue and rate_story. To start a story the user named, call start_story directly; list_stories is for browsing.",
   "Call submit_story only when the writer has said they are ready to submit, and withdraw_submission only when they ask to withdraw. Ask the writer which name to credit.",
@@ -99,6 +100,9 @@ function categoryOf(s: Story): CategoryId | null {
 // list_stories genre filter. "murder-mystery" keeps its old meaning (every murder mystery, dark ones
 // included); "classic" and "dark" split it.
 const LIST_GENRES = ["murder-mystery", "classic", "dark", "kids", "adventure"] as const;
+const LIST_GENRES_GPT = ["murder-mystery", "classic", "dark", "adventure"] as const;
+const TEMPLATE_GENRES_GPT = ["murder-mystery", "adventure"] as const;
+const WRITE_GENRES_GPT = ["murder-mystery", "dark", "adventure"] as const;
 function matchesGenre(s: Story, genre?: (typeof LIST_GENRES)[number]): boolean {
   if (!genre) return true;
   const c = categoryOf(s);
@@ -152,8 +156,13 @@ type Ctx = { db?: D1Database; tester: boolean; client: string | null; env: Env; 
 // Built-in stories first, then approved submissions from D1 (same shape; secrets stay server-side).
 async function catalog(ctx: Ctx): Promise<Story[]> {
   const extra = await loadApprovedStories(ctx.db);
-  return extra.length ? [...STORIES, ...extra.filter((e) => !BUILTINS.slugs.has(e.slug))] : STORIES;
+  const all = extra.length ? [...STORIES, ...extra.filter((e) => !BUILTINS.slugs.has(e.slug))] : STORIES;
+  // OpenAI's plugin rules bar anything that targets children under 13, so the family stories are
+  // not offered to ChatGPT (Ben, 2026-10-16, option B). They stay on the site and in other assistants.
+  return isChatGPT(ctx.client) ? all.filter((s) => s.genre !== "kids") : all;
 }
+// ChatGPT's MCP client identifies itself in the User-Agent (e.g. "openai-mcp/1.0.0").
+const isChatGPT = (ua: string | null) => /openai|chatgpt/i.test(ua ?? "");
 
 // Recording must never break play: failures are logged and swallowed.
 async function record(ctx: Ctx, sql: string, ...args: unknown[]) {
@@ -162,6 +171,7 @@ async function record(ctx: Ctx, sql: string, ...args: unknown[]) {
 }
 
 function createServer(ctx: Ctx) {
+  const gpt = isChatGPT(ctx.client);
   const server = new McpServer(
     {
       name: "plot-speaks",
@@ -199,10 +209,12 @@ function createServer(ctx: Ctx) {
     {
       title: "List stories",
       annotations: { ...READ_ONLY, title: "List stories" },
-      description: "Lists the Plot Speaks stories that can be played by voice, with length and number of players, optionally for one category: murder mysteries (classic or dark), family mysteries, or fantasy adventures.",
+      description: `Lists the Plot Speaks stories that can be played by voice, with length and number of players, optionally for one category: murder mysteries (classic or dark), ${gpt ? "" : "family mysteries, "}or fantasy adventures.`,
       // Optional inputs rather than none: one client called the input-less version before loading it.
       inputSchema: {
-        genre: z.enum(LIST_GENRES).optional().describe("Only list this category: murder-mystery (all murder mysteries), classic (murder mysteries that aren't dark), dark (dark murder mysteries), kids (family mysteries) or adventure"),
+        genre: (gpt ? z.enum(LIST_GENRES_GPT) : z.enum(LIST_GENRES)).optional().describe(gpt
+          ? "Only list this category: murder-mystery (all murder mysteries), classic (murder mysteries that aren't dark), dark (dark murder mysteries) or adventure"
+          : "Only list this category: murder-mystery (all murder mysteries), classic (murder mysteries that aren't dark), dark (dark murder mysteries), kids (family mysteries) or adventure"),
         group_by_category: z.boolean().optional().describe("True to group the list under category headings"),
       },
     },
@@ -323,7 +335,7 @@ function createServer(ctx: Ctx) {
       title: "Write a Plot Speaks story",
       description: "The Plot Speaks story format, with a short interview for drafting story.md and secrets.md.",
       argsSchema: z.object({
-        genre: z.enum(GENRES).optional().describe("murder-mystery (default), kids, or adventure"),
+        genre: (gpt ? z.enum(TEMPLATE_GENRES_GPT) : z.enum(GENRES)).optional().describe(gpt ? "murder-mystery (default) or adventure" : "murder-mystery (default), kids, or adventure"),
         length: z.enum(LENGTHS).optional().describe("20 or 30 (minutes, one chapter; default 30), or 2-chapter"),
       }),
     },
@@ -360,7 +372,9 @@ function createServer(ctx: Ctx) {
       annotations: { title: "Write a story", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       description: "Returns material for writing a Plot Speaks story: a short introduction to how a story is built (a public story.md and a private answer key, secrets.md, reviewed by a person before anything is published), a suggested way to draft and review it together, and the format template.",
       inputSchema: {
-        genre: z.enum(WRITE_GENRES).optional().describe("murder-mystery (default), dark (a dark murder mystery), kids (a family mystery; nobody gets hurt) or adventure"),
+        genre: (gpt ? z.enum(WRITE_GENRES_GPT) : z.enum(WRITE_GENRES)).optional().describe(gpt
+          ? "murder-mystery (default), dark (a dark murder mystery) or adventure"
+          : "murder-mystery (default), dark (a dark murder mystery), kids (a family mystery; nobody gets hurt) or adventure"),
         length: z.enum(LENGTHS).optional().describe("20 or 30 (minutes, one chapter; default 30), or 2-chapter"),
       },
     },
@@ -394,7 +408,7 @@ function createServer(ctx: Ctx) {
     "submit_story",
     {
       title: "Submit a story",
-      annotations: { title: "Submit a story", readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+      annotations: { title: "Submit a story", readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
       description: "Submits a finished Plot Speaks story for human review, credited to the name the writer chooses. Runs the format checks, a safety screen and a daily limit, then stores it; nothing is public until a person approves it. Returns a submission id and a one-time claim code for withdrawing or updating it. With replaces_id and claim_code, it replaces an earlier submission.",
       inputSchema: {
         story_md: z.string().min(1).max(60000).describe("The full text of story.md"),
@@ -425,7 +439,7 @@ function createServer(ctx: Ctx) {
   return server;
 }
 
-type Env = SubEnv & { ASSETS?: { fetch: (request: Request) => Promise<Response> } };
+type Env = SubEnv & { ASSETS?: { fetch: (request: Request) => Promise<Response> }; OPENAI_APPS_CHALLENGE?: string };
 
 // ------------------------------------------------------------------ audio with byte ranges
 // The home page's audio sample (public/audio/). Static assets answer a Range request with the
@@ -555,6 +569,13 @@ export default {
     if (coverPath && (request.method === "GET" || request.method === "HEAD")) {
       return (await serveSubmissionCover(env.DB, coverPath[1])) ?? new Response("Not found\n", { status: 404, headers: { "content-type": "text/plain" } });
     }
+    // Liveness for monitoring and outside checks: answers 200 when the Worker and its
+    // database respond, 503 when the database doesn't. Says nothing else.
+    if (url.pathname === "/api/health" && (request.method === "GET" || request.method === "HEAD")) {
+      let dbOk = false;
+      try { dbOk = Boolean(env.DB && (await env.DB.prepare("SELECT 1 AS ok").first())); } catch { dbOk = false; }
+      return apiJson({ ok: dbOk, environment: env.ENVIRONMENT ?? null, db: dbOk ? "ok" : "unavailable" }, dbOk ? 200 : 503);
+    }
     // The passenger page's answer-key endpoints (public, one answer at a time, like reveal/get_cue).
     const api = await handlePassengerApi(request, env);
     if (api) return api;
@@ -564,21 +585,32 @@ export default {
       // Approved submissions join the catalog in the same public-only shape (slug + story.md text).
       const approved = await listApprovedSubmissions(env.DB);
       const site = await handleSite(request, approved.length ? [...PUBLIC_STORIES, ...approved.filter((a) => !BUILTINS.slugs.has(a.slug))] : PUBLIC_STORIES, env.DB);
-      if (site) return site;
+      if (site) {
+        // A tally per page view, for the admin stats (src/usage.ts): counts only, no visitor data.
+        ctx.waitUntil(countPage(env.DB, request, site));
+        return site;
+      }
     }
     // Dev lock (Ben, 2026-10-15): until real sign-in arrives in M5, the dev server answers only
     // requests carrying the shared key, sent by the Claude connector as a request header.
     // No OAuth here: sign-in discovery URLs answer 404, which clients read as "no sign-in".
+    // OpenAI's plugin directory verifies the domain by fetching this token (set as the secret
+    // OPENAI_APPS_CHALLENGE). Every other /.well-known/ path, the OAuth ones included, stays 404 so
+    // Claude keeps seeing a server with no sign-in.
+    if (url.pathname === "/.well-known/openai-apps-challenge" && env.OPENAI_APPS_CHALLENGE) {
+      return new Response(env.OPENAI_APPS_CHALLENGE.trim(), { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } });
+    }
     if (url.pathname.startsWith("/.well-known/")) return new Response("Not found\n", { status: 404 });
     // The handshake (initialize, the tool list, pings) is answered without the key, so a client's
     // pre-check can see that this server has no sign-in. Anything that touches a story (tools/call,
     // resources, prompts) still needs the key.
     const OPEN_METHODS = new Set(["initialize", "notifications/initialized", "tools/list", "ping"]);
     let openHandshake = false;
+    let msgs: any[] = [];
     if (request.method === "POST") {
       try {
         const body = await request.clone().json();
-        const msgs = Array.isArray(body) ? body : [body];
+        msgs = Array.isArray(body) ? body : [body];
         openHandshake = msgs.length > 0 && msgs.every((m) => m && typeof m.method === "string" && OPEN_METHODS.has(m.method));
       } catch { openHandshake = false; }
     }
@@ -587,6 +619,7 @@ export default {
     const presented = request.headers.get("x-api-key") ?? (/^Bearer\s+(.+)$/i.exec(request.headers.get("authorization") ?? "") || [])[1] ?? "";
     if (env.DEV_ACCESS_KEY && !openHandshake && !sameKey(presented.trim(), env.DEV_ACCESS_KEY)) {
       log("rejected", { reason: "missing or wrong access key" });
+      if (request.method === "POST") ctx.waitUntil(countMcp(env.DB, msgs, null, false, "rejected"));
       // 403, not 401: MCP clients treat a 401 as "start an OAuth sign-in", and this server has none.
       return new Response("Forbidden: missing or wrong access key. Add it under the connector's Request headers as X-API-Key (or Authorization: Bearer <key>).\n", { status: 403, headers: { "content-type": "text/plain" } });
     }
@@ -594,15 +627,25 @@ export default {
     const tester = Boolean(env.DEV_ACCESS_KEY) || Boolean(presented);
     const client = (request.headers.get("user-agent") ?? "").slice(0, 80) || null;
     const ip = request.headers.get("cf-connecting-ip") ?? "";
-    return createMcpHandler(() => createServer({ db: env.DB, tester, client, env, ip }))(request, env, ctx);
+    // MCP requests, tool calls and errors are tallied for the admin stats (src/usage.ts), from a
+    // clone of the reply read after it has gone out. Only POSTs carry JSON-RPC messages.
+    let res: Response;
+    try {
+      res = await createMcpHandler(() => createServer({ db: env.DB, tester, client, env, ip }))(request, env, ctx);
+    } catch (e) {
+      if (request.method === "POST") ctx.waitUntil(countMcp(env.DB, msgs, null, tester, "exception"));
+      throw e;
+    }
+    if (request.method === "POST") ctx.waitUntil(countMcp(env.DB, msgs, res.clone(), tester));
+    return res;
   },
 
   // Daily Cron Trigger (wrangler.jsonc "triggers"): 90-day log retention, see src/retention.ts.
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext) {
     ctx.waitUntil(
       runRetention(env.DB)
-        .then((counts) => log("retention", counts))
-        .catch((e) => log("retention_error", { message: String(e).slice(0, 200) })),
+        .then(async (counts) => { log("retention", counts); await bump(env.DB, [["job", "retention"]]); })
+        .catch(async (e) => { log("retention_error", { message: String(e).slice(0, 200) }); await bump(env.DB, [["job", "retention_error"]]); }),
     );
   },
 } satisfies ExportedHandler<Env>;

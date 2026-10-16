@@ -11,7 +11,7 @@ const where = process.argv.includes('--local') ? '--local' : '--remote';
 function q(sql) {
   // Run the local wrangler through node directly (no shell), so the SQL reaches it as one argument.
   const wrangler = new URL('../node_modules/wrangler/bin/wrangler.js', import.meta.url);
-  const r = spawnSync(process.execPath, [fileURLToPath(wrangler), 'd1', 'execute', `plotspeaks-${env}`, `--env=${env}`, where, '--json',
+  const r = spawnSync(process.execPath, [fileURLToPath(wrangler), 'd1', 'execute', env === 'prod' ? 'plotspeaks' : `plotspeaks-${env}`, `--env=${env}`, where, '--json',
     `--command=${sql.replace(/\s+/g, ' ').trim()}`], { encoding: 'utf8', cwd: fileURLToPath(new URL('..', import.meta.url)) });
   const out = r.stdout || '';
   const start = out.indexOf('[');
@@ -39,5 +39,19 @@ const strangers = byGroup.filter((r) => !r.tester).reduce((a, r) => a + r.comple
 console.log(`\nGate 2: ${strangers} of 500 completed plays by strangers.`);
 console.log('\nRatings');
 for (const r of ratings) console.log(`  ${r.story}: ${r.n} rating(s), average ${r.avg_stars} stars, ${r.said_spoiled ?? 0} said something was given away early`);
+// Which assistant each play came from, from the MCP client's User-Agent.
+const assistant = (ua) => /openai|chatgpt/i.test(ua) ? 'ChatGPT' : /claude|anthropic/i.test(ua) ? 'Claude'
+  : /gemini|google/i.test(ua) ? 'Gemini' : /mistral|vibe|le ?chat/i.test(ua) ? 'Vibe' : /perplexity/i.test(ua) ? 'Perplexity' : 'Other';
+const totals = {};
+const weekAgo = Date.now() - 7 * 86400 * 1000;
+for (const r of q(`SELECT coalesce(client, '') AS client, count(*) AS plays, sum(CASE WHEN started_at > ${weekAgo} THEN 1 ELSE 0 END) AS week FROM plays WHERE tester = 0 GROUP BY client`)) {
+  const a = assistant(r.client);
+  totals[a] ??= { plays: 0, week: 0 };
+  totals[a].plays += r.plays; totals[a].week += r.week;
+}
+console.log('\nStranger plays by assistant (all time / last 7 days)');
+const ranked = Object.entries(totals).sort((x, y) => y[1].plays - x[1].plays);
+if (!ranked.length) console.log('  none yet');
+for (const [a, v] of ranked) console.log(`  ${a}: ${v.plays} / ${v.week}`);
 console.log('\nAssistants (by user agent)');
 for (const r of clients) console.log(`  ${r.tester ? 'tester  ' : 'stranger'}  ${r.client}: ${r.plays}`);

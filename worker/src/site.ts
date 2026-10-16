@@ -1629,6 +1629,7 @@ export function privacyPage(origin: string): string {
 <p>If you use <code>submit_story</code>, we store the story, its answer key, the name you chose to be credited as (a pen name is fine), the results of our automated content checks, a generated cover image, and the contact details you choose to give (optional, seen only by the reviewer). You get a claim code to withdraw or update it later. To limit submissions to a few a day, we keep a salted hash of your IP address, never the address itself. A person reviews every submission. If it's approved, the story is published under CC BY-NC 4.0 with your credit name; your contact details never are.</p>
 <h2>This website</h2>
 <p>No sign-in, no ads, no analytics scripts and no tracking cookies. The pages load fonts from Google Fonts, so your browser contacts Google's servers for them. Plot Speaks is hosted on Cloudflare, which processes every request and keeps short-lived operational logs.</p>
+<p>To see how the site and the connector are used, the server keeps daily tallies: how many times each page was viewed, and how many tool calls and errors there were. A tally is only a number per day; nothing about you, your browser or your address is stored with it.</p>
 <h2>How long we keep it</h2>
 <p>Deletion is automatic:</p>
 <div class="table-wrap"><table>
@@ -1637,6 +1638,7 @@ export function privacyPage(origin: string): string {
 <tr><td>Play logs (stories started, accusations, cues)</td><td>90 days, then deleted automatically.</td></tr>
 <tr><td>Ratings</td><td>The stars and the spoiler answer are kept. Any comment is deleted after 90 days.</td></tr>
 <tr><td>Rate-limit records (the salted IP hash)</td><td>2 days, then deleted.</td></tr>
+<tr><td>Daily tallies (page views, tool calls, errors: numbers only)</td><td>About 13 months, then deleted.</td></tr>
 <tr><td>Rejected submissions</td><td>90 days, then deleted.</td></tr>
 <tr><td>Approved stories and their credit name</td><td>For as long as the story is published.</td></tr>
 </tbody>
