@@ -39,7 +39,8 @@ const INSTRUCTIONS = [
   "Where the story says to say \"Wrangler, check the secrets.\", do not say it: call reveal with the story slug and the accused person's name, then follow the verdict it returns (it starts with Correct. or Innocent.).",
   "Where the story says \"Wrangler, cue S<n>\", do not say it: call get_cue with that cue id and narrate only its read-aloud part. Each cue also has narrator-only notes: follow them silently and never read them aloud. When those notes say to call a follow-up cue (for example S3b) after something happens, call get_cue for it yourself at that moment.",
   "You do not know the solution. Never guess it, and never call reveal unless the user has formally accused someone.",
-  "start_story returns a play id. Pass it to reveal, get_cue and rate_story.",
+  "start_story returns a play id. Pass it to reveal, get_cue and rate_story. To start a story the user named, call start_story directly; list_stories is for browsing.",
+  "Call submit_story only when the writer has said they are ready to submit, and withdraw_submission only when they ask to withdraw. Ask the writer which name to credit.",
   "Writing: write_story returns a suggested step-by-step way to draft a story with the user, and the format template. review_story checks a draft (format rules, plus a fair-play checklist for you to go through). When the writer wants to share it, submit_story sends it, with the name they want credited, to a person who reviews every submission before it is published; withdraw_submission removes it again with the claim code from the receipt. (The story_template prompt and check_story remain for older clients.)",
   "When a story ends (a correct accusation, the full reveal, a victory or defeat), ask once: \"How many stars out of five would you give it? And did I give anything away too early?\" Then call rate_story with the answer. If the player doesn't want to rate, drop it.",
 ].join("\n");
@@ -178,7 +179,7 @@ function createServer(ctx: Ctx) {
     {
       title: "Open Plot Speaks",
       annotations: { title: "Open Plot Speaks", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-      description: "Call this first when the user opens or asks for Plot Speaks without naming a story (for example \"open Plot Speaks\" or \"let's play Plot Speaks\"). Returns a short spoken introduction, a question asking whether they'd like to hear the stories, start one or write their own, and a menu of story categories with example titles.",
+      description: "Returns the Plot Speaks welcome: a short spoken introduction, a question offering to list the stories, start one or write one, and a menu of story categories with example titles.",
       inputSchema: {},
     },
     async () => {
@@ -198,7 +199,7 @@ function createServer(ctx: Ctx) {
     {
       title: "List stories",
       annotations: { ...READ_ONLY, title: "List stories" },
-      description: "List the Plot Speaks stories that can be played by voice, optionally for one category: murder mysteries (classic or dark), family mysteries for kids, and fantasy adventures. You don't need this to start a story the user named: call start_story directly.",
+      description: "Lists the Plot Speaks stories that can be played by voice, with length and number of players, optionally for one category: murder mysteries (classic or dark), family mysteries, or fantasy adventures.",
       // Optional inputs rather than none: one client called the input-less version before loading it.
       inputSchema: {
         genre: z.enum(LIST_GENRES).optional().describe("Only list this category: murder-mystery (all murder mysteries), classic (murder mysteries that aren't dark), dark (dark murder mysteries), kids (family mysteries) or adventure"),
@@ -226,7 +227,7 @@ function createServer(ctx: Ctx) {
       // Not read-only: it logs an anonymous play (no transcript, no personal data). Directories reject
       // annotations that don't match behaviour.
       annotations: { ...RECORDS, title: "Start a story" },
-      description: "Load a Plot Speaks story to narrate. Returns the full story script, including the narrator's rules. Call it when the user asks to play a story.",
+      description: "Loads a Plot Speaks story by slug or title. Returns its full script (setting, cast, scenes, and how the game is narrated) and a play id. Records an anonymous play.",
       inputSchema: { slug: z.string().describe("The story's slug or title, e.g. example-dinner-party or The Last Toast") },
     },
     async ({ slug }) => {
@@ -249,7 +250,7 @@ function createServer(ctx: Ctx) {
       title: "Check an accusation",
       // Not read-only: it logs an anonymous accusation event for the play.
       annotations: { ...RECORDS, title: "Check an accusation" },
-      description: "Check a formal accusation in a Plot Speaks mystery. Call only after the user says they accuse someone. Returns that person's verdict line, starting Correct. or Innocent.",
+      description: "Checks an accusation in a Plot Speaks mystery. Returns the verdict line for the accused person, starting Correct. or Innocent. Records the accusation and verdict anonymously.",
       inputSchema: {
         slug: z.string().describe("The story slug"),
         accused: z.string().describe("The name of the person the user accused"),
@@ -272,7 +273,7 @@ function createServer(ctx: Ctx) {
     {
       title: "Get a scene cue",
       annotations: { ...RECORDS, title: "Get a scene cue" },
-      description: "Get a cue in a Plot Speaks adventure, when the story calls for one. Returns the text to narrate plus narrator-only notes that must never be read aloud.",
+      description: "Returns a cue from a Plot Speaks adventure: the scene text to narrate, and the scene's private notes for the narrator. Records which cue was fetched.",
       inputSchema: {
         slug: z.string().describe("The story slug"),
         cue: z.string().describe("The cue id, e.g. S1 or S3b"),
@@ -297,7 +298,7 @@ function createServer(ctx: Ctx) {
     {
       title: "Rate a story",
       annotations: { ...RECORDS, title: "Rate a story" },
-      description: "Save the player's rating when a Plot Speaks story ends: 1 to 5 stars, whether the narrator gave anything away too early, and an optional short comment.",
+      description: "Saves a rating for a Plot Speaks story: 1 to 5 stars, whether anything was given away too early, and an optional short comment.",
       inputSchema: {
         slug: z.string().describe("The story slug"),
         stars: z.number().int().min(1).max(5).describe("1 to 5"),
@@ -320,7 +321,7 @@ function createServer(ctx: Ctx) {
     "story_template",
     {
       title: "Write a Plot Speaks story",
-      description: "Interview the writer, then write story.md and secrets.md in the Plot Speaks format, and check them with check_story.",
+      description: "The Plot Speaks story format, with a short interview for drafting story.md and secrets.md.",
       argsSchema: z.object({
         genre: z.enum(GENRES).optional().describe("murder-mystery (default), kids, or adventure"),
         length: z.enum(LENGTHS).optional().describe("20 or 30 (minutes, one chapter; default 30), or 2-chapter"),
@@ -357,7 +358,7 @@ function createServer(ctx: Ctx) {
     {
       title: "Write a story",
       annotations: { title: "Write a story", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-      description: "Start writing a Plot Speaks story with the user. Returns a short intro for the user (how a story is built: a public story.md plus a private answer key, secrets.md; that you draft it together; that a person at Plot Speaks reviews it before anything is published; roughly how long it takes), a suggested step-by-step way to work together, and the format template. Call it when the user wants to write their own story.",
+      description: "Returns material for writing a Plot Speaks story: a short introduction to how a story is built (a public story.md and a private answer key, secrets.md, reviewed by a person before anything is published), a suggested way to draft and review it together, and the format template.",
       inputSchema: {
         genre: z.enum(WRITE_GENRES).optional().describe("murder-mystery (default), dark (a dark murder mystery), kids (a family mystery; nobody gets hurt) or adventure"),
         length: z.enum(LENGTHS).optional().describe("20 or 30 (minutes, one chapter; default 30), or 2-chapter"),
@@ -374,7 +375,7 @@ function createServer(ctx: Ctx) {
     {
       title: "Review a story draft",
       annotations: { title: "Review a story draft", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-      description: "Review a draft Plot Speaks story before it is submitted. Runs the automatic format checks on story.md and secrets.md together (including whether story.md gives the culprit away) and returns a status (passes format checks, or the number of problems), the findings with line numbers, and a fair-play checklist for you to go through with the writer, since the server can't judge fairness itself. Nothing sent is stored.",
+      description: "Runs the format checks on a draft story.md and secrets.md together (including whether story.md gives the culprit away). Returns a status, the findings with line numbers, and a fair-play checklist. Nothing sent is stored.",
       inputSchema: {
         story_md: z.string().min(1).max(60000).describe("The full text of story.md"),
         secrets_md: z.string().max(60000).describe("The full text of secrets.md (the private answer key)"),
@@ -394,11 +395,11 @@ function createServer(ctx: Ctx) {
     {
       title: "Submit a story",
       annotations: { title: "Submit a story", readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
-      description: "Submit a finished Plot Speaks story for publication, credited to the name the writer chooses. Runs the format checks (any error refuses it), an automatic safety screen and a daily limit, then stores it for a person to review. Nothing is public until it is approved. The receipt includes a claim code, shown once, that the writer needs to withdraw or update the story later. Call only when the writer has said they are ready to submit. To send a new version of an earlier submission, include replaces_id and claim_code.",
+      description: "Submits a finished Plot Speaks story for human review, credited to the name the writer chooses. Runs the format checks, a safety screen and a daily limit, then stores it; nothing is public until a person approves it. Returns a submission id and a one-time claim code for withdrawing or updating it. With replaces_id and claim_code, it replaces an earlier submission.",
       inputSchema: {
         story_md: z.string().min(1).max(60000).describe("The full text of story.md"),
         secrets_md: z.string().max(30000).optional().describe("The full text of secrets.md (kept private on the server; mysteries need one)"),
-        author_name: z.string().min(2).max(60).describe("The name to credit publicly as \"Written by\" (2 to 60 characters; a pen name is fine). Ask the writer; it is checked by the reviewer with the story."),
+        author_name: z.string().min(2).max(60).describe("The name credited publicly as \"Written by\" (2 to 60 characters; a pen name is fine). Checked by the reviewer with the story."),
         contact: z.string().max(200).optional().describe("Optional: how the reviewer can reach the writer (email or handle). Seen only by the reviewer."),
         replaces_id: z.string().max(40).optional().describe("Only to update an earlier submission: its submission id"),
         claim_code: z.string().max(40).optional().describe("Only to update an earlier submission: the claim code from its receipt"),
@@ -412,7 +413,7 @@ function createServer(ctx: Ctx) {
     {
       title: "Withdraw a submission",
       annotations: { title: "Withdraw a submission", readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
-      description: "Withdraw a story the user submitted to Plot Speaks: deletes the submission (pending or published) when the submission id and claim code from its receipt match. Call only when the writer asks to withdraw it.",
+      description: "Deletes a story submitted to Plot Speaks (pending or published) when its submission id and claim code match.",
       inputSchema: {
         id: z.string().min(1).max(40).describe("The submission id from the receipt"),
         claim_code: z.string().min(1).max(40).describe("The claim code from the receipt, e.g. ABCD-EFGH-JKMN"),

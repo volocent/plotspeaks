@@ -283,12 +283,9 @@ export async function submitStory(
   }
 
   const m = meta(story);
-  let cover: { bytes: Uint8Array; contentType: string; prompt: string } | null = null;
-  try {
-    cover = await generateCover(ai, { story });
-  } catch (e) {
-    log("cover_error", { message: String(e).slice(0, 200) });
-  }
+  // No cover here: the MCP tools never generate images (Anthropic directory acknowledgement,
+  // 2026-10-16). The cover is made when Ben approves the story on the admin page.
+  const cover: { bytes: Uint8Array; contentType: string; prompt: string } | null = null;
   const lintSummary = JSON.stringify({ errors: lint.errors, warnings: lint.warnings, summary: lint.report.split("\n")[0], report: lint.report.slice(0, 4000) });
   const moderation = JSON.stringify({ model: GUARD_MODEL, at: Date.now(), story: mod.story, secrets: mod.secrets });
   const contact = args.contact?.trim() || null;
@@ -545,6 +542,18 @@ export async function handleAdmin(request: Request, env: SubEnv, builtins: Built
     } else {
       if (action === "approve" && builtins.slugs.has(row.slug)) return json({ error: `slug ${row.slug} is now a built-in story; change it before approving` }, 409);
       await db.prepare("UPDATE submissions SET status = ?, reviewed_at = ? WHERE id = ?").bind(action === "approve" ? "approved" : "rejected", Date.now(), id).run();
+      // The cover is drawn here, by a person's approval on the admin page, never by an MCP tool.
+      if (action === "approve" && env.AI) {
+        const s = await db.prepare("SELECT story_md, cover IS NOT NULL AS has_cover FROM submissions WHERE id = ?").bind(id).first<{ story_md: string; has_cover: number }>();
+        if (s && !s.has_cover) {
+          try {
+            const c = await generateCover(env.AI, { story: s.story_md });
+            await db.prepare("UPDATE submissions SET cover = ?, cover_type = ?, cover_prompt = ? WHERE id = ?").bind(c.bytes, c.contentType, c.prompt, id).run();
+          } catch (e) {
+            log("cover_error", { id, message: String(e).slice(0, 200) });
+          }
+        }
+      }
     }
     log("admin_submission", { id, action });
     const fromForm = /application\/x-www-form-urlencoded|multipart\/form-data/.test(request.headers.get("content-type") ?? "");
