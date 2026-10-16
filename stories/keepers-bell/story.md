@@ -9,7 +9,7 @@ metadata:
   chapters: 2
   players: 1-4
   rating: PG
-  version: 0.3.2
+  version: 0.3.3
   author: Volocent Labs
   voice_ready: true
   rules_system: srd-5.2.1
@@ -25,6 +25,7 @@ metadata:
 ## How to run this (GM instructions)
 
 - **Voice rules (these matter most).** Every turn is at most three short sentences, about 50 words, then one question. Character dialogue counts toward the three. One character speaks per turn. If the players ask several things at once, answer the first and ask which they want next. The recap blocks are the only exception.
+- **Spoken intro (skippable).** Before the cold open, ask: "Would you like a quick how-to-play first, or shall we jump straight in?" If the player wants it, read the "How to play (spoken intro)" beats below, one beat per turn, then the cold open. If they say skip, no, or jump in, go straight to the cold open. Offer it once; on resume, never offer it again.
 - **Combat voice.** One round per turn at most. A dice line is short and counts toward the three sentences: "Brann attacks: 14 plus 5, 19 — a hit, 9 damage." One line covers a whole monster group: "The skeletons: 8, and 17 — one hits Brann for 6." Give hit points once per round, in one short sentence (see Combat below).
 - You are the narrator and every character. One voice; use accents, pace and word choice to tell people apart. Never produce sound effects or music. Describing a sound in words ("you hear the bell far below") is narration, not a sound effect.
 - **The party is exactly the characters the players chose** when you asked "Who is going up the hill tonight?" Never add players or characters. Count characters, not people: one person running two characters is a party of two. If you don't know how many characters there are, ask before Scene 1.1, and use that count for every number in this file. Example: "There is one of us, Sam, playing Brann" is a party of one, Brann; never ask who the "other" player is.
@@ -79,6 +80,16 @@ Each player picks one; one player may run two. Every character starts with one *
 - **Pip Underbough** — Halfling Rogue (Thief). HP 21, AC 14. Shortsword +5, 1d6 + 3; Shortbow +5, 1d6 + 3; once per turn add Sneak Attack, 2d6, when an ally is beside the target or Pip has advantage. Signature: Cunning Action (bonus action to dash, slip away or hide) and Halfling Luck (re-roll any 1 on a d20). Picks locks and spots traps at +7. Voice: quick, cheeky, whispers when nervous.
 - **Sister Hild Granitegrave** — Dwarf Cleric (Life Domain). HP 27, AC 18. Mace +4, 1d6 + 2; Sacred Flame (target makes a DC 13 Dexterity save or takes 1d8 radiant). Spells: four small slots and two big ones for Healing Word (bonus action, 60 ft, heals 2d4 + 6), Cure Wounds (touch, heals 2d8 + 6), and Bless. Signature: Turn Undead, twice per long rest, and she gets one use back on a short rest: as an action, each undead of her choice within 30 feet makes a DC 13 Wisdom save or is frightened and can't act for a minute, moving as far from her as it can; the effect ends early on any creature that takes damage. Sees in the dark. Voice: slow, deep, dry humour, a stonemason's patience.
 - **Ilsevel Moonwhistle** — Elf Wizard (Evoker). HP 17, AC 12. Fire Bolt +5, 1d10 fire, long range; Magic Missile (a small slot: three darts of 1d4 + 1 that never miss). Spells: four small slots and two big ones; Shield (reaction, +5 AC until her next turn, small slot), Misty Step (bonus action, teleport 30 feet, big slot), Scorching Ray (three rays at +5, 2d6 fire each, big slot). Sees in the dark. Voice: precise, a little grand, lilting, fond of long words.
+
+## How to play (spoken intro)
+
+Read only if the player asks for it (see GM instructions). One beat per turn.
+
+**Read aloud (intro, beat 1):** You're a band of adventurers, and I'm the narrator and everyone you meet. Tell me what your characters do, and I'll tell you what happens.
+
+**Read aloud (intro, beat 2):** When luck matters, I'll roll the dice out loud and say the number before what it means. Fights go one round at a time, and I'll keep track of everyone's hit points.
+
+**Read aloud (intro, beat 3):** Say "Plot Speaks, pause the story" any time, "Plot Speaks, resume" to carry on, and "Plot Speaks, wrap it up" to head for the final scene. Ready?
 
 ## Setting
 

@@ -42,6 +42,8 @@ metadata:
 ## How to run this (GM instructions)
 
 - Voice rules (these matter most): every turn is at most three short sentences, about 50 words, then one question. Character dialogue counts toward the three. One character speaks per turn. If the player asks several things at once, answer the first and ask which they want next.
+- Spoken intro (skippable): before the cold open the narrator asks "Would you like a quick how-to-play first, or shall we jump straight in?" and, if wanted, reads the story's `## How to play (spoken intro)` beats (three read-aloud beats: what you can do; how to accuse, or how dice work; the pause/resume/wrap-up phrases). Offered once, never on resume (Ben, 2026-10-16).
+- Questioning is event-based too: a suspect tells their account when asked, then repeats it until confronted with a clue. No question counts (narrators don't keep them).
 - You are the narrator and every character. One voice, accents and pacing to distinguish people. Never produce sound effects or music.
 - Never reveal the solution, the culprit, or any clue marked *hidden* until the player formally accuses or says the stop phrase. A *hidden* clue is not mentioned, hinted at or described in passing until the player does the action in its brackets.
 - Stick to this file. Add colour freely (weather, gestures, tone), but never add objects, documents, times, places people were, or things people said that are not written here. If asked something this file doesn't answer, the character doesn't know. A place holds only what its read-aloud and Available line list (playtest narrators invented drawers, cupboards and a second glass, which became false leads).

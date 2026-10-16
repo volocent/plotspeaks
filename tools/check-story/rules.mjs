@@ -149,6 +149,13 @@ export function checkSections(text, opts = {}) {
   for (const phrase of ['Plot Speaks, pause the story', 'Plot Speaks, resume', 'Plot Speaks, wrap it up']) {
     if (!scope.includes(phrase)) out.push(err(base, 'stop-phrase', `GM instructions must contain the phrase "${phrase}"`));
   }
+  // The skippable how-to-play intro (Ben, 2026-10-16): offered in the GM instructions, beats in its own section.
+  if (!scope.includes('jump straight in')) {
+    out.push(err(base, 'spoken-intro', 'GM instructions must offer the skippable intro ("…or shall we jump straight in?")'));
+  }
+  if (!/^##\s+How to play \(spoken intro\)/m.test(lines.join('\n'))) {
+    out.push(err(base, 'spoken-intro', 'missing "## How to play (spoken intro)" section'));
+  }
   if (opts.genre === 'murder-mystery' && !scope.includes('Wrangler, check the secrets')) {
     out.push(err(base, 'accusation-handoff', 'murder-mystery GM instructions must contain the phrase "Wrangler, check the secrets"'));
   }

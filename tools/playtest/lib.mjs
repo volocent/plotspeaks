@@ -50,7 +50,13 @@ export function parseAccusation(text) {
   text = String(text).replace(/\b(Mr|Mrs|Ms|Dr|St|Fr)\./g, '$1');
   const m = text.match(/\bI\s+(?:formally\s+)?accuse\s+(?:that\s+)?(.+?)(?=\s+(?:because|since|of|for|as|who|and|with|using|by|in|on|at|from|had|did|was|is)\b|[.,;:!?]|$)/i);
   if (!m) return null;
-  return m[1].replace(/^(?:the\s+)/i, '').trim() || null;
+  const name = m[1].replace(/^(?:the\s+)/i, '').trim();
+  // "Theo Bramble, I accuse you": the name comes before the accusation.
+  if (/^(?:you|him|her|them)$/i.test(name)) {
+    const before = text.match(/([A-Z][a-z'-]+(?:\s+[A-Z][a-z'-]+)?),\s*I\s+(?:formally\s+)?accuse\s+(?:you|him|her|them)\b/);
+    return before ? before[1] : null;
+  }
+  return name || null;
 }
 
 /** Extract the wrangler-readable parts of `## S<id>` (never the "Wrangler only" part). */

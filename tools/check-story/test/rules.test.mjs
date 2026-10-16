@@ -66,11 +66,21 @@ test('front matter: SRD attribution required', () => {
 
 const GOOD = `## How to run this (GM instructions)
 - Stop phrase: "Plot Speaks, pause the story." Resume: "Plot Speaks, resume." Wrap-up: "Plot Speaks, wrap it up."
+- Spoken intro: "Would you like a quick how-to-play first, or shall we jump straight in?"
+## How to play (spoken intro)
+**Read aloud (intro, beat 1):** You are the detective. Tell me what you do.
 ## Cast
 ## Chapter 1 — A (≈30 min)
 ### Recap block
 ## Endings
 `;
+
+test('spoken-intro: the offer and the section are both required', () => {
+  const noOffer = GOOD.replace(/^- Spoken intro:.*\n/m, '');
+  assert.ok(checkSections(noOffer).some((f) => f.rule === 'spoken-intro'));
+  const noSection = GOOD.replace(/## How to play \(spoken intro\)\n.*\n/, '');
+  assert.ok(checkSections(noSection).some((f) => f.rule === 'spoken-intro'));
+});
 
 test('sections: pass and fail', () => {
   assert.deepEqual(checkSections(GOOD), []);
@@ -208,7 +218,9 @@ test('spoiler hints and hidden clues', () => {
 test('checkStoryText: a minimal clean story has no findings; breaking it is caught', () => {
   const body = `
 ## How to run this (GM instructions)
-- Never produce sound effects or music. Stop phrase: "Plot Speaks, pause the story." Resume phrase: "Plot Speaks, resume." Wrap-up: "Plot Speaks, wrap it up." Wrangler, check the secrets.
+- Never produce sound effects or music. Stop phrase: "Plot Speaks, pause the story." Resume phrase: "Plot Speaks, resume." Wrap-up: "Plot Speaks, wrap it up." Wrangler, check the secrets. Spoken intro: "Would you like a quick how-to-play first, or shall we jump straight in?"
+## How to play (spoken intro)
+**Read aloud (intro, beat 1):** You are the detective. Tell me what you do.
 ## Cast (public information only)
 ## Chapter 1 — One (≈30 min)
 ### Scene 1.1
@@ -227,7 +239,7 @@ test('checkStoryText: a minimal clean story has no findings; breaking it is caug
 });
 
 test('accusation-handoff and resume-chapter', () => {
-  const gm = (extra) => `## How to run this\nPlot Speaks, pause the story. Plot Speaks, resume. Plot Speaks, wrap it up. ${extra}\n## Cast\n## Chapter 1\n## Endings\n`;
+  const gm = (extra) => `## How to run this\nPlot Speaks, pause the story. Plot Speaks, resume. Plot Speaks, wrap it up. Or shall we jump straight in? ${extra}\n## How to play (spoken intro)\n## Cast\n## Chapter 1\n## Endings\n`;
   assert.deepEqual(rules(checkSections(gm(''), { genre: 'murder-mystery' })), ['accusation-handoff']);
   assert.deepEqual(checkSections(gm('Say "Wrangler, check the secrets."'), { genre: 'murder-mystery' }), []);
   assert.deepEqual(checkSections(gm(''), { genre: 'heist' }), []);

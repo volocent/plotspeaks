@@ -12,6 +12,7 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { createMcpHandler } from "agents/mcp/server";
 import { z } from "zod";
 import stories from "./generated/stories.json";
+import { handleSite, type PublicStory } from "./site";
 
 type Ending = { name: string; verdict: string; text: string };
 type Cue = { read_aloud: string; narrator_only: string | null };
@@ -20,6 +21,9 @@ type Story = {
   story: string; endings: Ending[]; cues: Record<string, Cue>; listen_for: string | null;
 };
 const STORIES = stories as Story[];
+// The catalog site gets the slug and the public story.md text ONLY: never endings or cues.
+const toPublic = (s: Story): PublicStory => ({ slug: s.slug, story: s.story });
+const PUBLIC_STORIES: PublicStory[] = STORIES.map(toPublic);
 
 // These rules travel with the server itself, not only inside the story text: on 2026-10-15
 // Claude declined to treat GM instructions inside a pasted document as the user's instructions.
@@ -50,8 +54,22 @@ function findEnding(endings: Ending[], accused: string): Ending | null {
   return bestScore > 0 ? best : null;
 }
 
-const findStory = (slug: string) =>
-  STORIES.find((s) => s.slug === slug || norm(s.title) === norm(slug) || norm(s.title).includes(norm(slug)));
+// Titles arrive through speech recognition ("The Last Host" for The Last Toast), so after the exact
+// matches, fall back to the title sharing the most words, ignoring "the"/"a"/"of".
+const STOP = new Set(["the", "a", "an", "of", "story", "mystery", "plot", "speaks"]);
+const words = (s: string) => norm(s).replace(/-/g, " ").split(" ").filter((w) => w && !STOP.has(w));
+function findStory(slug: string): Story | undefined {
+  const exact = STORIES.find((s) => s.slug === slug || norm(s.title) === norm(slug) || norm(s.title).includes(norm(slug)));
+  if (exact) return exact;
+  const want = words(slug);
+  let best: Story | undefined, bestScore = 0;
+  for (const s of STORIES) {
+    const have = new Set([...words(s.title), ...words(s.slug)]);
+    const score = want.filter((w) => have.has(w)).length;
+    if (score > bestScore) { best = s; bestScore = score; }
+  }
+  return bestScore > 0 ? best : undefined;
+}
 
 const text = (t: string) => ({ content: [{ type: "text" as const, text: t }] });
 
@@ -92,10 +110,16 @@ function createServer(ctx: Ctx) {
 
   server.registerTool(
     "list_stories",
-    { annotations: READ_ONLY, description: "List the Plot Speaks stories that can be played by voice: murder mysteries and adventures.", inputSchema: {} },
-    async () => {
-      log("list_stories", {});
-      return text(STORIES.map((s) => `${s.title} (slug: ${s.slug}; ${s.genre}; ${s.players} players; about ${s.duration_minutes} minutes)`).join("\n"));
+    {
+      annotations: READ_ONLY,
+      description: "List the Plot Speaks stories that can be played by voice: murder mysteries and adventures. You don't need this to start a story the user named: call start_story directly.",
+      // An optional input rather than none: one client called the input-less version before loading it.
+      inputSchema: { genre: z.enum(["murder-mystery", "adventure"]).optional().describe("Only list this genre") },
+    },
+    async ({ genre }) => {
+      log("list_stories", { genre: genre ?? null });
+      return text(STORIES.filter((s) => !genre || s.genre === genre)
+        .map((s) => `${s.title} (slug: ${s.slug}; ${s.genre}; ${s.players} players; about ${s.duration_minutes} minutes)`).join("\n"));
     },
   );
 
@@ -202,19 +226,40 @@ function sameKey(a: string, b: string): boolean {
 }
 
 export default {
-  fetch(request: Request, env: Env, ctx: ExecutionContext) {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext) {
     const url = new URL(request.url);
-    if (url.pathname === "/") {
-      return new Response("Plot Speaks MCP server (dev). Connect an MCP client to /mcp.\n", { headers: { "content-type": "text/plain" } });
+    // The catalog pages are public: they show only public story text (see site.ts). The access
+    // key below applies to the MCP endpoint only.
+    if (url.pathname !== "/mcp") {
+      const site = await handleSite(request, PUBLIC_STORIES, env.DB);
+      if (site) return site;
     }
     // Dev lock (Ben, 2026-10-15): until real sign-in arrives in M5, the dev server answers only
     // requests carrying the shared key, sent by the Claude connector as a request header.
-    if (env.DEV_ACCESS_KEY && !sameKey(request.headers.get("x-plotspeaks-key") ?? "", env.DEV_ACCESS_KEY)) {
-      log("rejected", { reason: "missing or wrong x-plotspeaks-key" });
-      return new Response("Unauthorized\n", { status: 401, headers: { "content-type": "text/plain" } });
+    // No OAuth here: sign-in discovery URLs answer 404, which clients read as "no sign-in".
+    if (url.pathname.startsWith("/.well-known/")) return new Response("Not found\n", { status: 404 });
+    // The handshake (initialize, the tool list, pings) is answered without the key, so a client's
+    // pre-check can see that this server has no sign-in. Anything that touches a story (tools/call,
+    // resources, prompts) still needs the key.
+    const OPEN_METHODS = new Set(["initialize", "notifications/initialized", "tools/list", "ping"]);
+    let openHandshake = false;
+    if (request.method === "POST") {
+      try {
+        const body = await request.clone().json();
+        const msgs = Array.isArray(body) ? body : [body];
+        openHandshake = msgs.length > 0 && msgs.every((m) => m && typeof m.method === "string" && OPEN_METHODS.has(m.method));
+      } catch { openHandshake = false; }
+    }
+    // Claude's connector form only accepts approved header names, so the key is read from the
+    // standard places: X-API-Key, or Authorization: Bearer <key>.
+    const presented = request.headers.get("x-api-key") ?? (/^Bearer\s+(.+)$/i.exec(request.headers.get("authorization") ?? "") || [])[1] ?? "";
+    if (env.DEV_ACCESS_KEY && !openHandshake && !sameKey(presented.trim(), env.DEV_ACCESS_KEY)) {
+      log("rejected", { reason: "missing or wrong access key" });
+      // 403, not 401: MCP clients treat a 401 as "start an OAuth sign-in", and this server has none.
+      return new Response("Forbidden: missing or wrong access key. Add it under the connector's Request headers as X-API-Key (or Authorization: Bearer <key>).\n", { status: 403, headers: { "content-type": "text/plain" } });
     }
     // Plays made with the access key are ours (testers); Gate 2 counts strangers only.
-    const tester = Boolean(env.DEV_ACCESS_KEY) || Boolean(request.headers.get("x-plotspeaks-key"));
+    const tester = Boolean(env.DEV_ACCESS_KEY) || Boolean(presented);
     const client = (request.headers.get("user-agent") ?? "").slice(0, 80) || null;
     return createMcpHandler(() => createServer({ db: env.DB, tester, client }))(request, env, ctx);
   },

@@ -14,6 +14,6 @@ Answer keys are compiled into the Worker at deploy time by `tools/worker-data/bu
 
 Play data goes to a D1 database (`migrations/`): plays, accusations, verdicts, cues and ratings. No transcripts, names or IP addresses are stored. `scripts/stats.mjs` prints the totals, and `test/smoke.mjs` checks every tool.
 
-Deploys: the top-level wrangler config is dev; production exists only as the named `prod` environment. The dev server requires an `X-PlotSpeaks-Key` header when `DEV_ACCESS_KEY` is set.
+Deploys: the top-level wrangler config is dev; production exists only as the named `prod` environment. When `DEV_ACCESS_KEY` is set, tool calls need that key as `X-API-Key` or `Authorization: Bearer <key>`; the handshake and tool list stay open so clients can detect that there is no sign-in.
 
 License: AGPL-3.0 (see LICENSE). If you run a modified version as a network service, you must offer its source to its users.

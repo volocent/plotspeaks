@@ -25,10 +25,17 @@
         { "binding": "DB", "database_name": "plotspeaks-dev", "database_id": "3c93a1ce-a864-405f-be55-01bd5ad3d565", "migrations_dir": "migrations" }
       ]
     },
+    // Production: plotspeaks.volocent.com. Deploy only through scripts/deploy-prod.ps1, which
+    // builds the published catalog only, runs the checks and logs a D1 restore point first.
+    // No DEV_ACCESS_KEY here: production is open to players.
     "prod": {
       "name": "plotspeaks",
       "workers_dev": false,
-      "vars": { "ENVIRONMENT": "production" }
+      "routes": [{ "pattern": "plotspeaks.volocent.com", "custom_domain": true }],
+      "vars": { "ENVIRONMENT": "production" },
+      "d1_databases": [
+        { "binding": "DB", "database_name": "plotspeaks", "database_id": "bf10cf37-6f31-4f7f-bf5d-e2366dd00518", "migrations_dir": "migrations" }
+      ]
     }
   }
 }

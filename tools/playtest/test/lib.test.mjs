@@ -27,6 +27,11 @@ test('findEnding matches first, last or full name, ignoring titles', () => {
   assert.equal(findEnding(e, null), null);
 });
 
+test('parseAccusation handles a name said before "I accuse you"', () => {
+  assert.equal(parseAccusation('Let\'s try again. Bram Holt, I accuse you: you went through the back door.'), 'Bram Holt');
+  assert.equal(parseAccusation('I accuse you!'), null);
+});
+
 test('parseAccusation extracts the name', () => {
   assert.equal(parseAccusation('I accuse Ada Quill because she came in from the fog.'), 'Ada Quill');
   assert.equal(parseAccusation('I accuse Mr. Bram. He lied about the tides.'), 'Mr Bram');

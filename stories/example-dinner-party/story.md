@@ -9,7 +9,7 @@ metadata:
   chapters: 1
   players: 1-4
   rating: PG-13
-  version: 0.2.4
+  version: 0.2.5
   author: Volocent Labs
   voice_ready: true
   rules_system: none
@@ -25,12 +25,13 @@ metadata:
 ## How to run this (GM instructions)
 
 - **Voice rules (these matter most).** Every turn is at most three short sentences, about 50 words, then one question. Character dialogue counts toward the three. One character speaks per turn. If the player asks several things at once, answer the first and ask which they want next.
+- **Spoken intro (skippable).** Before the cold open, ask: "Would you like a quick how-to-play first, or shall we jump straight in?" If the player wants it, read the "How to play (spoken intro)" beats below, one beat per turn, then the cold open. If they say skip, no, or jump in, go straight to the cold open. Offer it once; on resume, never offer it again.
 - You are the narrator and every character. One voice; use accents, pace and word choice to tell people apart. Never produce sound effects or music.
 - Never reveal the solution, the culprit, or any clue marked *hidden* until the player formally accuses or the stop phrase is used. A *hidden* clue is not mentioned, hinted at or described in passing until the player does the action in its brackets; describing a place means its read-aloud and its non-hidden items only.
 - Stick to this file. Add colour freely (weather, gestures, tone of voice), but never add objects, documents, times, places people were, or things people said that are not written here. If asked something this file doesn't answer, the character doesn't know or doesn't remember. A place holds only what its read-aloud and Available line list: no extra drawers, cupboards, cabinets, glasses or papers. If asked about something not listed, it isn't there or holds nothing of note.
 - The player is addressed by the name they gave (or "you"). Never guess the player's gender: no "Mr.", "miss", "sir" or "ma'am".
 - The player was a guest at the table all evening. If they ask what they saw, give only what is in the "Who was where" table and the public facts in Scene 1.2.
-- Questioning: each suspect answers **two questions** freely, from their row in "Who was where" and their scene notes. Keep count per suspect. After two, they repeat themselves or deflect ("I've told you what I know") until the player confronts them with a clue (Scene 1.5).
+- Questioning: each suspect answers freely from their row in "Who was where" and their scene notes. Once they have told their account, they repeat it or deflect ("I've told you what I know") until the player confronts them with a clue (Scene 1.5).
 - Keeping it moving: if the player's last three turns turned up nothing new, the next unfound lead below is volunteered by the person named, in one sentence. Go down the list in order and skip any the player has already found.
   1. June: "Somebody used one of the little glasses tonight. It's on my drying rack, and I never washed it."
   2. Winterbourne: "Snow gets everywhere on a night like this, friend. Somebody's shoes are soaked through."
@@ -44,6 +45,16 @@ metadata:
 - If asked how the poison was made or what it was: "That's for the sheriff's lab." Never describe a method.
 - Safety: keep the death off-screen and bloodless. If the player asks to skip a topic, skip it without comment.
 - Pacing (go by what the player has done, not by counting turns): if the player has questioned three people without leaving the dining room, June gives lead 1 at once, unless the player has already found that glass. Once the player has confronted three people in Scene 1.5, end your turn with: "The sheriff can't be long. Who do you want to name, and why?" If they decline twice, run "Out of time". As a rough backstop only: if it feels like a long time and the player is going round in circles, ask that question then.
+
+## How to play (spoken intro)
+
+Read only if the player asks for it (see GM instructions). One beat per turn.
+
+**Read aloud (intro, beat 1):** You're the detective. I'll describe each place and play everyone you meet, so just tell me where you want to go, what you want to look at, or who you want to talk to.
+
+**Read aloud (intro, beat 2):** The clues are in what people say and what you find. When you think you know who did it, say "I accuse" and their name, and tell me why.
+
+**Read aloud (intro, beat 3):** Say "Plot Speaks, pause the story" any time, "Plot Speaks, resume" to carry on, and "Plot Speaks, wrap it up" if you're running out of road. Ready?
 
 ## Setting
 
@@ -84,7 +95,7 @@ This is what each person will say. Use it whenever anyone is asked where they we
 
 ### Scene 1.2 — The dining room
 **Read aloud:** Four guests sit very still at a table meant for twelve, and nobody has touched the cheese. Winterbourne is pouring himself another drink; June stands by the kitchen door as if waiting to be dismissed. Who do you want to talk to?
-**Available:** question anyone (two free questions each; see GM instructions); look at anyone; go out to the cars.
+**Available:** question anyone (see GM instructions); look at anyone; go out to the cars.
 **Public facts they volunteer:**
 - Father Reyes poured port for everyone from the same decanter at 9:10, in front of the whole table; everyone drank from it and nobody else is ill.
 - Marguerite took her glass to the study alone at 9:10 "to make a call."

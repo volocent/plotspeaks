@@ -27,7 +27,15 @@ const field = (fm, key) => {
 };
 
 const stories = [];
+// --catalog: build only the stories published in stories/catalog.json (production). Without it,
+// every story folder is built (dev), so drafts can be tested before they are published.
+const catalogOnly = process.argv.includes("--catalog");
+const published = catalogOnly
+  ? new Set(JSON.parse(readFileSync(join(root, "stories", "catalog.json"), "utf8")).published)
+  : null;
+
 for (const slug of readdirSync(join(root, "stories")).sort()) {
+  if (published && !published.has(slug)) continue;
   const dir = join(root, "stories", slug);
   if (
     !existsSync(join(dir, "story.md")) ||
