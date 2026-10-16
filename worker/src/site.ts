@@ -1604,6 +1604,7 @@ export function writePage(origin: string): string {
 // Keep these in step with what index.ts and submissions.ts actually store
 // (migrations/0001_init.sql, 0002_submissions.sql).
 const ISSUES = "https://github.com/volocent/plotspeaks/issues";
+const CONTACT = "contact@plotspeaks.com"; // Cloudflare Email Routing forwards it to Ben
 
 export function privacyPage(origin: string): string {
   const body = `<div class="wrap narrow prose">
@@ -1642,7 +1643,7 @@ export function privacyPage(origin: string): string {
 </table></div>
 <p style="margin-top:16px">You can withdraw a story you submitted at any time with its claim code: ask your assistant to withdraw it, with Plot Speaks connected.</p>
 <h2>Questions or removal</h2>
-<p>Open an issue on <a href="${ISSUES}">GitHub</a>. Issues are public, so don't post personal details there: give the story title or roughly when you played, and we'll follow up.</p>
+<p>Email <a href="mailto:${CONTACT}">${CONTACT}</a>. For something that isn't personal you can also open an issue on <a href="${ISSUES}">GitHub</a>; issues are public, so leave personal details out of those.</p>
 <p style="margin:36px 0 64px"><a class="link-arrow" href="/support">Support ${icon("arrow", 18)}</a></p>
 </div>`;
   return page({ title: "Privacy · Plot Speaks", description: "What Plot Speaks stores: anonymous plays, verdicts and ratings. No accounts, no ads, no transcripts.", body, origin, path: "/privacy" });
@@ -1653,9 +1654,9 @@ export function supportPage(origin: string): string {
 <header class="page-head">
 <p class="eyebrow">${icon("chat", 18)} Support</p>
 <h1>Something not working?</h1>
-<p class="lead">Plot Speaks is run by Volocent Labs LLC. The fastest way to reach us is a GitHub issue.</p>
-<p><a class="btn btn-primary" href="${ISSUES}">${icon("chat", 20)}Open an issue on GitHub</a></p>
-<p class="muted">Issues are public. Say which story, which assistant, and what happened. Leave out personal details.</p>
+<p class="lead">Plot Speaks is run by Volocent Labs LLC. Email us at <a href="mailto:${CONTACT}">${CONTACT}</a>, or open an issue on GitHub.</p>
+<p><a class="btn btn-primary" href="mailto:${CONTACT}">${icon("chat", 20)}Email ${CONTACT}</a> <a class="btn btn-ghost" href="${ISSUES}">Open a GitHub issue</a></p>
+<p class="muted">Say which story, which assistant, and what happened. GitHub issues are public, so leave personal details out of those.</p>
 </header>
 <h2>Quick fixes</h2>
 <ul>
@@ -1706,7 +1707,7 @@ export function termsPage(origin: string): string {
 <h2>Privacy</h2>
 <p>What we store, and for how long, is on the <a href="/privacy">Privacy</a> page.</p>
 <h2>Contact</h2>
-<p>Open an issue on <a href="${ISSUES}">GitHub</a>. Issues are public, so leave out personal details.</p>
+<p>Email <a href="mailto:${CONTACT}">${CONTACT}</a>, or open an issue on <a href="${ISSUES}">GitHub</a> (public, so leave out personal details).</p>
 <p style="margin:36px 0 64px"><a class="link-arrow" href="/support">Support ${icon("arrow", 18)}</a></p>
 </div>`;
   return page({ title: "Terms · Plot Speaks", description: "Plot Speaks terms: free and as is, never while driving, story licences, and what submitting a story means.", body, origin, path: "/terms" });
