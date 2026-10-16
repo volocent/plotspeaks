@@ -18,6 +18,9 @@
   // Workers AI: cover images and submission moderation. Static files (logo, covers) in public/.
   "ai": { "binding": "AI" },
   "assets": { "directory": "public", "binding": "ASSETS" },
+  // Daily 90-day log retention (scheduled() in src/index.ts -> src/retention.ts). Triggers are
+  // per environment, so every env below repeats it. 03:23 UTC, off the hour.
+  "triggers": { "crons": ["23 3 * * *"] },
   "env": {
     // Named dev env, so deploy commands can say --env=dev explicitly. Same Worker as the top level.
     "dev": {
@@ -26,6 +29,7 @@
       "vars": { "ENVIRONMENT": "dev" },
       "ai": { "binding": "AI" },
       "assets": { "directory": "public", "binding": "ASSETS" },
+      "triggers": { "crons": ["23 3 * * *"] },
       "d1_databases": [
         { "binding": "DB", "database_name": "plotspeaks-dev", "database_id": "3c93a1ce-a864-405f-be55-01bd5ad3d565", "migrations_dir": "migrations" }
       ]
@@ -41,6 +45,7 @@
       "vars": { "ENVIRONMENT": "production" },
       "ai": { "binding": "AI" },
       "assets": { "directory": "public", "binding": "ASSETS" },
+      "triggers": { "crons": ["23 3 * * *"] },
       "d1_databases": [
         { "binding": "DB", "database_name": "plotspeaks", "database_id": "bf10cf37-6f31-4f7f-bf5d-e2366dd00518", "migrations_dir": "migrations" }
       ]

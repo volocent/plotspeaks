@@ -1,4 +1,5 @@
-// Smoke test for the Plot Speaks MCP server: every tool, the story_template prompt, the access lock, and play recording.
+// Smoke test for the Plot Speaks MCP server: every tool, the story_template prompt, the access lock, play recording,
+// the passenger-page JSON API and the http -> https redirect.
 // Usage: node test/smoke.mjs [base-url] [--open]   (default http://127.0.0.1:8799; reads the key from .dev.vars)
 //   --open: the server has no access key (production). Story calls must work without one; the key
 //   is still sent with the other calls so smoke plays are flagged as tester plays, not strangers.
@@ -43,10 +44,29 @@ if (openServer) {
 }
 
 const tools = (await rpc('tools/list', {})).json?.result?.tools?.map((t) => t.name) ?? [];
-ok(['list_stories', 'start_story', 'reveal', 'get_cue', 'rate_story'].every((t) => tools.includes(t)), `tools: ${tools.join(', ')}`);
+ok(['open_plot_speaks', 'list_stories', 'start_story', 'reveal', 'get_cue', 'rate_story', 'write_story', 'review_story', 'check_story', 'submit_story', 'withdraw_submission'].every((t) => tools.includes(t)), `tools: ${tools.join(', ')}`);
+const toolList = (await rpc('tools/list', {})).json?.result?.tools ?? [];
+ok(toolList.every((t) => typeof t.title === 'string' && t.title.length > 0), 'every tool has a title');
 
 const list = await call('list_stories', {});
 ok(/example-dinner-party/.test(list) && /keepers-bell/.test(list), 'list_stories lists the stories');
+
+// ---------------------------------------------------------------- open_plot_speaks and categories
+const opened = await call('open_plot_speaks', {});
+ok(opened.includes('Would you like to hear what stories there are, start one, or write your own?'), 'open_plot_speaks returns the question');
+ok(/car ride/i.test(opened) && /until you accuse/i.test(opened), 'open_plot_speaks has the spoken intro (car rides, answer hidden until you accuse)');
+ok(['Murder mysteries:', 'Dark murder mysteries:', 'Family mysteries:', 'Fantasy adventures:'].every((c) => opened.includes(c)) && /The Last Toast/.test(opened),
+  'open_plot_speaks menu has the four categories with example titles');
+ok(!/\((correct|wrong)\)|^\s*(Correct|Innocent)\.\s/im.test(opened), 'open_plot_speaks contains no answer-key line');
+const darkList = await call('list_stories', { genre: 'dark' });
+const mysteryList = await call('list_stories', { genre: 'murder-mystery' });
+const classicList = await call('list_stories', { genre: 'classic' });
+ok(/, dark;/.test(darkList) && !/example-dinner-party/.test(darkList) && !/; kids;/.test(darkList), 'list_stories genre "dark" lists dark mysteries only');
+ok(/example-dinner-party/.test(classicList) && !/, dark;/.test(classicList), 'list_stories genre "classic" leaves dark mysteries out');
+ok(/example-dinner-party/.test(mysteryList) && (!/, dark;/.test(list) || /, dark;/.test(mysteryList)), 'list_stories genre "murder-mystery" still lists every murder mystery (backwards compatible)');
+ok(/; kids;/.test(await call('list_stories', { genre: 'kids' })), 'list_stories accepts genre "kids"');
+const grouped = await call('list_stories', { group_by_category: true });
+ok(/^Murder mysteries:\n- /m.test(grouped) && /^Fantasy adventures:\n- /m.test(grouped), 'list_stories groups by category');
 
 const start = await call('start_story', { slug: 'The Last Toast' });
 const playId = (/Play id: ([0-9a-f-]{36})/.exec(start) || [])[1];
@@ -100,6 +120,24 @@ ok(/^0 errors/.test(exampleReport), `check_story passes the example story (${exa
 const tooLong = await rpc('tools/call', { name: 'check_story', arguments: { story_md: 'x'.repeat(60001) } });
 ok(Boolean(tooLong.json?.error) || tooLong.json?.result?.isError === true, 'check_story rejects a story over 60,000 characters');
 
+// ---------------------------------------------------------------- write_story and review_story
+const writing = await call('write_story', { genre: 'dark', length: '30' });
+ok(/story\.md/.test(writing) && /secrets\.md/.test(writing) && /person at Plot Speaks/.test(writing), 'write_story has the intro for the writer (two files, human review)');
+ok(/jump straight in/.test(writing) && /## Endings/.test(writing) && /tone: dark/.test(writing), `write_story returns the template (${writing.length} chars)`);
+const checkpoints = ['Would you like me to point out gaps and suggestions as we go?', 'Are you ready to have the story reviewed?', 'Are you ready to submit it?', 'What name would you like credited? A pen name is fine.'];
+ok(checkpoints.every((c) => writing.includes(c)), 'write_story returns the four checkpoints');
+ok(/review_story/.test(writing) && /submit_story/.test(writing) && /author_name/.test(writing), 'write_story suggests review_story, then submit_story with author_name');
+// A crafted draft: the example story with a GM line that names the (made-up) culprit. Not The Last Toast's answer.
+const tellMd = exampleMd.replace(/^## How to run this \(GM instructions\)\s*$/m, (h) => `${h}\n\n- Pacing: once the player has confronted Ada Fenn, ask who they accuse.`);
+const tellSecrets = ['# Crafted secrets', '', '- **Culprit:** Ada Fenn.', '', '## Endings detail', '',
+  '- **Ada Fenn (correct):** Correct. Crafted line.',
+  '- **Hale Winterbourne (wrong):** Innocent. Crafted line.', ''].join('\n');
+const tellReview = await call('review_story', { story_md: tellMd, secrets_md: tellSecrets });
+ok(/^STATUS: \d+ problems? to fix/.test(tellReview) && /\[culprit-tell\]/.test(tellReview), `review_story flags a culprit tell (${tellReview.split('\n')[0]})`);
+ok(/FAIR-PLAY REVIEW/.test(tellReview) && /can't judge/.test(tellReview) && /Minimum clue set/.test(tellReview) && /Red herrings/.test(tellReview), 'review_story returns the fair-play checklist and says the server cannot judge fairness');
+const cleanReview = await call('review_story', { story_md: exampleMd, secrets_md: tellSecrets });
+ok(/^STATUS: passes format checks/.test(cleanReview), `review_story passes a clean draft (${cleanReview.split('\n')[0]})`);
+
 // ---------------------------------------------------------------- catalog site (M3)
 // The pages are public, so they must carry no secret: fetch every page and assert that no
 // answer-key line ("(correct):", a line starting "Correct." / "Innocent."), no Endings detail
@@ -140,7 +178,11 @@ if (existsSync(genPath)) {
   }
 }
 const needles = secretTexts.filter((t) => t && t.trim().length >= 25).map((t) => t.trim().replace(/\s+/g, ' ').slice(0, 120));
-const pages = ['/', ...slugs.flatMap((s) => [`/stories/${encodeURIComponent(s)}`, `/stories/${encodeURIComponent(s)}/story.md`]), '/stories/no-such-story'];
+// Routes allowed to carry secret text, one answer at a time (the passenger page's JSON API, checked
+// separately below). They are never part of the scan.
+const SECRET_ROUTES_ALLOWED = [/^\/api\/stories\//];
+const pages = ['/', ...slugs.flatMap((s) => [`/stories/${encodeURIComponent(s)}`, `/stories/${encodeURIComponent(s)}/story.md`, `/stories/${encodeURIComponent(s)}/passenger`]), '/stories/no-such-story']
+  .filter((p) => !SECRET_ROUTES_ALLOWED.some((re) => re.test(p)));
 let leaks = 0;
 for (const p of pages) {
   const text = unescape((await get(p)).body);
@@ -150,6 +192,38 @@ for (const p of pages) {
   if (keyLine || hit) { leaks++; console.log(`FAIL  secret text on ${p} (${keyLine ? 'answer-key line' : 'ending/cue text'})`); }
 }
 ok(leaks === 0, `no answer-key line, Endings text or cue text on any of ${pages.length} pages (${needles.length} secret snippets checked${existsSync(genPath) ? '' : '; generated data not found, key-line check only'})`);
+
+// ---------------------------------------------------------------- passenger page API
+// Endpoints answer one name or cue at a time; names must carry no Endings text at all.
+const getJson = async (path) => { const r = await fetch(`${base}${path}`); let json = null; try { json = await r.json(); } catch {} return { status: r.status, type: r.headers.get('content-type') ?? '', json }; };
+const names = await getJson('/api/stories/example-dinner-party/names');
+ok(names.status === 200 && /application\/json/.test(names.type) && Array.isArray(names.json?.names) && names.json.names.some((n) => /Winterbourne/.test(n)), `GET /api/stories/<slug>/names lists the names (${names.status})`);
+const namesRaw = JSON.stringify(names.json ?? {});
+ok(Object.keys(names.json ?? {}).join() === 'names' && !/Correct\.|Innocent\./.test(namesRaw) && !needles.some((n) => namesRaw.includes(n.slice(0, 60))) && names.json.names.every((n) => n.length < 60),
+  'names returns names only, no ending text');
+ok(JSON.stringify([...names.json.names].sort((x, y) => x.localeCompare(y))) === JSON.stringify(names.json.names), 'names are sorted (secrets.md order gives nothing away)');
+const checked = await getJson(`/api/stories/example-dinner-party/check?name=${encodeURIComponent('hale winterbourne')}`);
+ok(checked.status === 200 && checked.json?.verdict === 'wrong' && /^Innocent\./.test(checked.json?.line ?? '') && Object.keys(checked.json).sort().join() === 'line,verdict', `GET .../check returns one verdict line (${checked.json?.verdict})`);
+const misheardCheck = await getJson(`/api/stories/example-dinner-party/check?name=${encodeURIComponent('Mr Winterbourne')}`);
+ok(misheardCheck.status === 200 && misheardCheck.json?.verdict === 'wrong', 'GET .../check uses the same fuzzy matching as reveal');
+const noMatch = await getJson('/api/stories/example-dinner-party/check?name=Nobody%20Atall');
+ok(noMatch.status === 404 && noMatch.json?.error === 'no_match', `GET .../check with an unknown name is 404 JSON (${noMatch.status})`);
+const apiCue = await getJson('/api/stories/keepers-bell/cue/s3');
+const genStories = existsSync(genPath) ? JSON.parse(readFileSync(genPath, 'utf8')) : [];
+const bellS3 = genStories.find((x) => x.slug === 'keepers-bell')?.cues?.S3;
+ok(apiCue.status === 200 && typeof apiCue.json?.read_aloud === 'string' && Object.keys(apiCue.json).join() === 'read_aloud', `GET .../cue/<id> returns read_aloud only (${apiCue.status})`);
+ok(!bellS3?.narrator_only || !JSON.stringify(apiCue.json).includes(bellS3.narrator_only.slice(0, 60)), 'the cue endpoint never returns the narrator-only part');
+for (const path of ['/api/stories/no-such-story/names', '/api/stories/no-such-story/check?name=x', '/api/stories/keepers-bell/cue/S99', '/api/stories/no-such-story/cue/S1']) {
+  const r = await getJson(path);
+  ok(r.status === 404 && /application\/json/.test(r.type) && typeof r.json?.error === 'string', `${path} -> 404 JSON (${r.status})`);
+}
+
+// ---------------------------------------------------------------- http -> https redirect
+// Only meaningful when the server is reached over https (local dev is plain http, and exempt).
+if (base.startsWith('https://')) {
+  const plain = await fetch(base.replace(/^https:/, 'http:') + '/', { redirect: 'manual' });
+  ok(plain.status === 301 && (plain.headers.get('location') ?? '').startsWith('https://'), `http:// redirects to https:// with 301 (${plain.status})`);
+} else console.log('SKIP  http -> https redirect (base URL is not https)');
 
 // ---------------------------------------------------------------- covers and submissions (M5)
 const coverRes = await fetch(`${base}/covers/example-dinner-party.jpg`);
@@ -166,7 +240,13 @@ for (const [method, path] of [['GET', '/admin/submissions'], ['POST', '/admin/co
 }
 
 ok(tools.includes('submit_story'), 'tools/list includes submit_story');
-const lintFail = await call('submit_story', { story_md: broken });
+const noAuthor = await rpc('tools/call', { name: 'submit_story', arguments: { story_md: broken } });
+ok(Boolean(noAuthor.json?.error) || noAuthor.json?.result?.isError === true, 'submit_story requires author_name');
+const shortAuthor = await rpc('tools/call', { name: 'submit_story', arguments: { story_md: broken, author_name: 'A' } });
+ok(Boolean(shortAuthor.json?.error) || shortAuthor.json?.result?.isError === true, 'submit_story refuses a 1-character author_name');
+const urlAuthor = await call('submit_story', { story_md: broken, author_name: 'www.example.com' });
+ok(/^Not submitted: the credited name can't be a web address/.test(urlAuthor), 'submit_story refuses a web address as the credit');
+const lintFail = await call('submit_story', { story_md: broken, author_name: 'Smoke Author' });
 ok(/^Not submitted: the story has \d+ format error/.test(lintFail) && /\[stop-phrase\]/.test(lintFail), 'submit_story refuses a lint-failing story and returns the errors');
 const tooBig = await rpc('tools/call', { name: 'submit_story', arguments: { story_md: exampleMd, secrets_md: 'x'.repeat(30001) } });
 ok(Boolean(tooBig.json?.error) || tooBig.json?.result?.isError === true, 'submit_story rejects secrets over 30,000 characters');
@@ -182,12 +262,14 @@ if (!openServer && key) {
   const smokeSecrets = [
     '# Smoke test secrets', '', '## Endings detail', '',
     '- **Hale Winterbourne (wrong):** Innocent. Smoke test line for the innocent suspect.',
-    '- **Smoke Culprit (correct):** Correct. Smoke test line for the culprit.', '',
+    '- **Smoke Target (correct):** Correct. Smoke test line for the culprit.', '',
   ].join('\n');
   const admin = (path, method = 'POST') => fetch(`${base}${path}`, { method, headers: { 'x-admin-key': key, accept: 'application/json' } });
-  const receipt = await call('submit_story', { story_md: smokeMd, secrets_md: smokeSecrets, contact: 'smoke@example.invalid' });
+  const receipt = await call('submit_story', { story_md: smokeMd, secrets_md: smokeSecrets, contact: 'smoke@example.invalid', author_name: 'Smoke Author' });
   const subId = (/Submission id: ([a-z0-9]+)/.exec(receipt) || [])[1];
+  const claim = (/Claim code: ([A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4})/.exec(receipt) || [])[1];
   ok(Boolean(subId) && /a person reviews every submission/i.test(receipt) && /not public yet/i.test(receipt), `submit_story accepts a valid story and returns a receipt (${subId ?? receipt.split('\n')[0].slice(0, 160)})`);
+  ok(Boolean(claim) && /shown only this once/.test(receipt) && /no accounts/i.test(receipt) && /credited to Smoke Author/.test(receipt), 'the receipt has a claim code, explained in plain words');
   if (subId) {
     const slug = `smoke-test-${stamp}`;
     const pendingList = await call('list_stories', {});
@@ -195,6 +277,7 @@ if (!openServer && key) {
     const queue = await (await fetch(`${base}/admin/submissions`, { headers: { 'x-admin-key': key, accept: 'application/json' } })).json().catch(() => []);
     const mine = Array.isArray(queue) ? queue.find((r) => r.id === subId) : null;
     ok(Boolean(mine) && mine.dev_marker === 1 && !('secrets_md' in mine), `the admin queue lists it with the dev marker${mine ? `, cover: ${mine.has_cover ? 'yes' : 'no'}` : ''}`);
+    ok(mine?.author_name === 'Smoke Author' && !('claim_hash' in mine), 'the admin queue shows the credited name and never the claim hash');
     const page = await fetch(`${base}/admin/submissions`, { headers: { 'x-admin-key': key } });
     ok(page.status === 200 && (await page.text()).includes(`Smoke Test ${stamp}`), 'the admin page shows the submission');
     const approved = await admin(`/admin/submissions/${subId}/approve`);
@@ -202,16 +285,38 @@ if (!openServer && key) {
     ok((await call('list_stories', {})).includes(slug), 'an approved submission is listed by list_stories');
     const subStart = await call('start_story', { slug });
     ok(new RegExp(`narrator for "Smoke Test ${stamp}"`).test(subStart) && !/\((correct|wrong)\):\*\*/.test(subStart), 'start_story serves the approved submission without its answer key');
+    ok(/^\s+author: "Smoke Author"$/m.test(subStart), 'the credited name is the approved story\'s metadata.author');
+    const subPage = await get(`/stories/${slug}`);
+    ok(subPage.status === 200 && subPage.body.includes('Smoke Author'), `the site credits the writer on the story page (${subPage.status})`);
     const subReveal = await call('reveal', { slug, accused: 'Hale Winterbourne' });
-    ok(/^Innocent\./.test(subReveal) && !/Smoke Culprit/.test(subReveal), 'reveal on a submission returns only the one ending line');
+    ok(/^Innocent\./.test(subReveal) && !/Smoke Target/.test(subReveal), 'reveal on a submission returns only the one ending line');
+    const subNames = await getJson(`/api/stories/${slug}/names`);
+    ok(subNames.status === 200 && JSON.stringify(subNames.json?.names) === JSON.stringify(['Hale Winterbourne', 'Smoke Target']), 'GET /api/.../names works for an approved submission');
+    const subCheck = await getJson(`/api/stories/${slug}/check?name=${encodeURIComponent('smoke culprit')}`);
+    ok(subCheck.status === 200 && subCheck.json?.verdict === 'correct' && /^Correct\./.test(subCheck.json?.line ?? ''), 'GET /api/.../check works for an approved submission');
     if (mine?.has_cover) {
       const c = await fetch(`${base}/covers/${slug}.jpg`);
       await c.arrayBuffer();
       ok(c.status === 200 && /^image\//.test(c.headers.get('content-type') ?? ''), `the approved submission's cover is served from D1 (${c.status})`);
     }
-    const del = await admin(`/admin/submissions/${subId}/delete`);
-    ok(del.status === 200, `the smoke submission is deleted again (${del.status})`);
-    ok(!(await call('list_stories', {})).includes(slug), 'the deleted submission is gone');
+    // Update with the claim code: a wrong code is refused before screening; the right one puts it back to pending.
+    const badReplace = await call('submit_story', { story_md: smokeMd, secrets_md: smokeSecrets, author_name: 'Smoke Author', replaces_id: subId, claim_code: 'AAAA-BBBB-CCCC' });
+    ok(/^Not submitted: no submission matches that id and claim code/.test(badReplace), 'submit_story refuses an update with the wrong claim code');
+    const replaced = await call('submit_story', { story_md: smokeMd, secrets_md: smokeSecrets, author_name: 'Smoke Author Two', replaces_id: subId, claim_code: claim.toLowerCase() });
+    ok(/replaced submission/.test(replaced) && /claim code stays the same/i.test(replaced), `submit_story updates a submission with its claim code (${replaced.split('\n')[0].slice(0, 120)})`);
+    ok(!(await call('list_stories', {})).includes(slug), 'an updated submission is off the catalog until reviewed again');
+    // Withdraw: the wrong code is refused, the right one deletes it.
+    const badWithdraw = await call('withdraw_submission', { id: subId, claim_code: 'AAAA-BBBB-CCCC' });
+    ok(/^Not withdrawn/.test(badWithdraw), 'withdraw_submission refuses a wrong claim code');
+    const withdrawn = await call('withdraw_submission', { id: subId, claim_code: claim });
+    ok(/^Withdrawn:/.test(withdrawn), 'withdraw_submission deletes the submission with the right claim code');
+    const after = await (await fetch(`${base}/admin/submissions?status=all`, { headers: { 'x-admin-key': key, accept: 'application/json' } })).json().catch(() => []);
+    const still = Array.isArray(after) && after.some((r) => r.id === subId);
+    ok(!still, 'the withdrawn submission is gone from the queue');
+    if (still) await admin(`/admin/submissions/${subId}/delete`); // cleanup if withdraw failed
+    ok(!(await call('list_stories', {})).includes(slug), 'the withdrawn submission is not listed');
+    const again = await call('withdraw_submission', { id: subId, claim_code: claim });
+    ok(/^Not withdrawn/.test(again), 'a used claim code no longer works');
   }
 }
 

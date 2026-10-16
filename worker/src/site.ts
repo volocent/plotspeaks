@@ -3,6 +3,8 @@
 //   GET /                        home: what it is, bring your own assistant, car rides, the stories
 //   GET /stories/<slug>          one story: cover, pitch, connect (primary), copy-and-paste (fallback)
 //   GET /stories/<slug>/story.md the public story.md as plain text
+//   GET /stories/<slug>/passenger for the passenger: holds the answer key in paste play, fetched
+//                                tap by tap from /api/stories/<slug>/... (index.ts), never in the HTML
 //   GET /connect                 how to add the connector, per assistant
 //   GET /how-it-works            how a session goes, the phrases, what to do if it goes wrong
 //   GET /write                   for writers: the Studio tools and submit_story
@@ -18,7 +20,8 @@
 // cue text appears.
 //
 // All story-derived text is escaped with esc(). The only scripts are small inline ones: the copy
-// buttons, the category filter and the /connect tabs. Every page works without them.
+// buttons, the category filter, the /connect tabs and the passenger page. Every page but the
+// passenger page works without them (it needs script to fetch a line on tap).
 
 export type PublicStory = { slug: string; story: string };
 export type RatingSummary = { avg: number; count: number };
@@ -70,14 +73,17 @@ export function meta(p: PublicStory): Meta {
 type Assistant = {
   id: string; name: string; tab: string; status: string; ok?: boolean; plan: string;
   button?: { href: string; label: string };
-  steps: string[]; say?: string; notes: string[];
+  steps: string[]; open?: string; say?: string; notes: string[];
 };
+// The opening line (Ben, 2026-10-16): "Open Plot Speaks" gives a short intro and the choice of
+// browsing, starting or writing a story. Naming a story still goes straight in.
+const OPEN_LINE = "Open Plot Speaks.";
 // Claude's documented prefilled "Add custom connector" link (directory-vs-custom docs).
 const claudeLink = (mcpUrl: string) =>
   `https://claude.ai/customize/connectors?modal=add-custom-connector&connectorName=${encodeURIComponent("Plot Speaks")}&connectorUrl=${encodeURIComponent(mcpUrl)}`;
 const CONNECT: { headline: string; short: string; assistants: Assistant[] } = {
   headline: "Connect once, then just say which story you want.",
-  short: "Add Plot Speaks to Claude as a connector. One tap, no sign-in, and it works on Claude's free plan.",
+  short: "Add Plot Speaks to Claude as a connector. One tap, no sign-in. Claude's Free plan includes one custom connector, and Plot Speaks can be it.",
   assistants: [
     {
       id: "claude", name: "Claude", tab: "Claude", status: "Recommended · works by voice", ok: true,
@@ -87,13 +93,14 @@ const CONNECT: { headline: string; short: string; assistants: Assistant[] } = {
         "Tap <strong>Connect to Claude</strong>. It opens claude.ai in your browser. Sign in if asked.",
         "Check the name says <strong>Plot Speaks</strong>, choose <strong>No sign-in</strong> if asked, and tap <strong>Add</strong>.",
         "Open the Claude app, start a new chat, tap <strong>+ → Connectors</strong> and make sure Plot Speaks is on.",
-        "Tap the voice button and name the story: <strong>“Start {story} with Plot Speaks.”</strong> Allow Plot Speaks when Claude asks, or choose <em>Always allow</em> so it doesn't ask mid-drive.",
+        "Tap the voice button and say <strong>“Open Plot Speaks.”</strong> for a quick intro and a choice of stories, or name one: <strong>“Start {story} with Plot Speaks.”</strong> Allow Plot Speaks when Claude asks, or choose <em>Always allow</em> so it doesn't ask mid-drive.",
       ],
+      open: OPEN_LINE,
       say: "Start {story} with Plot Speaks.",
       notes: [
         "Adding it works best in a browser, so on a phone open the link there. Once added, the connector shows up in the Claude phone app on its own.",
         "Voice works: in our test, Claude's voice mode loaded the story and checked an accusation through the connector.",
-        "Say the story's name. A vague “play something” can send Claude on a detour.",
+        "Say “Open Plot Speaks” or the story's name. A vague “play something” can send Claude on a detour.",
         "Doing it by hand: <strong>Customize → Connectors → + Add → Add custom connector</strong>, name it Plot Speaks and paste <code>{url}</code>.",
       ],
     },
@@ -103,8 +110,9 @@ const CONNECT: { headline: string; short: string; assistants: Assistant[] } = {
       steps: [
         "In Le Chat on the web, open <strong>Connectors → + Add Connector → Custom MCP Connector</strong>.",
         "Name it <strong>PlotSpeaks</strong> (no spaces) and paste <code>{url}</code>. Tap <strong>Connect</strong>.",
-        "In a chat, ask: <strong>“Start {story} with Plot Speaks.”</strong>",
+        "In a chat, say <strong>“Open Plot Speaks.”</strong> or name a story: <strong>“Start {story} with Plot Speaks.”</strong>",
       ],
+      open: OPEN_LINE,
       say: "Start {story} with Plot Speaks.",
       notes: ["We haven't tested voice play in Le Chat yet."],
     },
@@ -114,8 +122,9 @@ const CONNECT: { headline: string; short: string; assistants: Assistant[] } = {
       steps: [
         "In your phone's browser, go to <strong>gemini.google.com → Menu → Settings → Connected Apps</strong> (it may sit under Personal Intelligence).",
         "Choose <strong>Add a custom app</strong>, paste <code>{url}</code>, tap <strong>Next</strong> and follow the prompts.",
-        "It then works in the Gemini app too. Type <strong>@Plot Speaks</strong> and name the story.",
+        "It then works in the Gemini app too. Type <strong>@Plot Speaks open</strong> for the intro, or <strong>@Plot Speaks</strong> and the story's name.",
       ],
+      open: "@Plot Speaks open.",
       say: "@Plot Speaks start {story}.",
       notes: ["We haven't tested voice (Gemini Live) with Plot Speaks yet."],
     },
@@ -129,8 +138,8 @@ const CONNECT: { headline: string; short: string; assistants: Assistant[] } = {
       notes: ["If either gives you trouble, paste the story instead: open any story page and tap <strong>Copy the story</strong>."],
     },
     {
-      id: "chatgpt", name: "ChatGPT", tab: "ChatGPT", status: "Paste the story for now",
-      plan: "ChatGPT only lets Business, Enterprise and Edu accounts add outside connectors like this one. On Free and Plus, paste the story instead. It plays start to finish by voice: we've tested it on ChatGPT Free.",
+      id: "chatgpt", name: "ChatGPT", tab: "ChatGPT", status: "Free and Plus: paste",
+      plan: "Today, custom connectors in ChatGPT need a <strong>Business, Enterprise or Edu</strong> plan. On <strong>Free and Plus</strong>, paste the story instead. It plays start to finish by voice: we've tested it on ChatGPT Free.",
       button: { href: "/#stories", label: "Pick a story to paste" },
       steps: [
         "Open a story page and tap <strong>Copy the story</strong>.",
@@ -139,8 +148,9 @@ const CONNECT: { headline: string; short: string; assistants: Assistant[] } = {
       ],
       say: "Plot Speaks, start the story.",
       notes: [
-        "Without the connector, the answer key isn't in the chat. A passenger who knows it can hold it, or you check your accusation after the drive.",
-        "We'll add a one-tap ChatGPT option if Plot Speaks is approved for ChatGPT's directory.",
+        "Without the connector, the answer key isn't in the chat. A passenger can hold it: every story page links a <strong>passenger page</strong> that shows the line to read aloud when the narrator asks.",
+        "On a Business, Enterprise or Edu plan, add it on the web: <strong>Plugins → + → Add custom MCP server</strong>, paste <code>{url}</code> and choose no authentication.",
+        "A ChatGPT app listing is planned, so Free and Plus can connect too. Until then, paste.",
       ],
     },
     {
@@ -208,6 +218,7 @@ const genreLabel = (m: Meta) =>
     : GENRE[m.genre] ?? (m.genre ? m.genre.replace(/-/g, " ").replace(/^./, (c) => c.toUpperCase()) : "Story");
 const playersLabel = (p: string) => (p ? `${p.replace(/-/g, "–")} player${p === "1" ? "" : "s"}` : "");
 const isSrd = (m: Meta) => /^srd/i.test(m.rulesSystem);
+const authorOf = (m: Meta) => m.author || "Volocent Labs";
 const sortKey = (t: string) => t.replace(/^(the|a|an)\s+/i, "");
 
 // ============================================================================ SMALL PIECES
@@ -249,7 +260,7 @@ function copyField(url: string, id: string, big = false): string {
 <p class="copy-status" role="status" aria-live="polite" data-status-for="${id}"></p>`;
 }
 
-function connectCard(origin: string, story: string, opts: { id: string; heading?: "h2" | "h3"; lead?: string } = { id: "mcp-url" }): string {
+function connectCard(origin: string, story: string, opts: { id: string; heading?: "h2" | "h3"; lead?: string; passenger?: string } = { id: "mcp-url" }): string {
   const h = opts.heading ?? "h2";
   const url = origin + "/mcp";
   return `<section class="connect-card" aria-labelledby="${opts.id}-h">
@@ -262,9 +273,38 @@ function connectCard(origin: string, story: string, opts: { id: string; heading?
 </div>
 ${copyField(url, opts.id, false)}
 <p class="fine">On a phone, open the link in your browser and tap <strong>Add</strong>. Once added, Plot Speaks shows up in the Claude app, and it works in voice mode.</p>
-<p class="then">Then, in a chat, tap <strong>+ → Connectors</strong>, turn Plot Speaks on, and name the story: <strong>“${esc(`Start ${story} with Plot Speaks.`)}”</strong></p>
+<p class="then">Then, in a chat, tap <strong>+ → Connectors</strong>, turn Plot Speaks on, and say <strong>“${esc(OPEN_LINE)}”</strong> for a quick intro and the choice to browse, start or write a story. Or name it: <strong>“${esc(`Start ${story} with Plot Speaks.`)}”</strong></p>
+${chatgptNote(opts.passenger)}
 <p class="connect-links"><a class="link-arrow" href="/connect">Le Chat, Gemini, ChatGPT and more ${icon("arrow", 18)}</a></p>
 </section>`;
+}
+
+// The honest ChatGPT line, on every connect card. passenger: the story's passenger page, if any.
+function chatgptNote(passenger?: string): string {
+  return `<div class="gpt-note">
+<p class="gpt-note-h">${icon("chat", 18)} Using ChatGPT?</p>
+<p>Today, custom connectors in ChatGPT need a Business, Enterprise or Edu plan. On Free and Plus, paste the story instead, and a passenger can hold the answer key with ${passenger ? `the <a href="${esc(passenger)}">passenger page</a>` : `a story's passenger page`}. A ChatGPT app listing is planned.</p>
+</div>`;
+}
+
+// BYOA: the headline idea (Ben, 2026-10-16). Plain names as text chips, never logos.
+const BYOA_CHIPS: [string, string][] = [
+  ["ChatGPT", "Paste a story"],
+  ["Claude", "Connector, free"],
+  ["Gemini", "Connector, US"],
+  ["Le Chat", "Connector, free"],
+];
+function byoaBadge(): string {
+  return `<span class="byoa-badge"><span class="byoa-tag">BYOA</span><span class="byoa-name">Bring your own assistant</span></span>`;
+}
+function byoaHero(): string {
+  return `<div class="byoa">
+${byoaBadge()}
+<ul class="ai-chips" aria-label="Assistants that can play">
+${BYOA_CHIPS.map(([n, how]) => `<li><span class="ai-name">${esc(n)}</span><span class="ai-how">${esc(how)}</span></li>`).join("\n")}
+</ul>
+<p class="byoa-line"><strong>No new app, no account, no subscription.</strong> Plot Speaks brings the story and keeps the answer key.</p>
+</div>`;
 }
 
 function phrasesTable(m: Meta | null): string {
@@ -273,7 +313,7 @@ function phrasesTable(m: Meta | null): string {
   return `<div class="table-wrap"><table class="phrases">
 <thead><tr><th scope="col">Say</th><th scope="col">What happens</th></tr></thead>
 <tbody>
-<tr><td>"Plot Speaks, start the story."</td><td>The narrator reads the opening and asks what you do.</td></tr>
+${!m ? `<tr><td>"Open Plot Speaks."</td><td>With the connector: a quick intro, then the choice to browse the stories, start one or write your own.</td></tr>\n` : ""}<tr><td>"Plot Speaks, start the story."</td><td>The narrator reads the opening and asks what you do.</td></tr>
 <tr><td>"Plot Speaks, pause the story."</td><td>The narrator stops and waits.</td></tr>
 <tr><td>"Plot Speaks, resume."</td><td>A short recap, then on you go.</td></tr>
 ${chapters ? `<tr><td>"Plot Speaks, resume from chapter 2."</td><td>In a new chat: recap of chapter 1, then chapter 2.</td></tr>\n` : ""}<tr><td>"Plot Speaks, wrap it up."</td><td>${!m ? "A recap of what you've found, then the ending: in a mystery, who do you accuse?" : isMystery ? "A recap of what you've found, then: who do you accuse?" : "A recap, then straight on to the final scene."}</td></tr>
@@ -376,6 +416,7 @@ p{margin:0 0 1em}
 .waves circle:nth-child(4){stroke:var(--sky);opacity:.14;animation-delay:1.2s}
 @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.035)}}
 .hero-grid{display:grid;gap:36px;align-items:center}
+.hero-grid>*{min-width:0}
 @media (min-width:960px){.hero{padding:72px 0 88px}.hero-grid{grid-template-columns:1.1fr .9fr;gap:56px}.waves{right:-60px;top:-160px;width:760px;height:760px;opacity:.9}}
 .hero h1{margin:0 0 18px;max-width:12ch}
 .hero h1 em{font-style:italic;font-weight:560;color:var(--accent)}
@@ -578,6 +619,9 @@ details.script pre{margin:0;padding:0 18px 18px;white-space:pre-wrap;word-break:
 .status-ok{background:color-mix(in srgb,var(--sky) 18%,transparent);color:var(--sky-ink)}
 .assistant .plan{color:var(--ink-2)}
 .saybox{margin:18px 0;padding:16px 18px;border-radius:16px;background:var(--navy);color:#F6F0E6;font-family:var(--serif);font-size:1.15rem}
+.saybox-sub{display:block;margin-top:6px;font:500 .9rem/1.4 var(--sans);color:#C9D5E4}
+.saybox-alt{background:var(--surface-2);color:var(--ink);border:1px solid var(--line)}
+.saybox.saybox-alt b{color:var(--accent)}
 .saybox b{display:block;font:700 .72rem/1 var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--peach);margin-bottom:8px}
 .assistant ul.notes{margin:0;padding:0;list-style:none;display:grid;gap:10px}
 
@@ -588,9 +632,91 @@ details.script pre{margin:0;padding:0 18px 18px;white-space:pre-wrap;word-break:
 .prose h3{margin:28px 0 8px}
 .prose ul{padding-left:1.2rem}
 .prose li{margin:0 0 8px}
+.prose .pill-card h3{margin:2px 0 4px}
+.prose .byo-grid{grid-template-columns:1fr}
+@media (min-width:760px){.prose .byo-grid{grid-template-columns:repeat(3,1fr)}.prose .pill-card{flex-direction:column}}
 .tool{display:grid;gap:4px;padding:18px 20px;border-radius:var(--radius);background:var(--surface);border:1px solid var(--line);margin:0 0 12px}
 .tool code{justify-self:start;font-size:.95rem}
 .tool p{margin:0;color:var(--ink-2)}
+
+/* BYOA: badge, assistant chips (names only, never logos), ways to play */
+.byoa{margin:0 0 26px;padding:18px 18px 20px;border-radius:var(--radius-lg);background:radial-gradient(120% 90% at 100% 0%,#1B4A7A,transparent 60%),linear-gradient(160deg,var(--navy),#0B2643);color:#F6F0E6;box-shadow:var(--shadow-lg);border:1px solid rgba(255,255,255,.06);position:relative;overflow:hidden;isolation:isolate}
+.byoa::after{content:"";position:absolute;z-index:-1;right:-70px;bottom:-90px;width:220px;height:220px;border-radius:50%;border:16px solid var(--orange);opacity:.16;box-shadow:0 0 0 30px rgba(63,184,232,.08)}
+@media (min-width:720px){.byoa{padding:24px 26px 26px}}
+.byoa .byoa-badge{background:rgba(255,255,255,.08);box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.2);color:#F6F0E6}
+.byoa .byoa-tag{background:var(--orange);color:#14233D}
+.byoa .byoa-tag::after{background:var(--sky);box-shadow:0 0 0 2px #143A63}
+.byoa .ai-chips li{background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.16)}
+.byoa .ai-name{color:#FFFDF9}
+.byoa .ai-how{color:var(--peach)}
+.byoa .byoa-line{color:#C9D5E4}
+.byoa .byoa-line strong{color:#FFFDF9}
+.byoa-badge{display:inline-flex;align-items:center;gap:10px;padding:4px 16px 4px 4px;border-radius:999px;background:var(--surface);box-shadow:inset 0 0 0 1.5px var(--line-2),var(--shadow);font:700 .95rem/1 var(--sans);color:var(--ink)}
+.byoa-tag{display:inline-block;padding:8px 12px 7px;border-radius:999px;background:var(--ink);color:var(--bg);font:800 .82rem/1 var(--sans);letter-spacing:.16em;position:relative}
+.byoa-tag::after{content:"";position:absolute;right:-2px;top:-2px;width:10px;height:10px;border-radius:50%;background:var(--orange);box-shadow:0 0 0 2px var(--surface)}
+.ai-chips{list-style:none;margin:14px 0 12px;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+@media (min-width:560px){.ai-chips{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.ai-chips li{display:grid;gap:3px;padding:11px 14px 10px;border-radius:16px;background:var(--surface);border:1.5px solid var(--line-2)}
+.ai-name{font:650 1.16rem/1.1 var(--serif);font-variation-settings:"SOFT" 50,"opsz" 36;color:var(--ink)}
+.ai-how{font:700 .68rem/1.25 var(--sans);letter-spacing:.07em;text-transform:uppercase;color:var(--ink-2)}
+.byoa-line{margin:0;color:var(--ink-2);font-size:1.02rem;max-width:36rem}
+.byoa-line strong{color:var(--ink)}
+.section-head .byoa-badge{margin:0 0 16px}
+.ways{display:grid;gap:14px;margin-top:20px;list-style:none;padding:0}
+@media (min-width:760px){.ways{grid-template-columns:repeat(2,1fr)}}
+@media (min-width:1100px){.ways{grid-template-columns:repeat(4,1fr)}}
+.ways li{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:20px}
+.ways h3{font-size:1.3rem;margin:0 0 8px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.ways p{margin:0 0 8px;color:var(--ink-2);font-size:.95rem}
+.ways p:last-child{margin:0}
+.ways .status{font-size:.66rem;padding:6px 9px}
+.gpt-note{margin:16px 0 12px;padding:14px 16px;border-radius:14px;background:var(--surface-2);border:1px solid var(--line);font-size:.94rem}
+.gpt-note-h{display:flex;align-items:center;gap:8px;margin:0 0 6px!important;font:700 .76rem/1 var(--sans)!important;letter-spacing:.1em;text-transform:uppercase;color:var(--accent)!important}
+.gpt-note p{margin:0;color:var(--ink-2)}
+.byline{margin:4px 0 0;color:var(--ink-2);font-weight:600}
+.byline strong{color:var(--ink);font-weight:700}
+.card .by{margin:-2px 0 8px;font-size:.84rem;color:var(--ink-2)}
+
+/* passenger page: one-handed, big targets, nothing secret until a tap */
+.pass-head{padding:28px 0 8px}
+.pass-head h1{font-size:clamp(2rem,7vw,3rem);margin:0 0 10px}
+.pass-head .lead{margin:0 0 4px}
+.spoiler{display:flex;gap:12px;align-items:flex-start;padding:16px 18px;border-radius:18px;background:var(--accent-soft);border:1.5px solid color-mix(in srgb,var(--orange) 55%,transparent);margin:18px 0 24px;font-size:1.02rem}
+.spoiler .ic{color:var(--accent);margin-top:1px}
+.spoiler strong{display:block;font-size:1.1rem;margin-bottom:2px}
+.pass-step{font:700 .8rem/1 var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2);margin:0 0 12px}
+.pass-step q{quotes:"“" "”";color:var(--ink);text-transform:none;letter-spacing:0;font:italic 600 1.02rem/1.3 var(--serif)}
+.pick-grid{list-style:none;margin:0 0 18px;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+@media (min-width:640px){.pick-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.follow-list{list-style:none;margin:0 0 18px;padding:0;display:grid;gap:10px}
+.follow-list li{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border:1px solid var(--line);border-radius:14px;background:var(--surface)}
+.follow-list p{margin:0;min-width:0;flex:1 1 220px}
+.pick{appearance:none;width:100%;min-height:68px;padding:14px 16px;border-radius:18px;border:2px solid var(--line-2);background:var(--surface);color:var(--ink);font:650 1.1rem/1.2 var(--serif);font-variation-settings:"SOFT" 50,"opsz" 36;text-align:left;cursor:pointer;box-shadow:var(--shadow);transition:border-color .15s ease,background-color .15s ease}
+.pick:hover{border-color:var(--accent)}
+.pick[aria-pressed=true]{border-color:var(--accent);background:var(--accent-soft)}
+.pick-cue{font:800 1.5rem/1 var(--sans);letter-spacing:.04em;text-align:center}
+.other{display:flex;flex-wrap:wrap;gap:10px;margin:0 0 8px}
+.other label{flex:1 0 100%;font-weight:700;font-size:.95rem}
+.other input{flex:1 1 160px;min-width:0;min-height:56px;padding:12px 16px;border-radius:16px;border:1.5px solid var(--line-2);background:var(--surface);color:var(--ink);font:500 1.08rem/1.2 var(--sans)}
+.other input:focus{outline:3px solid var(--focus);outline-offset:2px;border-color:transparent}
+.other .btn{min-height:56px}
+.confirm{position:sticky;bottom:12px;z-index:5;margin:8px 0 18px;padding:14px;border-radius:22px;background:var(--surface);border:1.5px solid var(--accent);box-shadow:var(--shadow-lg);display:grid;gap:10px}
+.confirm p{margin:0;font-weight:650;text-align:center}
+.confirm .row{display:flex;gap:10px}
+.confirm .btn-primary{flex:1 1 auto;min-height:60px;font-size:1.08rem}
+.confirm .btn-ghost{flex:0 0 auto;min-height:60px}
+.answer{margin:8px 0 22px;padding:20px;border-radius:24px;background:linear-gradient(160deg,var(--navy),#0B2643);color:#F6F0E6;box-shadow:var(--shadow-lg)}
+.answer .say-label{display:block;font:700 .74rem/1.3 var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--peach);margin:0 0 10px}
+.answer .line{font:500 clamp(1.2rem,4.6vw,1.45rem)/1.45 var(--serif);font-variation-settings:"SOFT" 80,"opsz" 36;margin:0 0 18px}
+.answer .btn-ghost{color:#F6F0E6;box-shadow:inset 0 0 0 1.5px rgba(246,240,230,.45);width:100%}
+.answer .btn-ghost:hover{color:#fff;box-shadow:inset 0 0 0 1.5px var(--peach)}
+.pass-msg{min-height:1.5em;margin:0 0 12px;font-weight:600;color:var(--ink-2)}
+.pass-msg.err{color:var(--accent)}
+.pass-msg:empty{min-height:0;margin:0}
+.pass-foot{margin:28px 0 64px;color:var(--ink-2);font-size:.95rem}
+.passenger-link{display:flex;gap:12px;align-items:flex-start;margin:18px 0 6px;padding:14px 16px;border-radius:14px;background:var(--surface);border:1.5px solid var(--line-2)}
+.passenger-link .ic{color:var(--accent);margin-top:2px}
+.passenger-link p{margin:0}
 
 /* cta band + footer */
 .cta{padding:56px 0}
@@ -710,6 +836,7 @@ function storyCard(m: Meta, r: RatingSummary | undefined): string {
 <div style="position:relative">${cover(m)}${m.minutes ? `<span class="badge">${icon("clock", 13)}${m.minutes} min</span>` : ""}</div>
 <div class="card-body">
 <h4 class="title"><a href="/stories/${encodeURIComponent(m.slug)}">${esc(m.title)}</a></h4>
+<p class="by">Written by ${esc(authorOf(m))}</p>
 <p class="pitch">${esc(m.pitch)}</p>
 ${facts(m)}
 ${stars(r)}
@@ -751,6 +878,7 @@ ${WAVES}
 <p class="eyebrow rise">${icon("mic", 18)} Storytelling out loud</p>
 <h1 class="rise rise-2">Stories you <em>play</em> out loud.</h1>
 <p class="lead rise rise-3">Murder mysteries and fantasy adventures you play by voice with the AI assistant you already use. One narrator does every voice. You ask the questions. Made for car rides.</p>
+<div class="rise rise-3">${byoaHero()}</div>
 <div class="rise rise-4">${connectCard(origin, example, { id: "mcp-url" })}</div>
 </div>
 ${lead ? `<figure class="voice rise rise-3" aria-label="Example of a story starting">
@@ -766,30 +894,37 @@ ${bars()}
 <div class="wrap">
 <div class="section-head"><p class="eyebrow">${icon("book", 18)} How it works</p><h2 id="how-h">Three steps, then just talk.</h2></div>
 <ol class="steps3">
-<li><h3>Connect once</h3><p>Tap Connect to Claude and then Add. No sign-in, free plan included. Do it once, parked.</p></li>
-<li><h3>Say the story</h3><p>“Start ${esc(example)} with Plot Speaks.” Your assistant loads it and becomes the narrator.</p></li>
+<li><h3>Connect once</h3><p>Tap Connect to Claude and then Add. No sign-in, and Claude's Free plan has room for it. Do it once, parked.</p></li>
+<li><h3>Open Plot Speaks</h3><p>Say “Open Plot Speaks” for a quick intro, then browse, start or write a story. Or name one: “Start ${esc(example)} with Plot Speaks.”</p></li>
 <li><h3>Play by talking</h3><p>Question suspects, search rooms, roll for initiative. Turns are short, and each one ends with a question for you.</p></li>
 </ol>
 <p style="margin-top:22px"><a class="link-arrow" href="/how-it-works">More on how a story goes ${icon("arrow", 18)}</a></p>
 </div>
 </section>
 
-<section class="section" aria-labelledby="byo-h">
+<section class="section" id="byoa" aria-labelledby="byo-h">
 <div class="wrap">
-<div class="section-head"><p class="eyebrow">${icon("chat", 18)} Bring your own assistant</p><h2 id="byo-h">Use the assistant you already have.</h2>
-<p class="lead">Plot Speaks isn't another app. It's a library of stories your own ChatGPT or Claude can play.</p></div>
+<div class="section-head">${byoaBadge()}<h2 id="byo-h">Use the assistant you already have.</h2>
+<p class="lead">Plot Speaks isn't another app. It's a library of stories that ChatGPT, Claude, Gemini or Le Chat can play with you. Your assistant is the narrator; Plot Speaks brings the story and keeps the answer key.</p></div>
 <div class="byo-grid">
-<div class="pill-card"><span class="ic-wrap">${icon("app")}</span><div><h3>No new app</h3><p>Play in the Claude or ChatGPT app on your phone, in the car.</p></div></div>
+<div class="pill-card"><span class="ic-wrap">${icon("app")}</span><div><h3>No new app</h3><p>Play in the assistant app already on your phone, in the car.</p></div></div>
 <div class="pill-card"><span class="ic-wrap">${icon("user")}</span><div><h3>No account with us</h3><p>No sign-up, no email, no password. The connector has no sign-in.</p></div></div>
 <div class="pill-card"><span class="ic-wrap">${icon("card")}</span><div><h3>No subscription</h3><p>The stories are free. Your assistant runs on the plan you already have.</p></div></div>
 </div>
+<ul class="ways" aria-label="How each assistant plays">
+<li><h3>Claude <span class="status status-ok">Free plan works</span></h3><p>Add the connector in one tap. Claude's Free plan includes one custom connector, and Plot Speaks can be it.</p><p>Voice tested: the connector loads the story and checks your accusation.</p></li>
+<li><h3>ChatGPT <span class="status">Free and Plus: paste</span></h3><p>Custom connectors need a Business, Enterprise or Edu plan today. On Free and Plus, paste the story; a passenger holds the answer key on the passenger page.</p><p>A ChatGPT app listing is planned.</p></li>
+<li><h3>Gemini <span class="status">US, 18+</span></h3><p>Add it as a custom app on a personal Google account in the US. Not on work or school accounts.</p><p>Voice not tested yet.</p></li>
+<li><h3>Le Chat <span class="status">Free plan works</span></h3><p>Add it as a custom MCP connector, no sign-in needed, on the free plan too.</p><p>Voice not tested yet.</p></li>
+</ul>
+<p style="margin-top:18px"><a class="link-arrow" href="/connect">Step-by-step for each assistant ${icon("arrow", 18)}</a></p>
 <div class="split">
 <div class="panel panel-key"><h3>${icon("key", 26)} We keep the answer key</h3>
 <p>Your assistant tells the story, but it never sees who did it. When you accuse someone, it asks Plot Speaks, and Plot Speaks says whether you're right. So the narrator can't spoil the ending, even by accident.</p>
 <p>Adventures work the same way: the big surprises stay with Plot Speaks until you reach them.</p></div>
 <div class="panel"><h3>${icon("shield", 26)} Your conversation stays with your assistant</h3>
 <p>Plot Speaks never hears you. It only sees what your assistant sends it: the story you picked, the name you accused, and any rating you give. We count those plays without names or accounts, to learn which stories work.</p>
-<p class="fine">The chat itself lives in your ChatGPT or Claude account, under that company's privacy terms.</p></div>
+<p class="fine">The chat itself lives in your assistant account (ChatGPT, Claude, Gemini or Le Chat), under that company's privacy terms.</p></div>
 </div>
 </div>
 </section>
@@ -840,6 +975,7 @@ export function storyPage(p: PublicStory, rating: RatingSummary | undefined, ori
     ? `<p>This work includes material from the System Reference Document 5.2.1 ("SRD 5.2.1") by Wizards of the Coast LLC, available at <a href="https://www.dndbeyond.com/srd">dndbeyond.com/srd</a>. The SRD 5.2.1 is licensed under the <a href="https://creativecommons.org/licenses/by/4.0/legalcode">Creative Commons Attribution 4.0 International License</a>.</p>`
     : "";
   const cat = categoryOf(m);
+  const passenger = `/stories/${encodeURIComponent(m.slug)}/passenger`;
   const body = `<div class="wrap">
 <p class="crumbs"><a href="/#cat-${cat.id}">← ${esc(cat.name)}</a></p>
 <section class="story-hero">
@@ -847,6 +983,7 @@ ${cover(m, { alt: `Cover art for ${m.title}`, eager: true })}
 <div>
 ${facts(m)}
 <h1>${esc(m.title)}</h1>
+<p class="byline">Written by <strong>${esc(authorOf(m))}</strong></p>
 ${stars(rating)}
 <p class="pitch">${esc(m.pitch)}</p>
 </div>
@@ -855,19 +992,20 @@ ${stars(rating)}
 <div class="story-body">
 <div>
 <div class="block">
-${connectCard(origin, m.title, { id: "mcp-url", lead: `Add Plot Speaks to Claude once. The connector loads the story and ${isMystery ? "checks accusations for you, so nobody needs to hold the answer" : "hands over the hidden scenes for you, so nobody needs to hold them"}.` })}
+${connectCard(origin, m.title, { id: "mcp-url", lead: `Add Plot Speaks to Claude once. The connector loads the story and ${isMystery ? "checks accusations for you, so nobody needs to hold the answer" : "hands over the hidden scenes for you, so nobody needs to hold them"}.`, passenger })}
 </div>
 
 <div class="block">
 <h2>Phrases</h2>
 ${phrasesTable(m)}
-${isMystery ? `<p class="note" style="margin-top:16px">${icon("key", 20)}<span>The story your assistant reads doesn't contain the answer. When you accuse someone, the narrator asks whoever holds the answer key: the Plot Speaks connector, or a passenger who knows it.</span></p>` : `<p class="note" style="margin-top:16px">${icon("key", 20)}<span>Some scenes are held back as cues, so the big moments stay a surprise. With the connector, the narrator fetches them itself; with the pasted story, a passenger reads them out.</span></p>`}
+${isMystery ? `<p class="note" style="margin-top:16px">${icon("key", 20)}<span>The story your assistant reads doesn't contain the answer. When you accuse someone, the narrator asks whoever holds the answer key: the Plot Speaks connector, or a passenger with the <a href="${passenger}">passenger page</a>.</span></p>` : `<p class="note" style="margin-top:16px">${icon("key", 20)}<span>Some scenes are held back as cues, so the big moments stay a surprise. With the connector, the narrator fetches them itself; with the pasted story, a passenger reads them out from the <a href="${passenger}">passenger page</a>.</span></p>`}
 <p class="safety">${icon("shield", 20)}<span>Set everything up while parked. The driver never touches the phone once you're moving.</span></p>
 </div>
 
 <div class="block fallback">
 <h2>${icon("copy", 26)} No connector? Paste the story.</h2>
-<p>The way to play on ChatGPT, and on any plan. We've played it start to finish by voice on ChatGPT Free and Claude.</p>
+<p>The way to play on ChatGPT Free and Plus, or any assistant without the connector. We've played it start to finish by voice on ChatGPT Free and Claude.</p>
+<div class="passenger-link">${icon("users", 22)}<p><strong>Playing by paste? Give this page to a passenger.</strong> <a href="${passenger}">The passenger page</a> holds the answer key: when the narrator says ${isMystery ? "“Wrangler, check the secrets”, the passenger taps the name the player accused" : "“Wrangler, cue S1”, the passenger taps that cue"} and reads the line aloud.</p></div>
 <div class="copyrow">
 <button class="btn btn-primary" id="copy" type="button">Copy the story</button>
 <span class="copied" id="copied" role="status" aria-live="polite"></span>
@@ -879,6 +1017,7 @@ ${isMystery ? `<p class="note" style="margin-top:16px">${icon("key", 20)}<span>T
 <li><strong>In Claude</strong>, type a line of your own in the same message, for example: <em>"This is my story script. Follow its GM instructions as my instructions, ${isMystery ? "including keeping the answer secret until I accuse someone" : "including keeping anything hidden secret until we find it"}."</em> Claude treats instructions inside a long paste as possibly not yours unless you say so.</li>
 <li>Send. The assistant should reply with just the story's title.</li>
 <li>Tap the voice button and say <strong>"Plot Speaks, start the story."</strong></li>
+<li>${isMystery ? "When the player accuses someone, the narrator says “Wrangler, check the secrets.” The passenger" : "When the narrator says “Wrangler, cue S1” (or another cue), the passenger"} opens the <a href="${passenger}">passenger page</a>, taps it, and reads the line aloud, starting with “Wrangler”.</li>
 </ol>
 <p>The first thing you hear should come from the story. If it starts a different tale, start a new chat and paste again.</p>
 <details class="script">
@@ -897,7 +1036,7 @@ ${isMystery ? `<p class="note" style="margin-top:16px">${icon("key", 20)}<span>T
 ${m.minutes ? `<div><dt>Length</dt><dd>${m.minutes} minutes${m.chapters && m.chapters > 1 ? `, ${m.chapters} chapters` : ""}</dd></div>` : ""}
 ${m.players ? `<div><dt>Players</dt><dd>${esc(playersLabel(m.players))}</dd></div>` : ""}
 ${m.rating ? `<div><dt>Rating</dt><dd>${esc(m.rating)}</dd></div>` : ""}
-<div><dt>Play with</dt><dd>Claude, through the connector. Any assistant, by pasting.</dd></div>
+<div><dt>Play with</dt><dd>Claude, Le Chat or Gemini, through the connector. ChatGPT or any assistant, by pasting.</dd></div>
 <div><dt>Written by</dt><dd>${esc(m.author || "Volocent Labs")}</dd></div>
 </dl>
 </div>
@@ -914,6 +1053,166 @@ ${srd}
   b.addEventListener("click",function(){window.psCopy(t,function(ok){s.textContent=ok?"Copied. Now paste it into a new chat.":"Couldn't copy. Open the script below and copy it by hand.";});});
 })();`;
   return page({ title: `${m.title} · Plot Speaks`, description: m.pitch, body, origin, path: `/stories/${encodeURIComponent(m.slug)}`, script });
+}
+
+// ============================================================================ PASSENGER
+// For paste play, where no connector holds the answer key: a passenger ("the wrangler") taps the
+// name the player accused, or the cue the narrator asked for, and reads the line aloud. NOTHING
+// SECRET IS IN THIS HTML: every line is fetched on tap from index.ts's JSON endpoints
+//   GET /api/stories/<slug>/names            {"names":[...]}
+//   GET /api/stories/<slug>/check?name=<n>   {"verdict":"correct"|"wrong","line":"..."}
+//   GET /api/stories/<slug>/cue/<id>         {"read_aloud":"..."}  (404 JSON if unknown)
+// Cue ids come from the public story.md's "Wrangler, cue S<n>" mentions. Follow-ups (S2b...) are
+// listed only in the secret "Listen for" table, so the page offers a free-text "Other cue" box.
+export const cueIds = (story: string): string[] =>
+  [...new Set([...story.matchAll(/Wrangler,\s*cue\s+(S\d+[a-z]?)/gi)].map((x) => x[1].toUpperCase().replace(/^S(\d+)([A-Z]?)$/, (_, n, l) => `S${n}${l.toLowerCase()}`)))]
+    .sort((a, b) => parseInt(a.slice(1), 10) - parseInt(b.slice(1), 10) || a.localeCompare(b));
+
+const PASSENGER_JS = `(function(){
+  var root=document.getElementById("pass");if(!root)return;
+  var api=root.getAttribute("data-api"),msg=document.getElementById("pass-msg"),ans=document.getElementById("answer"),
+      ansLine=document.getElementById("answer-line"),ansLabel=document.getElementById("answer-label"),
+      conf=document.getElementById("confirm"),confText=document.getElementById("confirm-text"),picked=null;
+  function say(t,err){msg.textContent=t||"";msg.className="pass-msg"+(err?" err":"");}
+  function getJSON(path){
+    return fetch(api+path,{headers:{accept:"application/json"},cache:"no-store"}).then(function(r){
+      return r.json().catch(function(){return null;}).then(function(j){return {ok:r.ok,status:r.status,json:j};});
+    });
+  }
+  function unpress(){[].forEach.call(root.querySelectorAll(".pick[aria-pressed=true]"),function(b){b.setAttribute("aria-pressed","false");});}
+  function show(label,line){
+    ansLabel.textContent=label;ansLine.textContent=line;ans.hidden=false;say("");
+    ans.scrollIntoView({block:"start",behavior:"smooth"});ans.focus({preventScroll:true});
+  }
+  function hide(){ans.hidden=true;ansLine.textContent="";if(conf)conf.hidden=true;picked=null;unpress();}
+  document.getElementById("answer-hide").addEventListener("click",function(){hide();window.scrollTo({top:0,behavior:"smooth"});});
+  function check(name){
+    if(conf)conf.hidden=true;say("Checking "+name+"…");
+    getJSON("/check?name="+encodeURIComponent(name)).then(function(r){
+      if(r.ok&&r.json&&typeof r.json.line==="string"&&r.json.line){show("Say “Wrangler,” then read this aloud",r.json.line);}
+      else if(r.status===404||r.status===400){unpress();say("Couldn't match “"+name+"” to anyone in this story. Try the name as the narrator said it.",true);}
+      else{unpress();say("Couldn't get the answer from Plot Speaks. Tap again in a moment.",true);}
+    }).catch(function(){unpress();say("Couldn't reach Plot Speaks. Check your signal and tap again.",true);});
+  }
+  function cue(id){
+    id=String(id).trim().replace(/\\s+/g,"");if(!id)return;
+    if(!/^s/i.test(id))id="S"+id;id="S"+id.slice(1);
+    hide();say("Getting cue "+id+"…");
+    getJSON("/cue/"+encodeURIComponent(id)).then(function(r){
+      if(r.ok&&r.json&&typeof r.json.read_aloud==="string"&&r.json.read_aloud){show("Cue "+id+": say “Wrangler,” then read this aloud",r.json.read_aloud);}
+      else if(r.status===404){say("There's no cue "+id+" in this story. Check the id the narrator said.",true);}
+      else{say("Couldn't get cue "+id+" from Plot Speaks. Tap again in a moment.",true);}
+    }).catch(function(){say("Couldn't reach Plot Speaks. Check your signal and tap again.",true);});
+  }
+  // Mysteries: the names, sorted so their order gives nothing away; one tap picks, a second confirms.
+  var grid=document.getElementById("names");
+  function loadNames(){
+    if(!grid)return;var st=document.getElementById("names-status");st.textContent="Loading the names…";
+    getJSON("/names").then(function(r){
+      var names=r.ok&&r.json&&Array.isArray(r.json.names)?r.json.names.filter(function(n){return typeof n==="string"&&n.trim();}):null;
+      if(!names||!names.length)throw 0;
+      names.sort(function(a,b){return a.localeCompare(b);});grid.innerHTML="";
+      names.forEach(function(n){
+        var li=document.createElement("li"),b=document.createElement("button");
+        b.type="button";b.className="pick";b.textContent=n;b.setAttribute("aria-pressed","false");
+        b.addEventListener("click",function(){
+          if(!ans.hidden)hide();unpress();b.setAttribute("aria-pressed","true");picked=n;
+          confText.textContent="The player accused "+n+"?";conf.hidden=false;say("");
+        });
+        li.appendChild(b);grid.appendChild(li);
+      });
+      st.textContent="";st.hidden=true;
+    }).catch(function(){
+      st.innerHTML="";st.appendChild(document.createTextNode("Couldn't load the names. Type the accused name below, or "));
+      var a=document.createElement("button");a.type="button";a.className="btn btn-ghost btn-sm";a.textContent="try again";
+      a.addEventListener("click",loadNames);st.appendChild(a);
+    });
+  }
+  loadNames();
+  if(conf){
+    document.getElementById("confirm-go").addEventListener("click",function(){if(picked)check(picked);});
+    document.getElementById("confirm-no").addEventListener("click",function(){conf.hidden=true;picked=null;unpress();});
+  }
+  var nf=document.getElementById("name-form");
+  if(nf)nf.addEventListener("submit",function(e){e.preventDefault();var v=nf.elements.name.value.trim();if(v){unpress();hide();check(v);}});
+  [].forEach.call(root.querySelectorAll("[data-cue]"),function(b){
+    b.addEventListener("click",function(){var id=b.getAttribute("data-cue");cue(id);b.setAttribute("aria-pressed","true");});
+  });
+  var cf=document.getElementById("cue-form");
+  if(cf)cf.addEventListener("submit",function(e){e.preventDefault();cue(cf.elements.cue.value);});
+  // Follow-up cues: the story's "Listen for" table, fetched only when the passenger asks for it.
+  var fl=document.getElementById("follow-load"),fol=document.getElementById("follow");
+  if(fl&&fol)fl.addEventListener("click",function(){
+    say("Loading the follow-up cues…");
+    getJSON("/listen").then(function(r){
+      var rows=r.ok&&r.json&&Array.isArray(r.json.follow_ups)?r.json.follow_ups:null;if(!rows)throw 0;
+      fol.innerHTML="";
+      if(!rows.length){var e=document.createElement("li");e.textContent="This story has no follow-up cues.";fol.appendChild(e);}
+      rows.forEach(function(x){
+        var li=document.createElement("li"),p=document.createElement("p"),b=document.createElement("button");
+        p.textContent="When you hear: "+x.when;b.type="button";b.className="btn btn-ghost btn-sm";b.textContent="Get cue "+x.cue;
+        b.addEventListener("click",function(){cue(x.cue);});li.appendChild(p);li.appendChild(b);fol.appendChild(li);
+      });
+      fol.hidden=false;fl.hidden=true;say("");
+    }).catch(function(){say("Couldn't load the follow-up cues. Tap again in a moment.",true);});
+  });
+})();`;
+
+export function passengerPage(p: PublicStory, origin: string): string {
+  const m = meta(p);
+  const isMystery = m.genre === "murder-mystery" || m.genre === "kids";
+  const cues = isMystery ? [] : cueIds(p.story);
+  const slug = encodeURIComponent(m.slug);
+  const mystery = `<section aria-labelledby="names-h">
+<h2 class="pass-step" id="names-h">When the narrator says <q>Wrangler, check the secrets</q></h2>
+<p class="pass-msg" id="names-status" role="status"></p>
+<ul class="pick-grid" id="names" aria-label="Who did the player accuse?"></ul>
+<div class="confirm" id="confirm" hidden>
+<p id="confirm-text"></p>
+<div class="row"><button class="btn btn-primary" type="button" id="confirm-go">${icon("key", 20)}Show the line</button><button class="btn btn-ghost" type="button" id="confirm-no">Cancel</button></div>
+</div>
+<form class="other" id="name-form" autocomplete="off">
+<label for="name-in">Someone else? Type the name the player accused</label>
+<input id="name-in" name="name" type="text" inputmode="text" enterkeyhint="go" maxlength="80" placeholder="e.g. the housekeeper">
+<button class="btn btn-ghost" type="submit">Check</button>
+</form>
+</section>`;
+  const adventure = `<section aria-labelledby="cues-h">
+<h2 class="pass-step" id="cues-h">When the narrator says <q>Wrangler, cue S1</q></h2>
+${cues.length ? `<ul class="pick-grid" aria-label="Cues">${cues.map((id) => `<li><button class="pick pick-cue" type="button" data-cue="${esc(id)}" aria-pressed="false">${esc(id)}</button></li>`).join("")}</ul>` : ""}
+<form class="other" id="cue-form" autocomplete="off">
+<label for="cue-in">Other cue</label>
+<input id="cue-in" name="cue" type="text" inputmode="text" autocapitalize="characters" enterkeyhint="go" maxlength="8" placeholder="e.g. S2b">
+<button class="btn btn-ghost" type="submit">Get cue</button>
+</form>
+<h2 class="pass-step" id="follow-h">Cues you call yourself</h2>
+<p>A few scenes have follow-up cues that nobody asks for: you call them when you hear the right moment. The list says what to listen for. It hints at what might happen, so only the passenger should look.</p>
+<p><button class="btn btn-ghost" type="button" id="follow-load">${icon("eyeoff", 20)}Show what to listen for</button></p>
+<ul class="follow-list" id="follow" aria-labelledby="follow-h" hidden></ul>
+</section>`;
+  const body = `<div class="wrap narrow" id="pass" data-api="/api/stories/${slug}">
+<p class="crumbs"><a href="/stories/${slug}">← ${esc(m.title)}</a></p>
+<header class="pass-head">
+<p class="eyebrow">${icon("users", 18)} For the passenger</p>
+<h1>${esc(m.title)}</h1>
+<p class="lead">You hold the answer key. The narrator calls you <strong>Wrangler</strong>. ${isMystery
+    ? "When it says “Wrangler, check the secrets”, tap the name the player accused and read the line shown aloud."
+    : "When it says “Wrangler, cue S1” (or another cue), tap that cue and read the line shown aloud."}</p>
+</header>
+<p class="spoiler">${icon("eyeoff", 24)}<span><strong>${isMystery ? "Don't tap until the player accuses someone." : "Don't tap a cue until the narrator asks for it."}</strong>Each tap shows a line from the answer key${isMystery ? ", including whether the accusation is right" : ""}. Nothing is on this page until you tap.</span></p>
+<noscript><p class="note">This page needs JavaScript: it fetches each line from Plot Speaks when you tap.</p></noscript>
+<p class="pass-msg" id="pass-msg" role="status" aria-live="polite"></p>
+<div class="answer" id="answer" tabindex="-1" hidden>
+<span class="say-label" id="answer-label"></span>
+<p class="line" id="answer-line"></p>
+<button class="btn btn-ghost" type="button" id="answer-hide">Done, hide it</button>
+</div>
+${isMystery ? mystery : adventure}
+<p class="pass-foot">${isMystery
+    ? "Read the line exactly as written. The narrator takes it as the truth and runs the ending."
+    : "Read only the line shown, starting with “Wrangler”. If the narrator says “That one comes later”, you tapped too early: wait for it to ask."} Playing with the connector instead? Then nobody needs this page: the narrator checks for itself.</p>
+</div>`;
+  return page({ title: `For the passenger: ${m.title} · Plot Speaks`, description: `The passenger's answer key for ${m.title}, for playing by paste.`, body, origin, path: `/stories/${slug}/passenger`, script: PASSENGER_JS });
 }
 
 // ============================================================================ CONNECT
@@ -938,16 +1237,18 @@ export function connectPage(stories: PublicStory[], origin: string): string {
 <p class="plan">${fill(a.plan, url, example)}</p>
 ${a.button ? `<p><a class="btn btn-primary btn-big" href="${fill(a.button.href, url, example)}"${a.button.href.startsWith("{") ? ` rel="noopener"` : ""}>${icon(a.id === "claude" ? "plug" : "book", 20)}${esc(a.button.label)}</a></p>` : ""}
 ${a.steps.length ? `<ol class="steps">${a.steps.map((s) => `<li>${fill(s, url, example)}</li>`).join("")}</ol>` : ""}
-${a.say ? `<p class="saybox"><b>Then say</b>“${fill(a.say, url, example)}”</p>` : ""}
+${a.open ? `<p class="saybox"><b>Then say</b>“${fill(a.open, url, example)}”<span class="saybox-sub">A quick intro, then browse, start or write a story.</span></p>` : ""}
+${a.say ? `<p class="saybox${a.open ? " saybox-alt" : ""}"><b>${a.open ? "Or name a story" : "Then say"}</b>“${fill(a.say, url, example)}”</p>` : ""}
 <ul class="notes">${a.notes.map((n) => `<li class="note">${icon("check", 20)}<span>${fill(n, url, example)}</span></li>`).join("")}</ul>
 </section>`).join("\n");
   const body = `<div class="wrap narrow">
 <header class="page-head">
 <p class="eyebrow">${icon("plug", 18)} Connect</p>
 <h1>${esc(CONNECT.headline)}</h1>
-<p class="lead">Plot Speaks works as a connector: your assistant calls it to load a story and check your answers. Add it once, parked, and every story is a sentence away. Claude is the easiest: one tap, free plan included.</p>
+<p class="lead">Plot Speaks works as a connector: your assistant calls it to load a story and check your answers. Add it once, parked, then say <strong>“Open Plot Speaks”</strong> for a quick intro and the choice to browse, start or write a story, or name the story you want. Claude is the easiest: one tap, and its Free plan includes one custom connector.</p>
 <p class="muted" style="margin:0">The connector address, for any assistant:</p>
 ${copyField(url, "mcp-url", false)}
+${chatgptNote()}
 </header>
 ${tabs}
 ${panels}
@@ -955,8 +1256,8 @@ ${panels}
 <p style="margin:28px 0 64px"><a class="link-arrow" href="/#stories">Pick a story ${icon("arrow", 18)}</a></p>
 </div>`;
   return page({
-    title: "Connect Plot Speaks to Claude or ChatGPT",
-    description: "Add the Plot Speaks connector once, with no sign-in, then just say which story you want. Steps for Claude and ChatGPT.",
+    title: "Connect Plot Speaks to your assistant",
+    description: "Add the Plot Speaks connector once, with no sign-in, then say \"Open Plot Speaks\" or name a story. Steps for Claude, Le Chat, Gemini and ChatGPT.",
     body, origin, path: "/connect", script: TABS_JS,
   });
 }
@@ -972,9 +1273,9 @@ export function howPage(stories: PublicStory[], origin: string): string {
 </header>
 <h2>Before you drive</h2>
 <ol class="steps">
-<li><a href="/connect">Add the Plot Speaks connector</a> to Claude (or Le Chat, or Gemini). On ChatGPT, or anywhere else, copy a story from its page and paste it into a new chat.</li>
+<li><a href="/connect">Add the Plot Speaks connector</a> to Claude (or Le Chat, or Gemini). On ChatGPT Free or Plus, or anywhere without the connector, copy a story from its page and paste it into a new chat.</li>
 <li>Agree who's playing. Tell the narrator your names when it asks.</li>
-<li>Start in voice mode and name the story: <strong>“Start ${esc(example)} with Plot Speaks.”</strong></li>
+<li>Start in voice mode and say <strong>“Open Plot Speaks.”</strong> for a quick intro and the choice to browse, start or write a story. Or name it: <strong>“Start ${esc(example)} with Plot Speaks.”</strong> (Pasted a story? Say “Plot Speaks, start the story.”)</li>
 </ol>
 <p class="safety">${icon("shield", 20)}<span>Set it up while parked. The driver never touches the phone once you're moving.</span></p>
 <h2>While you play</h2>
@@ -982,7 +1283,7 @@ export function howPage(stories: PublicStory[], origin: string): string {
 ${phrasesTable(null)}
 <h2>Who holds the answer</h2>
 <p>With the connector, Plot Speaks keeps the answer key and the hidden scenes. Your assistant asks for them only at the right moment, so it can't give the ending away.</p>
-<p>With a pasted story, the answer isn't in the paste. A passenger who knows it can be the answer key, or you can check your accusation after the drive.</p>
+<p>With a pasted story, the answer isn't in the paste. A passenger holds it instead: every story page links a <strong>passenger page</strong>. When the narrator says “Wrangler, check the secrets”, the passenger taps the name the player accused and reads the line shown. In an adventure, when the narrator says “Wrangler, cue S1”, the passenger taps that cue and reads it.</p>
 <h2>If it goes wrong</h2>
 <ul>
 <li><strong>The narrator rambles:</strong> say “Plot Speaks, shorter.”</li>
@@ -1001,21 +1302,31 @@ export function writePage(origin: string): string {
 <header class="page-head">
 <p class="eyebrow">${icon("pen", 18)} Write</p>
 <h1>Write a story for the road.</h1>
-<p class="lead">Write with your own assistant and the Plot Speaks Studio tools. They're on the same connector as the stories.</p>
+<p class="lead">Write it with your own assistant. With the Plot Speaks connector on, it becomes your writing partner: it knows how a Plot Speaks story is built and walks you through it.</p>
+<p class="saybox"><b>With the connector on, say</b>“Write a Plot Speaks story.”</p>
 </header>
+<h2>How it goes</h2>
 <ol class="steps">
-<li><a href="/connect">Connect Plot Speaks</a> to your assistant.</li>
-<li>Ask for the template: <em>“Use the Plot Speaks story template for a 30-minute murder mystery.”</em> Your assistant interviews you and drafts the story in the Plot Speaks format.</li>
-<li>Check it: <em>“Check my story with Plot Speaks.”</em> Fix what it flags.</li>
-<li>Submit it: <em>“Submit my story to Plot Speaks.”</em></li>
+<li><a href="/connect">Connect Plot Speaks</a> to your assistant, and switch it on in a new chat.</li>
+<li>Say <strong>“Write a Plot Speaks story.”</strong> Your assistant explains how a story is built (the cast, the clues, the hidden answer) and offers to point out gaps as you go.</li>
+<li>Write it together, at your pace. Ask questions, change your mind, try a twist.</li>
+<li>When you're ready, it reviews the whole story for gaps (a clue nobody can find, a suspect with no alibi, a scene that runs long) and fixes them with you.</li>
+<li>Then it asks if you're ready to submit. Nothing is sent until you say yes.</li>
 </ol>
+<div class="byo-grid" style="margin:28px 0 8px">
+<div class="pill-card"><span class="ic-wrap">${icon("user")}</span><div><h3>Your name, your choice</h3><p>You choose the name you're credited as. A pen name is fine.</p></div></div>
+<div class="pill-card"><span class="ic-wrap">${icon("key")}</span><div><h3>A claim code</h3><p>You get a code to withdraw or update your story later. No account needed.</p></div></div>
+<div class="pill-card"><span class="ic-wrap">${icon("shield")}</span><div><h3>A person reviews it</h3><p>Someone at Plot Speaks reads every submission before it's published.</p></div></div>
+</div>
+<h2>Under the hood</h2>
+<p>Your assistant uses the Studio tools on the same connector as the stories. You don't need to name them.</p>
 <div class="tool"><code>story_template</code><p>The interview and the format for a mystery, family mystery or adventure, at a length you choose.</p></div>
 <div class="tool"><code>check_story</code><p>Checks structure, read-aloud length, the stop phrase and more, and lists what to fix.</p></div>
-<div class="tool"><code>submit_story</code><p>Sends your story in for review. A person reviews every submission before anything is published.</p></div>
-<p>Stories are published under <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a>. The format is in <a href="https://github.com/volocent/plotspeaks/blob/main/docs/FORMAT.md">docs/FORMAT.md</a> on GitHub.</p>
+<div class="tool"><code>submit_story</code><p>Sends your story in for review, with the credit name you chose, and gives you your claim code.</p></div>
+<p>Stories are published under <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a>, credited to the name you chose. The format is in <a href="https://github.com/volocent/plotspeaks/blob/main/docs/FORMAT.md">docs/FORMAT.md</a> on GitHub.</p>
 <p style="margin:36px 0 64px"><a class="link-arrow" href="/stories/example-dinner-party">See an example: The Last Toast ${icon("arrow", 18)}</a></p>
 </div>`;
-  return page({ title: "Write a story · Plot Speaks", description: "Write a Plot Speaks story with your own assistant and the Studio tools: story_template, check_story and submit_story.", body, origin, path: "/write" });
+  return page({ title: "Write a story · Plot Speaks", description: "Write a Plot Speaks story with your own assistant: say \"Write a Plot Speaks story\", fix the gaps together, choose your credit name and submit. A person reviews every story.", body, origin, path: "/write" });
 }
 
 // ============================================================================ PRIVACY, SUPPORT
@@ -1043,11 +1354,22 @@ export function privacyPage(origin: string): string {
 </ul>
 <p>We don't store your name, your account, transcripts, or your IP address with any of this.</p>
 <h2>When you submit a story</h2>
-<p>If you use <code>submit_story</code>, we store the story, its answer key, the results of our automated content checks, a generated cover image, and the contact details you choose to give (optional, seen only by the reviewer). To limit submissions to a few a day, we keep a salted hash of your IP address, never the address itself. A person reviews every submission. If it's approved, the story is published under CC BY-NC 4.0; your contact details never are.</p>
+<p>If you use <code>submit_story</code>, we store the story, its answer key, the name you chose to be credited as (a pen name is fine), the results of our automated content checks, a generated cover image, and the contact details you choose to give (optional, seen only by the reviewer). You get a claim code to withdraw or update it later. To limit submissions to a few a day, we keep a salted hash of your IP address, never the address itself. A person reviews every submission. If it's approved, the story is published under CC BY-NC 4.0 with your credit name; your contact details never are.</p>
 <h2>This website</h2>
 <p>No sign-in, no ads, no analytics scripts and no tracking cookies. The pages load fonts from Google Fonts, so your browser contacts Google's servers for them. Plot Speaks is hosted on Cloudflare, which processes every request and keeps short-lived operational logs.</p>
 <h2>How long we keep it</h2>
-<p>Play data and ratings are kept to compare stories over time; there's no automatic deletion yet. Submissions are kept while they're reviewed, and for as long as an approved story is published.</p>
+<p>Deletion is automatic:</p>
+<div class="table-wrap"><table>
+<thead><tr><th scope="col">What</th><th scope="col">How long</th></tr></thead>
+<tbody>
+<tr><td>Play logs (stories started, accusations, cues)</td><td>90 days, then deleted automatically.</td></tr>
+<tr><td>Ratings</td><td>The stars and the spoiler answer are kept. Any comment is deleted after 90 days.</td></tr>
+<tr><td>Rate-limit records (the salted IP hash)</td><td>2 days, then deleted.</td></tr>
+<tr><td>Rejected submissions</td><td>90 days, then deleted.</td></tr>
+<tr><td>Approved stories and their credit name</td><td>For as long as the story is published.</td></tr>
+</tbody>
+</table></div>
+<p style="margin-top:16px">You can withdraw a story you submitted at any time with its claim code: ask your assistant to withdraw it, with Plot Speaks connected.</p>
 <h2>Questions or removal</h2>
 <p>Open an issue on <a href="${ISSUES}">GitHub</a>. Issues are public, so don't post personal details there: give the story title or roughly when you played, and we'll follow up.</p>
 <p style="margin:36px 0 64px"><a class="link-arrow" href="/support">Support ${icon("arrow", 18)}</a></p>
@@ -1115,12 +1437,19 @@ const MANIFEST = JSON.stringify({
   icons: [{ src: "/icon-192.png", sizes: "192x192", type: "image/png" }, { src: "/icon-512.png", sizes: "512x512", type: "image/png" }],
 });
 
+// The origin every page builds links from, the connector address above all. Claude refuses an
+// http connector URL, so anything but a local dev host is always https, whatever the request said.
+export function siteOrigin(url: URL): string {
+  const local = url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "[::1]";
+  return local ? url.origin : `https://${url.host}`;
+}
+
 // Returns a Response for site paths, or null to let the caller handle the request (e.g. /mcp).
 export async function handleSite(request: Request, stories: PublicStory[], db: D1Database | undefined): Promise<Response | null> {
   if (request.method !== "GET" && request.method !== "HEAD") return null;
   const url = new URL(request.url);
   const path = url.pathname.replace(/(.)\/$/, "$1");
-  const origin = url.origin;
+  const origin = siteOrigin(url);
   if (path === "/" || path === "/index.html") {
     return new Response(catalogPage(stories, await loadRatings(db), origin), { headers: HTML });
   }
@@ -1130,7 +1459,7 @@ export async function handleSite(request: Request, stories: PublicStory[], db: D
   if (path === "/privacy") return new Response(privacyPage(origin), { headers: HTML });
   if (path === "/support") return new Response(supportPage(origin), { headers: HTML });
   if (path === "/site.webmanifest") return new Response(MANIFEST, { headers: { "content-type": "application/manifest+json", "cache-control": "public, max-age=3600" } });
-  const m = /^\/stories\/([^/]+?)(\/story\.md|\/)?$/.exec(url.pathname);
+  const m = /^\/stories\/([^/]+?)(\/story\.md|\/passenger\/?|\/)?$/.exec(url.pathname);
   if (!m && !path.startsWith("/stories")) return null;
   let slug = "";
   try { slug = m ? decodeURIComponent(m[1]) : ""; } catch { slug = ""; }
@@ -1138,6 +1467,9 @@ export async function handleSite(request: Request, stories: PublicStory[], db: D
   if (!s) return new Response(notFoundPage(origin), { status: 404, headers: { ...HTML, "cache-control": "no-store" } });
   if (m && m[2] === "/story.md") {
     return new Response(s.story, { headers: { "content-type": "text/markdown; charset=utf-8", "cache-control": "public, max-age=60", "x-content-type-options": "nosniff" } });
+  }
+  if (m && m[2]?.startsWith("/passenger")) {
+    return new Response(passengerPage(s, origin), { headers: { ...HTML, "x-robots-tag": "noindex" } });
   }
   const ratings = await loadRatings(db);
   return new Response(storyPage(s, ratings.get(s.slug), origin), { headers: HTML });

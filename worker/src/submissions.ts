@@ -9,7 +9,8 @@
 //     served by the Worker at /covers/<slug>.jpg, the same path as the built-in covers.
 //
 // Used by index.ts:
-//   submitStory(env, ip, args)            the submit_story tool
+//   submitStory(env, ip, builtins, args)  the submit_story tool (new story, or a replacement with replaces_id + claim_code)
+//   withdrawSubmission(env, args)         the withdraw_submission tool (id + claim code)
 //   loadApprovedStories(db)               approved submissions in the play-tool Story shape
 //   handleAdmin(request, env, builtins)   /admin/* (key-gated; 404 when no admin key is set)
 //   serveSubmissionCover(db, slug)        /covers/<slug>.jpg for an approved submission
@@ -17,10 +18,10 @@
 // Flow of submit_story: size caps (zod, in index.ts) -> check_story lint (refuse on any ERROR) ->
 // per-IP and site-wide daily caps -> Llama Guard 3 on story_md and secrets_md -> cover -> D1 row
 // with status 'pending'. Nothing is public until Ben approves it at /admin/submissions.
-import { checkSubmitted } from "./studio";
+import { checkSubmitted, DENYLIST } from "./studio";
 import { generateCover } from "./covers";
 import { parseEndings, extractCue } from "../../tools/playtest/lib.mjs";
-import { parseFrontMatter } from "../../tools/check-story/rules.mjs";
+import { parseFrontMatter, checkDenylist } from "../../tools/check-story/rules.mjs";
 
 export const GUARD_MODEL = "@cf/meta/llama-guard-3-8b";
 export const PER_IP_DAILY = 3;
@@ -124,6 +125,51 @@ async function hashIp(ip: string, env: SubEnv): Promise<string> {
   return [...sig].map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 32);
 }
 
+// ------------------------------------------------------------------ author credit and claim codes
+
+/** author_name: the public "Written by" credit. Self-declared, no account; the reviewer checks it. */
+export function cleanAuthor(raw: string): { ok: true; name: string } | { ok: false; reason: string } {
+  const name = raw.normalize("NFC").replace(/\s+/g, " ").trim();
+  if (name.length < 2 || name.length > 60) return { ok: false, reason: "the credited name must be 2 to 60 characters" };
+  if (/[\u0000-\u001f\u007f"\\#<>|`{}\[\]]/.test(name)) return { ok: false, reason: "the credited name can't contain double quotes, #, <, >, |, brackets or backslashes" };
+  if (/:\/\/|\bwww\.|\S+@\S+\.\S+|\.(com|net|org|io|ai|app|co|me|xyz|gg)\b/i.test(name)) return { ok: false, reason: "the credited name can't be a web address or email address (it's shown publicly)" };
+  if (/plot\s*speaks|volocent/i.test(name)) return { ok: false, reason: "the credited name can't be Plot Speaks or Volocent" };
+  if ((checkDenylist(name, DENYLIST) as unknown[]).length) return { ok: false, reason: "the credited name matches a protected character or brand name" };
+  return { ok: true, name };
+}
+
+/** Puts the credited name into story.md's metadata.author (replacing the line, or adding one). */
+export function withAuthor(storyMd: string, author: string | null | undefined): string {
+  if (!author) return storyMd;
+  const s = nl(storyMd);
+  const fm = /^---\n([\s\S]*?)\n---(\n|$)/.exec(s);
+  if (!fm) return storyMd;
+  const line = `  author: "${author}"`;
+  let block = fm[1];
+  if (/^\s+author:.*$/m.test(block)) block = block.replace(/^\s+author:.*$/m, () => line);
+  else if (/^metadata:\s*$/m.test(block)) block = block.replace(/^metadata:\s*$/m, (m) => `${m}\n${line}`);
+  else return storyMd;
+  return `---\n${block}\n---${fm[2]}${s.slice(fm[0].length)}`;
+}
+
+// 12 characters from 31 that can't be confused when read aloud or copied (no 0/O, 1/I/L): about
+// 59 bits, shown once as XXXX-XXXX-XXXX. Only a SHA-256 of id + code is stored.
+const CLAIM_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+export function newClaimCode(): string {
+  const out: string[] = [];
+  while (out.length < 12) {
+    for (const b of crypto.getRandomValues(new Uint8Array(16))) {
+      if (b < 248 && out.length < 12) out.push(CLAIM_ALPHABET[b % 31]); // 248 = 8 * 31: no modulo bias
+    }
+  }
+  return `${out.slice(0, 4).join("")}-${out.slice(4, 8).join("")}-${out.slice(8).join("")}`;
+}
+const normCode = (c: string) => c.toUpperCase().replace(/[^A-Z0-9]/g, "");
+export async function claimHash(id: string, code: string): Promise<string> {
+  const d = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${id}:${normCode(code)}`)));
+  return [...d].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 const slugify = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48);
 
 function meta(storyMd: string) {
@@ -168,8 +214,13 @@ export async function submitStory(
   env: SubEnv,
   ip: string,
   builtins: Builtins,
-  args: { story_md: string; secrets_md?: string; contact?: string },
+  args: { story_md: string; secrets_md?: string; contact?: string; author_name: string; replaces_id?: string; claim_code?: string },
 ): Promise<string> {
+  const author = cleanAuthor(args.author_name ?? "");
+  if (!author.ok) {
+    log("submit_story", { outcome: "author" });
+    return `Not submitted: ${author.reason}. Ask the writer what name to credit (a pen name is fine) and submit again.`;
+  }
   const story = nl(args.story_md);
   const secrets = args.secrets_md ? nl(args.secrets_md) : undefined;
   const lint = checkSubmitted(story, secrets);
@@ -179,6 +230,22 @@ export async function submitStory(
   }
   const db = env.DB, ai = env.AI;
   if (!db || !ai) return "Submissions are switched off on this server right now. Nothing was stored.";
+
+  // A replacement: checked before screening, so a wrong code costs no Workers AI allowance.
+  let replacing: { id: string; slug: string; status: string } | null = null;
+  if (args.replaces_id || args.claim_code) {
+    if (!args.replaces_id || !args.claim_code) return "Not submitted: to update a submission, send both replaces_id (the submission id) and claim_code. Nothing was stored.";
+    const id = args.replaces_id.trim().toLowerCase();
+    try {
+      replacing = await db.prepare("SELECT id, slug, status FROM submissions WHERE id = ? AND claim_hash = ?").bind(id, await claimHash(id, args.claim_code)).first();
+    } catch (e) {
+      log("db_error", { where: "submit_replace", message: String(e) });
+    }
+    if (!replacing) {
+      log("submit_story", { outcome: "replace_no_match" });
+      return "Not submitted: no submission matches that id and claim code. Check both (the code looks like ABCD-EFGH-JKMN). Nothing was stored.";
+    }
+  }
 
   const ipHash = await hashIp(ip || "unknown", env);
   const since = Date.now() - DAY;
@@ -199,7 +266,8 @@ export async function submitStory(
   // Moderation. Failing closed: if the screener can't run, nothing is stored.
   let mod: { story: Verdict; secrets: Verdict | null };
   try {
-    mod = { story: await guard(ai, story), secrets: secrets ? await guard(ai, secrets) : null };
+    // The credit line is public too, so it is screened with the story.
+    mod = { story: await guard(ai, `Author credit (pen name): ${author.name}\n\n${story}`), secrets: secrets ? await guard(ai, secrets) : null };
   } catch (e) {
     log("submit_story", { outcome: "moderation_error", message: String(e).slice(0, 200) });
     await attempt("error", null).catch(() => {});
@@ -215,50 +283,107 @@ export async function submitStory(
   }
 
   const m = meta(story);
-  const id = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
-  let slug = m.slugWanted;
-  const taken = async (s: string) => builtins.slugs.has(s) || Boolean(await db.prepare("SELECT 1 FROM submissions WHERE slug = ?").bind(s).first());
-  if (await taken(slug)) slug = `${slug.slice(0, 40)}-${id.slice(0, 6)}`;
-
   let cover: { bytes: Uint8Array; contentType: string; prompt: string } | null = null;
   try {
     cover = await generateCover(ai, { story });
   } catch (e) {
     log("cover_error", { message: String(e).slice(0, 200) });
   }
-
-  const devMarker = env.ENVIRONMENT === "dev" && slug.startsWith("smoke-test") ? 1 : 0;
   const lintSummary = JSON.stringify({ errors: lint.errors, warnings: lint.warnings, summary: lint.report.split("\n")[0], report: lint.report.slice(0, 4000) });
   const moderation = JSON.stringify({ model: GUARD_MODEL, at: Date.now(), story: mod.story, secrets: mod.secrets });
+  const contact = args.contact?.trim() || null;
+  const common = [
+    secrets ? "The secrets file is kept private on the server: players only ever get one verdict line at a time." : "No secrets file was included; a mystery needs one (with an Endings detail section) before it can be approved.",
+    lint.warnings ? `The format check passed with ${lint.warnings} warning(s); the reviewer will see them.` : "The format check passed with no warnings.",
+    contact ? "Your contact details are seen only by the reviewer." : "",
+  ];
+
+  if (replacing) {
+    // Same id, slug and claim code; back to pending until a person reviews the new version.
+    await db.prepare(
+      `UPDATE submissions SET status = 'pending', reviewed_at = NULL, title = ?, genre = ?, players = ?, duration_minutes = ?, story_md = ?, secrets_md = ?,
+         contact = ?, moderation = ?, lint = ?, cover = ?, cover_type = ?, cover_prompt = ?, author_name = ? WHERE id = ?`,
+    ).bind(m.title, m.genre, m.players, m.duration, story, secrets ?? null, contact, moderation, lintSummary,
+      cover ? cover.bytes : null, cover?.contentType ?? null, cover?.prompt ?? null, author.name, replacing.id).run();
+    await attempt("stored", replacing.id);
+    log("submit_story", { outcome: "replaced", id: replacing.id, was: replacing.status, story_chars: story.length, warnings: lint.warnings });
+    return [
+      `Thank you! The new version of "${m.title}" replaced submission ${replacing.id}, credited to ${author.name}.`,
+      replacing.status === "approved"
+        ? "The old version was published; the story is now off the catalog until a person reviews the new version."
+        : "A person reviews every submission before it's published, so it is not public yet.",
+      "Your claim code stays the same.",
+      ...common,
+    ].filter(Boolean).join("\n");
+  }
+
+  const id = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
+  let slug = m.slugWanted;
+  const taken = async (s: string) => builtins.slugs.has(s) || Boolean(await db.prepare("SELECT 1 FROM submissions WHERE slug = ?").bind(s).first());
+  if (await taken(slug)) slug = `${slug.slice(0, 40)}-${id.slice(0, 6)}`;
+  const code = newClaimCode();
+  const devMarker = env.ENVIRONMENT === "dev" && slug.startsWith("smoke-test") ? 1 : 0;
   await db.prepare(
     `INSERT INTO submissions (id, created_at, status, title, slug, genre, players, duration_minutes, story_md, secrets_md, contact,
-       moderation, lint, cover, cover_type, cover_prompt, ip_hash, dev_marker)
-     VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).bind(id, Date.now(), m.title, slug, m.genre, m.players, m.duration, story, secrets ?? null, args.contact?.trim() || null,
-    moderation, lintSummary, cover ? cover.bytes : null, cover?.contentType ?? null, cover?.prompt ?? null, ipHash, devMarker).run();
+       moderation, lint, cover, cover_type, cover_prompt, ip_hash, dev_marker, author_name, claim_hash)
+     VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(id, Date.now(), m.title, slug, m.genre, m.players, m.duration, story, secrets ?? null, contact,
+    moderation, lintSummary, cover ? cover.bytes : null, cover?.contentType ?? null, cover?.prompt ?? null, ipHash, devMarker,
+    author.name, await claimHash(id, code)).run();
   await attempt("stored", id);
   log("submit_story", { outcome: "stored", id, story_chars: story.length, secrets_chars: secrets?.length ?? 0, warnings: lint.warnings, cover: Boolean(cover) });
 
   return [
-    `Thank you! "${m.title}" was received. Submission id: ${id}.`,
-    "A person reviews every submission before it's published, so it is not public yet and can't be played or found in the catalog until it's approved.",
-    secrets ? "The secrets file is kept private on the server: players only ever get one verdict line at a time." : "No secrets file was included; a mystery needs one (with an Endings detail section) before it can be approved.",
-    lint.warnings ? `The format check passed with ${lint.warnings} warning(s); the reviewer will see them.` : "The format check passed with no warnings.",
-    args.contact ? "Your contact details are seen only by the reviewer." : "",
+    `Thank you! "${m.title}" was received, credited to ${author.name}. Submission id: ${id}.`,
+    `Claim code: ${code}`,
+    "Please keep the claim code somewhere safe: it is shown only this once. There are no accounts, so the submission id and this code are how you withdraw the story or send a new version later. Nobody else can do either without the code, and Plot Speaks can't look it up for you.",
+    "A person reviews every submission before it's published, so it is not public yet and can't be played or found in the catalog until it's approved. The reviewer also checks the credited name.",
+    ...common,
   ].filter(Boolean).join("\n");
+}
+
+// ------------------------------------------------------------------ withdraw_submission
+
+export async function withdrawSubmission(env: SubEnv, args: { id: string; claim_code: string }): Promise<string> {
+  const db = env.DB;
+  if (!db) return "Withdrawals aren't available on this server right now. Nothing was changed.";
+  const id = args.id.trim().toLowerCase();
+  let row: { id: string; title: string; status: string; dev_marker: number } | null = null;
+  try {
+    row = await db.prepare("SELECT id, title, status, dev_marker FROM submissions WHERE id = ? AND claim_hash = ?").bind(id, await claimHash(id, args.claim_code)).first();
+  } catch (e) {
+    log("db_error", { where: "withdraw", message: String(e) });
+    return "Withdrawals aren't available on this server right now. Nothing was changed.";
+  }
+  // One answer for an unknown id and a wrong code, so ids can't be probed.
+  if (!row) {
+    log("withdraw_submission", { outcome: "no_match" });
+    return "Not withdrawn: no submission matches that id and claim code. Check both (the code looks like ABCD-EFGH-JKMN). Nothing was changed.";
+  }
+  await db.batch([
+    db.prepare("DELETE FROM submissions WHERE id = ?").bind(id),
+    // The attempt rows still count toward the daily caps (withdrawing must not reset them), so they
+    // only lose the link; smoke-test rows on dev are removed outright.
+    row.dev_marker
+      ? db.prepare("DELETE FROM submission_attempts WHERE submission_id = ?").bind(id)
+      : db.prepare("UPDATE submission_attempts SET submission_id = NULL WHERE submission_id = ?").bind(id),
+  ]);
+  log("withdraw_submission", { outcome: "deleted", id, was: row.status });
+  return `Withdrawn: "${row.title}" (submission ${id}) has been deleted from Plot Speaks${row.status === "approved" ? " and is no longer in the catalog" : ""}. Its claim code no longer works.`;
 }
 
 // ------------------------------------------------------------------ approved submissions
 
-type Row = { slug: string; title: string; genre: string | null; players: string | null; duration_minutes: number | null; story_md: string; secrets_md: string | null };
+type Row = { slug: string; title: string; genre: string | null; players: string | null; duration_minutes: number | null; story_md: string; secrets_md: string | null; author_name: string | null };
 
 async function approvedRows(db: D1Database | undefined): Promise<Row[]> {
   if (!db) return [];
   try {
     const { results } = await db.prepare(
-      "SELECT slug, title, genre, players, duration_minutes, story_md, secrets_md FROM submissions WHERE status = 'approved' ORDER BY reviewed_at, created_at",
+      "SELECT slug, title, genre, players, duration_minutes, story_md, secrets_md, author_name FROM submissions WHERE status = 'approved' ORDER BY reviewed_at, created_at",
     ).all<Row>();
-    return results ?? [];
+    // The credited name becomes metadata.author in every copy served (players and the site).
+    return (results ?? []).map((r) => ({ ...r, story_md: withAuthor(r.story_md, r.author_name) }));
   } catch (e) {
     log("db_error", { where: "approved_submissions", message: String(e) });
     return [];
@@ -394,7 +519,7 @@ export async function handleAdmin(request: Request, env: SubEnv, builtins: Built
   if (url.pathname === "/admin/submissions" && request.method === "GET") {
     const all = url.searchParams.get("status") === "all";
     const { results } = await db.prepare(
-      `SELECT id, created_at, status, title, slug, genre, story_md, secrets_md, contact, moderation, lint, cover_prompt, dev_marker,
+      `SELECT id, created_at, status, title, slug, genre, story_md, secrets_md, contact, author_name, moderation, lint, cover_prompt, dev_marker,
               cover IS NOT NULL AS has_cover
        FROM submissions ${all ? "" : "WHERE status = 'pending'"} ORDER BY created_at DESC LIMIT 50`,
     ).all<Record<string, any>>();
@@ -420,6 +545,7 @@ function adminPage(rows: Record<string, any>[], all: boolean): string {
     <div>
       <h2>${esc(r.title)} <small>${esc(r.slug)} · ${esc(r.genre)} · ${esc(r.status)}${r.dev_marker ? " · smoke test" : ""}</small></h2>
       <p>Submitted ${esc(new Date(r.created_at).toISOString().replace("T", " ").slice(0, 16))} UTC · id ${esc(r.id)}${r.contact ? ` · contact: ${esc(r.contact)}` : ""}</p>
+      <p><b>Credit ("Written by", self-declared; check it):</b> ${r.author_name ? esc(r.author_name) : "<i>none given (the front matter's author is used)</i>"}</p>
       <p><b>Lint:</b> ${esc(lint.summary ?? "")}</p>
       <p><b>Moderation (${esc(mod.model ?? "")}):</b> story ${esc(verdict(mod.story))}; secrets ${esc(mod.secrets ? verdict(mod.secrets) : "none submitted")}</p>
       ${r.cover_prompt ? `<p><b>Cover prompt:</b> ${esc(r.cover_prompt)}</p>` : ""}
