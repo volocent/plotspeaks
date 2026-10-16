@@ -70,11 +70,47 @@ export function meta(p: PublicStory): Meta {
 // connector address, "{claude}" with the Claude install link and "{story}" with a story title.
 // Source: docs/research-notes/connector-setup-2026.md (read 2026-10-16), "Connect in 30
 // seconds". Voice through the connector is confirmed for Claude only (our test, 2026-10-15).
+// The order here is the order of the Connect buttons (home, story pages) and of /connect:
+// Claude, ChatGPT, Gemini, then everything else under "Other assistants" (OTHERS below).
+// Each assistant has a short pop-up version ("pop", the dialog the Connect buttons open) and the
+// full /connect version (plan, steps, notes). Placeholders in pop strings, besides the above:
+// "{pick}" (how to get a story to paste) and "{passenger}" (the passenger page, linked when the
+// page is a story page).
 type Assistant = {
   id: string; name: string; tab: string; status: string; ok?: boolean; plan: string;
+  // The Connect button's label. Text only, no company logos (Ben, 2026-10-16: brand rules are
+  // being checked). aiButtons() has the slot: give an assistant `logo` (trusted inline SVG) and
+  // it shows before the name.
+  btn: string; logo?: string;
+  // The pop-up's heading. Text-only wording from directories-and-logos-2026.md §1: "Connect to
+  // Claude", "Use with ChatGPT", "Works with Gemini". Never "partnered with".
+  title: string;
   button?: { href: string; label: string };
   steps: string[]; open?: string; say?: string; notes: string[];
+  pop: { lead: string; steps?: string[]; stepsHead?: string; alt?: { head: string; text: string }; notes: string[] };
+  others?: boolean;
 };
+// "Other assistants": a one-liner each in the pop-up, the steps on /connect. popup: false keeps an
+// entry on /connect only. The old /connect anchors (#lechat, #more, #copilot) land on the Other tab.
+// Mistral renamed Le Chat to Vibe on 2026-05-28 (docs/research-notes/directories-and-logos-2026.md §3);
+// the id stays "lechat" so old links still land on it.
+type Other = { id: string; name: string; status: string; line: string; how?: string; popup: boolean };
+const OTHERS: Other[] = [
+  { id: "lechat", name: "Vibe (formerly Le Chat)", status: "Free plan works", popup: true,
+    line: "Free plan works, and it needs no sign-in. We haven't tested voice play yet.",
+    how: "In Vibe on the web (chat.mistral.ai), open <strong>Connectors → + Add Connector → Custom MCP Connector</strong>. Name it <strong>PlotSpeaks</strong> (no spaces), paste <code>{url}</code> and tap <strong>Connect</strong>." },
+  { id: "perplexity", name: "Perplexity", status: "Paid plans · untested", popup: true,
+    line: "Paid plans can add it by its address. We haven't played a story through it yet.",
+    how: "<strong>Plugins → Add custom → Connector → Add MCP connector → Remote</strong>. Name it Plot Speaks, paste <code>{url}</code>, leave authentication as <strong>None</strong>, tick the box and tap <strong>Add</strong>." },
+  { id: "grok", name: "Grok", status: "Untested", popup: true,
+    line: "It can add a custom connector by address, but which plans and devices support it isn't documented. Untested.",
+    how: "Go to <strong>grok.com/connectors → New Connector → Custom</strong> and paste <code>{url}</code>." },
+  // Meta AI: the Meta AI app and meta.ai don't support connectors (directories-and-logos-2026.md §2.4, 2026-10-16).
+  { id: "metaai", name: "Meta AI", status: "No connectors yet", popup: true,
+    line: "Meta AI can't add connectors yet. Pasting a story may work, but we haven't tested it." },
+  { id: "copilot", name: "Microsoft Copilot", status: "Not supported", popup: false,
+    line: "Copilot's consumer app has no way to add a custom connector. Pasting a story may work, but we haven't tested it." },
+];
 // The opening line (Ben, 2026-10-16): "Open Plot Speaks" gives a short intro and the choice of
 // browsing, starting or writing a story. Naming a story still goes straight in.
 const OPEN_LINE = "Open Plot Speaks.";
@@ -83,10 +119,10 @@ const claudeLink = (mcpUrl: string) =>
   `https://claude.ai/customize/connectors?modal=add-custom-connector&connectorName=${encodeURIComponent("Plot Speaks")}&connectorUrl=${encodeURIComponent(mcpUrl)}`;
 const CONNECT: { headline: string; short: string; assistants: Assistant[] } = {
   headline: "Connect once, then just say which story you want.",
-  short: "Add Plot Speaks to Claude as a connector. One tap, no sign-in. Claude's Free plan includes one custom connector, and Plot Speaks can be it.",
+  short: "Pick your assistant and connect it once. Plot Speaks brings the story and keeps the answer key.",
   assistants: [
     {
-      id: "claude", name: "Claude", tab: "Claude", status: "Recommended · works by voice", ok: true,
+      id: "claude", name: "Claude", tab: "Claude", btn: "Claude", title: "Connect to Claude", status: "Recommended · works by voice", ok: true,
       plan: "Works on every Claude plan, including Free. Free accounts can add one custom connector, and Plot Speaks will use it. On a Team or Enterprise account, your admin adds it first.",
       button: { href: "{claude}", label: "Connect to Claude" },
       steps: [
@@ -103,42 +139,17 @@ const CONNECT: { headline: string; short: string; assistants: Assistant[] } = {
         "Say “Open Plot Speaks” or the story's name. A vague “play something” can send Claude on a detour.",
         "Doing it by hand: <strong>Customize → Connectors → + Add → Add custom connector</strong>, name it Plot Speaks and paste <code>{url}</code>.",
       ],
+      pop: {
+        lead: "One tap, no sign-in. Check the name says <strong>Plot Speaks</strong>, choose <strong class='nw'>No sign-in</strong> if asked, and tap <strong>Add</strong>.",
+        notes: [
+          "<strong>On a phone</strong>, open the link in your browser. Once it's added, Plot Speaks appears in the Claude app and works in voice mode.",
+          "In a new chat, tap <strong>+ → Connectors</strong> and make sure Plot Speaks is on.",
+          "<strong>Free plan:</strong> one custom connector is included, and Plot Speaks can be it. On Team or Enterprise, your admin adds it first.",
+        ],
+      },
     },
     {
-      id: "lechat", name: "Le Chat (Mistral)", tab: "Le Chat", status: "Free plan works",
-      plan: "Le Chat accepts custom connectors with no sign-in, on the free plan too.",
-      steps: [
-        "In Le Chat on the web, open <strong>Connectors → + Add Connector → Custom MCP Connector</strong>.",
-        "Name it <strong>PlotSpeaks</strong> (no spaces) and paste <code>{url}</code>. Tap <strong>Connect</strong>.",
-        "In a chat, say <strong>“Open Plot Speaks.”</strong> or name a story: <strong>“Start {story} with Plot Speaks.”</strong>",
-      ],
-      open: OPEN_LINE,
-      say: "Start {story} with Plot Speaks.",
-      notes: ["We haven't tested voice play in Le Chat yet."],
-    },
-    {
-      id: "gemini", name: "Gemini", tab: "Gemini", status: "US, 18+, personal accounts",
-      plan: "Gemini can add custom apps for people in the US who are 18 or older, on a personal Google account with Keep Activity turned on. Not on work or school accounts.",
-      steps: [
-        "In your phone's browser, go to <strong>gemini.google.com → Menu → Settings → Connected Apps</strong> (it may sit under Personal Intelligence).",
-        "Choose <strong>Add a custom app</strong>, paste <code>{url}</code>, tap <strong>Next</strong> and follow the prompts.",
-        "It then works in the Gemini app too. Type <strong>@Plot Speaks open</strong> for the intro, or <strong>@Plot Speaks</strong> and the story's name.",
-      ],
-      open: "@Plot Speaks open.",
-      say: "@Plot Speaks start {story}.",
-      notes: ["We haven't tested voice (Gemini Live) with Plot Speaks yet."],
-    },
-    {
-      id: "more", name: "Perplexity and Grok", tab: "Perplexity, Grok", status: "Untested",
-      plan: "Both can add a custom connector by address. We haven't played a story through either yet.",
-      steps: [
-        "<strong>Perplexity</strong> (paid plans): <strong>Plugins → Add custom → Connector → Add MCP connector → Remote</strong>. Name it Plot Speaks, paste <code>{url}</code>, leave authentication as <strong>None</strong>, tick the box and tap <strong>Add</strong>.",
-        "<strong>Grok</strong>: go to <strong>grok.com/connectors → New Connector → Custom</strong> and paste <code>{url}</code>. Which plans and devices support it isn't documented.",
-      ],
-      notes: ["If either gives you trouble, paste the story instead: open any story page and tap <strong>Copy the story</strong>."],
-    },
-    {
-      id: "chatgpt", name: "ChatGPT", tab: "ChatGPT", status: "Free and Plus: paste",
+      id: "chatgpt", name: "ChatGPT", tab: "ChatGPT", btn: "ChatGPT", title: "Use with ChatGPT", status: "Free and Plus: paste",
       plan: "Today, custom connectors in ChatGPT need a <strong>Business, Enterprise or Edu</strong> plan. On <strong>Free and Plus</strong>, paste the story instead. It plays start to finish by voice: we've tested it on ChatGPT Free.",
       button: { href: "/#stories", label: "Pick a story to paste" },
       steps: [
@@ -152,17 +163,56 @@ const CONNECT: { headline: string; short: string; assistants: Assistant[] } = {
         "On a Business, Enterprise or Edu plan, add it on the web: <strong>Plugins → + → Add custom MCP server</strong>, paste <code>{url}</code> and choose no authentication.",
         "A ChatGPT app listing is planned, so Free and Plus can connect too. Until then, paste.",
       ],
+      pop: {
+        lead: "Today, custom connectors in ChatGPT need a <strong>Business, Enterprise or Edu</strong> plan. On Free and Plus, paste the story instead: it plays start to finish by voice.",
+        stepsHead: "On Free or Plus",
+        steps: [
+          "{pick}",
+          "Start a <strong>new chat</strong> and paste it as the first message. Don't attach it as a file.",
+          "Tap the voice button and say <strong>“Plot Speaks, start the story.”</strong>",
+          "Give {passenger} to a passenger. It holds the answer key, so they read out the verdict when the narrator asks.",
+        ],
+        alt: { head: "On Business, Enterprise or Edu", text: "On the web: <strong>Plugins → + → Add custom MCP server</strong>, paste the address and choose no authentication." },
+        notes: ["A ChatGPT app listing is planned, so Free and Plus can connect too. No date yet."],
+      },
     },
     {
-      id: "copilot", name: "Microsoft Copilot", tab: "Copilot", status: "Not supported",
-      plan: "Copilot's consumer app has no way to add a custom connector. Pasting a story may work, but we haven't tested it.",
-      steps: [],
-      notes: ["Claude's free plan is the easiest way to play with the connector."],
+      id: "gemini", name: "Gemini", tab: "Gemini", btn: "Gemini", title: "Works with Gemini", status: "US, 18+, personal accounts",
+      plan: "Gemini can add custom apps for people in the US who are 18 or older, on a personal Google account with Keep Activity turned on. Not on work or school accounts.",
+      steps: [
+        "In your phone's browser, go to <strong>gemini.google.com → Menu → Settings → Connected Apps</strong> (it may sit under Personal Intelligence).",
+        "Choose <strong>Add a custom app</strong>, paste <code>{url}</code>, tap <strong>Next</strong> and follow the prompts.",
+        "It then works in the Gemini app too. Type <strong>@Plot Speaks open</strong> for the intro, or <strong>@Plot Speaks</strong> and the story's name.",
+      ],
+      open: "@Plot Speaks open.",
+      say: "@Plot Speaks start {story}.",
+      notes: ["We haven't tested voice (Gemini Live) with Plot Speaks yet."],
+      pop: {
+        lead: "For people in the <strong>US</strong>, <strong>18 or older</strong>, on a <strong>personal</strong> Google account with Keep Activity on. Not on work or school accounts.",
+        steps: [
+          "Add it on the web: in your phone's browser, go to <strong>gemini.google.com → Menu → Settings → Connected Apps</strong> (it may sit under Personal Intelligence).",
+          "Choose <strong>Add a custom app</strong>, paste the address, tap <strong>Next</strong> and follow the prompts.",
+          "It then works in the Gemini app too.",
+        ],
+        notes: ["We haven't tested voice (Gemini Live) with Plot Speaks yet."],
+      },
+    },
+    {
+      id: "other", name: "Other assistants", tab: "Other", btn: "Other assistants", title: "Other assistants", status: "Vibe, Perplexity, Grok",
+      plan: "These can add Plot Speaks by its address too. We've tested voice play on Claude (connector) and ChatGPT (paste) only.",
+      steps: [], others: true,
+      open: OPEN_LINE,
+      notes: ["If one gives you trouble, paste the story instead: open any story page and tap <strong>Copy the story</strong>."],
+      pop: {
+        lead: "These can add Plot Speaks by its address too. We've tested voice play on Claude and ChatGPT only.",
+        notes: ["Anything else: paste the story. Open a story page and tap <strong>Copy the story</strong>."],
+      },
     },
   ],
 };
-const fill = (s: string, url: string, story: string) =>
-  s.replace(/\{url\}/g, esc(url)).replace(/\{claude\}/g, esc(claudeLink(url))).replace(/\{story\}/g, esc(story));
+const fill = (s: string, url: string, story: string, extra: Record<string, string> = {}) =>
+  s.replace(/\{url\}/g, esc(url)).replace(/\{claude\}/g, esc(claudeLink(url))).replace(/\{story\}/g, esc(story))
+    .replace(/\{(pick|passenger)\}/g, (all, k) => extra[k] ?? all);
 
 // ============================================================================ CATEGORIES
 type Category = { id: string; name: string; short: string; blurb: string; icon: string; match: (m: Meta) => boolean };
@@ -189,6 +239,7 @@ const ICON = {
   pen: `<path d="M4 20l1-4.5L15.5 5a2 2 0 0 1 3 3L8 18.5Z"/><path d="M13.5 7l3 3"/>`,
   book: `<path d="M12 6.5C10 5 7 4.5 3.5 5v13c3.5-.5 6.5 0 8.5 1.5 2-1.5 5-2 8.5-1.5V5C17 4.5 14 5 12 6.5Z"/><path d="M12 6.5v13"/>`,
   menu: `<path d="M4 7h16M4 12h16M4 17h16"/>`,
+  close: `<path d="M6 6l12 12M18 6 6 18"/>`,
   shield: `<path d="M12 3 5 6v5.5c0 4.5 3 8 7 9.5 4-1.5 7-5 7-9.5V6Z"/><path d="m9 12 2 2 4-4"/>`,
 };
 type IconName = keyof typeof ICON;
@@ -260,26 +311,7 @@ function copyField(url: string, id: string, big = false): string {
 <p class="copy-status" role="status" aria-live="polite" data-status-for="${id}"></p>`;
 }
 
-function connectCard(origin: string, story: string, opts: { id: string; heading?: "h2" | "h3"; lead?: string; passenger?: string } = { id: "mcp-url" }): string {
-  const h = opts.heading ?? "h2";
-  const url = origin + "/mcp";
-  return `<section class="connect-card" aria-labelledby="${opts.id}-h">
-<p class="eyebrow">${icon("plug", 18)} Start here</p>
-<${h} id="${opts.id}-h">${esc(CONNECT.headline)}</${h}>
-<p>${opts.lead ?? esc(CONNECT.short)}</p>
-<div class="connect-actions">
-<a class="btn btn-primary btn-big" href="${esc(claudeLink(url))}" rel="noopener">${icon("plug", 20)}Connect to Claude</a>
-<span class="or">or copy the address</span>
-</div>
-${copyField(url, opts.id, false)}
-<p class="fine">On a phone, open the link in your browser and tap <strong>Add</strong>. Once added, Plot Speaks shows up in the Claude app, and it works in voice mode.</p>
-<p class="then">Then, in a chat, tap <strong>+ → Connectors</strong>, turn Plot Speaks on, and say <strong>“${esc(OPEN_LINE)}”</strong> for a quick intro and the choice to browse, start or write a story. Or name it: <strong>“${esc(`Start ${story} with Plot Speaks.`)}”</strong></p>
-${chatgptNote(opts.passenger)}
-<p class="connect-links"><a class="link-arrow" href="/connect">Le Chat, Gemini, ChatGPT and more ${icon("arrow", 18)}</a></p>
-</section>`;
-}
-
-// The honest ChatGPT line, on every connect card. passenger: the story's passenger page, if any.
+// The honest ChatGPT line, at the top of /connect. passenger: the story's passenger page, if any.
 function chatgptNote(passenger?: string): string {
   return `<div class="gpt-note">
 <p class="gpt-note-h">${icon("chat", 18)} Using ChatGPT?</p>
@@ -287,25 +319,101 @@ function chatgptNote(passenger?: string): string {
 </div>`;
 }
 
-// BYOA: the headline idea (Ben, 2026-10-16). Plain names as text chips, never logos.
-const BYOA_CHIPS: [string, string][] = [
-  ["ChatGPT", "Paste a story"],
-  ["Claude", "Connector, free"],
-  ["Gemini", "Connector, US"],
-  ["Le Chat", "Connector, free"],
-];
+// ============================================================================ CONNECT BUTTONS
+// BYOA, the headline idea (Ben, 2026-10-16). One Connect button per assistant, text only (no
+// logos until each company's brand rules are checked; see Assistant.logo for the slot). Without
+// script each button is a link to that assistant's /connect section; DIALOG_JS turns it into a
+// button that opens the pop-up from connectDialogs(), which every page with buttons includes.
 function byoaBadge(): string {
   return `<span class="byoa-badge"><span class="byoa-tag">BYOA</span><span class="byoa-name">Bring your own assistant</span></span>`;
 }
-function byoaHero(): string {
-  return `<div class="byoa">
-${byoaBadge()}
-<ul class="ai-chips" aria-label="Assistants that can play">
-${BYOA_CHIPS.map(([n, how]) => `<li><span class="ai-name">${esc(n)}</span><span class="ai-how">${esc(how)}</span></li>`).join("\n")}
-</ul>
-<p class="byoa-line"><strong>No new app, no account, no subscription.</strong> Plot Speaks brings the story and keeps the answer key.</p>
-</div>`;
+function aiButtons(label = "Connect your assistant"): string {
+  return `<ul class="ai-btns" aria-label="${esc(label)}">
+${CONNECT.assistants.map((a) => `<li><a class="ai-btn" href="/connect#${a.id}" data-dialog="dlg-${a.id}">${a.logo ? `<span class="ai-btn-logo" aria-hidden="true">${a.logo}</span>` : ""}<span class="ai-btn-name">${esc(a.btn)}</span><span class="ai-btn-act">${icon("plug", 16)}Connect</span></a></li>`).join("\n")}
+</ul>`;
 }
+// The home page's call to action, in the hero and again at the bottom: badge, buttons, the line.
+function connectPanel(opts: { id: string; heading?: string }): string {
+  return `<section class="byoa" aria-labelledby="${opts.id}-h">
+${byoaBadge()}
+${opts.heading ? `<h2 class="byoa-h" id="${opts.id}-h">${esc(opts.heading)}</h2>` : `<h2 class="byoa-h byoa-h-sm" id="${opts.id}-h">Pick your assistant and connect it once.</h2>`}
+${aiButtons()}
+<p class="byoa-line">Then just say <strong>“${esc(OPEN_LINE)}”</strong> No new app, no account with us, no subscription. Plot Speaks brings the story and keeps the answer key.</p>
+</section>`;
+}
+
+type DialogCtx = { url: string; story: string; storyPage?: { passenger: string; isMystery: boolean } };
+function connectDialogs(ctx: DialogCtx): string {
+  const { url, story, storyPage } = ctx;
+  const extra = {
+    pick: storyPage
+      ? `Copy this story: <span class="dlg-copy"><button class="btn btn-primary btn-sm" type="button" data-copy-story>${icon("copy", 18)}Copy the story</button><span class="copied" role="status" aria-live="polite"></span></span>`
+      : `<a href="/#stories" data-close>Pick a story</a> and tap <strong>Copy the story</strong> on its page.`,
+    passenger: storyPage ? `<a href="${esc(storyPage.passenger)}">the passenger page</a>` : "the story's <strong>passenger page</strong> (every story page links one)",
+  };
+  const f = (s: string) => fill(s, url, story, extra);
+  const sayStory = `Start ${story} with Plot Speaks.`;
+  const thenSay = (a: Assistant) => {
+    if (a.id === "gemini") return `<p class="saybox"><b>Then say</b>“${esc(storyPage ? `@Plot Speaks start ${story}.` : "@Plot Speaks open.")}”<span class="saybox-sub">${storyPage ? "Or “@Plot Speaks open” for the intro." : `Or name a story: “@Plot Speaks start ${esc(story)}.”`}</span></p>`;
+    const sub = a.id === "chatgpt" ? "With the connector. Pasted a story? Say “Plot Speaks, start the story.”"
+      : storyPage ? `Or “${esc(OPEN_LINE)}” for a quick intro and the other stories.` : `Or name a story: “${esc(sayStory)}”`;
+    return `<p class="saybox"><b>Then say</b>“${esc(storyPage && a.id !== "chatgpt" ? sayStory : OPEN_LINE)}”<span class="saybox-sub">${sub}</span></p>`;
+  };
+  const list = (items: string[], cls = "steps") => items.length ? `<ol class="${cls}">${items.map((s) => `<li>${f(s)}</li>`).join("")}</ol>` : "";
+  const notes = (items: string[]) => items.length ? `<ul class="dlg-notes">${items.map((n) => `<li>${f(n)}</li>`).join("")}</ul>` : "";
+  return CONNECT.assistants.map((a) => {
+    const id = `dlg-${a.id}`;
+    const copy = copyField(url, `${id}-url`, false);
+    let inner = `<p class="dlg-lead">${f(a.pop.lead)}</p>`;
+    if (a.id === "claude") {
+      inner += `<p class="dlg-cta"><a class="btn btn-primary btn-big" href="${esc(claudeLink(url))}" rel="noopener">${icon("plug", 20)}Connect to Claude</a></p>
+<p class="dlg-or">or copy the address</p>${copy}${notes(a.pop.notes)}`;
+    } else if (a.id === "chatgpt") {
+      inner += `<h3 class="dlg-h">${esc(a.pop.stepsHead ?? "")}</h3>${list(a.pop.steps ?? [])}`;
+      if (a.pop.alt) inner += `<h3 class="dlg-h">${esc(a.pop.alt.head)}</h3><p>${f(a.pop.alt.text)}</p>${copy}`;
+      inner += notes(a.pop.notes);
+    } else if (a.others) {
+      inner += copy + `<ul class="dlg-others">${OTHERS.filter((o) => o.popup).map((o) => `<li><p class="dlg-other-h"><strong>${esc(o.name)}</strong> <span class="status">${esc(o.status)}</span></p><p>${f(o.line)}</p></li>`).join("")}</ul>${notes(a.pop.notes)}`;
+    } else {
+      inner += list(a.pop.steps ?? []) + copy + notes(a.pop.notes);
+    }
+    return `<dialog class="cdlg" id="${id}" aria-labelledby="${id}-h">
+<div class="cdlg-in">
+<div class="cdlg-head">
+<h2 id="${id}-h">${esc(a.title)} <span class="status${a.ok ? " status-ok" : ""}">${esc(a.status)}</span></h2>
+<button class="cdlg-x" type="button" data-close aria-label="Close">${icon("close", 22)}</button>
+</div>
+<div class="cdlg-body">
+${inner}
+${thenSay(a)}
+<p class="dlg-more"><a class="link-arrow" href="/connect#${a.id}">Full details on the Connect page ${icon("arrow", 18)}</a></p>
+</div>
+</div>
+</dialog>`;
+  }).join("\n");
+}
+// Opens a pop-up from its button: native <dialog> + showModal() (focus stays inside, Esc closes),
+// a click on the backdrop or any [data-close] closes it, and focus returns to the button.
+const DIALOG_JS = `(function(){
+  var btns=[].slice.call(document.querySelectorAll("a[data-dialog]"));
+  btns.forEach(function(b){
+    var d=document.getElementById(b.getAttribute("data-dialog"));
+    if(!d||typeof d.showModal!=="function")return;
+    b.setAttribute("role","button");b.setAttribute("aria-haspopup","dialog");
+    function open(e){e.preventDefault();d._from=b;d.showModal();var s=d.querySelector(".cdlg-body");if(s)s.scrollTop=0;}
+    b.addEventListener("click",open);
+    b.addEventListener("keydown",function(e){if(e.key===" "){open(e);}});
+  });
+  [].forEach.call(document.querySelectorAll("dialog.cdlg"),function(d){
+    var down=false;
+    d.addEventListener("pointerdown",function(e){down=e.target===d;});
+    d.addEventListener("click",function(e){
+      if(e.target===d&&down){d.close();return;}
+      var c=e.target.closest&&e.target.closest("[data-close]");if(c){if(c.tagName==="A")d._from=null;d.close();}
+    });
+    d.addEventListener("close",function(){if(d._from){d._from.focus();d._from=null;}});
+  });
+})();`;
 
 function phrasesTable(m: Meta | null): string {
   const isMystery = !m || m.genre === "murder-mystery" || m.genre === "kids";
@@ -438,24 +546,23 @@ p{margin:0 0 1em}
 .bars i:nth-child(3n){animation-delay:.2s}.bars i:nth-child(3n+1){animation-delay:.45s}.bars i:nth-child(4n){animation-delay:.7s}.bars i:nth-child(5n){animation-delay:.9s}
 @keyframes bar{0%,100%{height:22%}50%{height:100%}}
 
-/* connect card */
-.connect-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:24px 20px;position:relative;overflow:hidden}
-.connect-card::after{content:"";position:absolute;right:-60px;top:-60px;width:180px;height:180px;border-radius:50%;border:14px solid var(--sky);opacity:.12;pointer-events:none}
-.connect-card h2,.connect-card h3{font-size:clamp(1.45rem,4.6vw,1.95rem);margin:0 0 10px;max-width:22ch}
-.connect-card>p{color:var(--ink-2)}
-@media (min-width:720px){.connect-card{padding:32px}}
+/* story page: the Connect row */
+.connect-row{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:24px 20px;position:relative;overflow:hidden}
+.connect-row::after{content:"";position:absolute;right:-60px;top:-60px;width:180px;height:180px;border-radius:50%;border:14px solid var(--sky);opacity:.12;pointer-events:none}
+.connect-row h2{font-size:clamp(1.45rem,4.6vw,1.95rem);margin:0 0 10px;max-width:22ch}
+.connect-row>p:not(.eyebrow):not(.saybox){color:var(--ink-2)}
+.connect-row .saybox{margin:16px 0 14px}
+.connect-alt{display:flex;gap:10px;align-items:flex-start;margin:0;font-size:.96rem}
+.connect-alt .ic{color:var(--accent);margin-top:3px}
+@media (min-width:720px){.connect-row{padding:32px}}
 .urlbox{display:flex;flex-wrap:wrap;gap:10px;align-items:stretch;margin:18px 0 4px}
 .urlbox .url{flex:1 1 220px;display:flex;align-items:center;min-height:50px;padding:12px 16px;border-radius:14px;background:var(--bg);border:1.5px dashed var(--line-2);font-size:1rem;color:var(--ink);word-break:break-all}
 .urlbox .btn{flex:1 1 auto}
 @media (min-width:520px){.urlbox .btn{flex:0 0 auto}}
-.connect-actions{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;margin:20px 0 0}
 .btn-big{min-height:58px;padding:16px 28px;font-size:1.08rem;flex:1 1 auto;max-width:100%}
 @media (min-width:520px){.btn-big{flex:0 0 auto}}
-.or{font-size:.9rem;color:var(--ink-2);font-weight:600}
 .urlbox .btn-ghost{background:var(--surface)}
 .copy-status{min-height:1.4em;margin:6px 0 0;font-size:.9rem;color:var(--ink-2)}
-.then{margin:10px 0 6px;font-size:1.02rem}
-.connect-links{margin:0}
 
 /* sections */
 .section{padding:64px 0}
@@ -624,6 +731,13 @@ details.script pre{margin:0;padding:0 18px 18px;white-space:pre-wrap;word-break:
 .saybox.saybox-alt b{color:var(--accent)}
 .saybox b{display:block;font:700 .72rem/1 var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--peach);margin-bottom:8px}
 .assistant ul.notes{margin:0;padding:0;list-style:none;display:grid;gap:10px}
+.others{list-style:none;margin:18px 0;padding:0;display:grid;gap:12px}
+.others li{padding:16px 18px;border-radius:var(--radius);border:1px solid var(--line);background:var(--surface-2);scroll-margin-top:96px}
+.others h3{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;font-size:1.2rem;margin:0 0 6px}
+.others .status{font-size:.64rem;padding:5px 8px}
+.others p{margin:0 0 6px;color:var(--ink-2)}
+.others p:last-child{margin:0}
+.others .how{color:var(--ink)}
 
 /* prose pages */
 .page-head{padding:48px 0 28px}
@@ -646,19 +760,26 @@ details.script pre{margin:0;padding:0 18px 18px;white-space:pre-wrap;word-break:
 .byoa .byoa-badge{background:rgba(255,255,255,.08);box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.2);color:#F6F0E6}
 .byoa .byoa-tag{background:var(--orange);color:#14233D}
 .byoa .byoa-tag::after{background:var(--sky);box-shadow:0 0 0 2px #143A63}
-.byoa .ai-chips li{background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.16)}
-.byoa .ai-name{color:#FFFDF9}
-.byoa .ai-how{color:var(--peach)}
 .byoa .byoa-line{color:#C9D5E4}
 .byoa .byoa-line strong{color:#FFFDF9}
 .byoa-badge{display:inline-flex;align-items:center;gap:10px;padding:4px 16px 4px 4px;border-radius:999px;background:var(--surface);box-shadow:inset 0 0 0 1.5px var(--line-2),var(--shadow);font:700 .95rem/1 var(--sans);color:var(--ink)}
 .byoa-tag{display:inline-block;padding:8px 12px 7px;border-radius:999px;background:var(--ink);color:var(--bg);font:800 .82rem/1 var(--sans);letter-spacing:.16em;position:relative}
 .byoa-tag::after{content:"";position:absolute;right:-2px;top:-2px;width:10px;height:10px;border-radius:50%;background:var(--orange);box-shadow:0 0 0 2px var(--surface)}
-.ai-chips{list-style:none;margin:14px 0 12px;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
-@media (min-width:560px){.ai-chips{grid-template-columns:repeat(4,minmax(0,1fr))}}
-.ai-chips li{display:grid;gap:3px;padding:11px 14px 10px;border-radius:16px;background:var(--surface);border:1.5px solid var(--line-2)}
-.ai-name{font:650 1.16rem/1.1 var(--serif);font-variation-settings:"SOFT" 50,"opsz" 36;color:var(--ink)}
-.ai-how{font:700 .68rem/1.25 var(--sans);letter-spacing:.07em;text-transform:uppercase;color:var(--ink-2)}
+.byoa-h{font-size:clamp(1.4rem,4.4vw,1.8rem);color:#FFFDF9;margin:16px 0 0;max-width:24ch}
+.byoa-h-sm{font-size:clamp(1.25rem,3.8vw,1.5rem)}
+.byoa .ai-btn{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.2);color:#FFFDF9;box-shadow:none}
+.byoa .ai-btn:hover{background:rgba(255,255,255,.14);border-color:var(--peach);color:#FFFDF9}
+.byoa .ai-btn:focus-visible{outline-color:var(--sky)}
+/* Connect buttons: name, then a Connect pill. .ai-btn-logo is the slot for a logo later. */
+.ai-btns{list-style:none;margin:16px 0 14px;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+@media (min-width:560px){.ai-btns{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.ai-btns li{display:flex;min-width:0}
+.ai-btn{flex:1;display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;gap:12px;min-height:92px;padding:14px 14px 13px;border-radius:18px;background:var(--surface);border:1.5px solid var(--line-2);box-shadow:var(--shadow);color:var(--ink);text-decoration:none;cursor:pointer;transition:transform .15s ease,border-color .15s ease,background-color .15s ease}
+.ai-btn:hover{border-color:var(--accent);color:var(--ink);transform:translateY(-2px)}
+.ai-btn:active{transform:translateY(0) scale(.99)}
+.ai-btn-logo{display:block;width:28px;height:28px}
+.ai-btn-name{font:650 1.2rem/1.12 var(--serif);font-variation-settings:"SOFT" 50,"opsz" 36}
+.ai-btn-act{display:inline-flex;align-items:center;gap:6px;padding:7px 12px 7px 9px;border-radius:999px;background:var(--btn);color:var(--btn-ink);font:750 .84rem/1 var(--sans)}
 .byoa-line{margin:0;color:var(--ink-2);font-size:1.02rem;max-width:36rem}
 .byoa-line strong{color:var(--ink)}
 .section-head .byoa-badge{margin:0 0 16px}
@@ -720,7 +841,7 @@ details.script pre{margin:0;padding:0 18px 18px;white-space:pre-wrap;word-break:
 
 /* cta band + footer */
 .cta{padding:56px 0}
-.cta .connect-card{max-width:52rem;margin:0 auto}
+.cta .byoa{max-width:52rem;margin:0 auto}
 footer.foot{border-top:1px solid var(--line);padding:40px 0 48px;color:var(--ink-2);font-size:.9rem;background:var(--bg-2)}
 .foot-grid{display:grid;gap:24px}
 @media (min-width:760px){.foot-grid{grid-template-columns:1.4fr 1fr}}
@@ -729,6 +850,46 @@ footer.foot{border-top:1px solid var(--line);padding:40px 0 48px;color:var(--ink
 .foot nav a{font-weight:650;text-decoration:none;color:var(--ink)}
 .foot nav a:hover{color:var(--accent)}
 .foot p{margin:0 0 8px}
+
+/* connect pop-ups: a centered card on desktop, a near-full-height sheet on phones */
+html:has(dialog.cdlg[open]){overflow:hidden}
+dialog.cdlg{padding:0;border:0;margin:auto;width:min(38rem,calc(100% - 32px));max-width:none;max-height:min(90vh,56rem);max-height:min(90dvh,56rem);border-radius:var(--radius-lg);background:var(--surface);color:var(--ink);box-shadow:0 30px 80px -20px rgba(0,0,0,.55);outline:1px solid var(--line);overflow:hidden}
+dialog.cdlg[open]{display:flex;animation:dlg-in .22s cubic-bezier(.2,.7,.2,1)}
+dialog.cdlg::backdrop{background:rgba(6,14,26,.6);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}
+@keyframes dlg-in{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+.cdlg-in{display:flex;flex-direction:column;width:100%;min-height:0}
+.cdlg-head{display:flex;align-items:flex-start;gap:12px;padding:20px 20px 14px 24px;border-bottom:1px solid var(--line)}
+.cdlg-head h2{flex:1;display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;font-size:clamp(1.5rem,5vw,1.9rem);margin:4px 0 0}
+.cdlg-x{flex:none;appearance:none;display:grid;place-items:center;width:44px;height:44px;border-radius:12px;border:1px solid var(--line);background:var(--surface-2);color:var(--ink);cursor:pointer}
+.cdlg-x:hover{border-color:var(--accent)}
+.cdlg-body{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:18px 24px 24px}
+.cdlg-body .saybox{margin:20px 0 14px}
+.dlg-lead{color:var(--ink-2);font-size:1.02rem}
+.dlg-lead strong{color:var(--ink)}
+.dlg-cta{margin:0}
+.dlg-cta .btn-big{width:100%}
+.dlg-or{margin:14px 0 -8px;font-size:.9rem;font-weight:600;color:var(--ink-2)}
+.dlg-h{font:750 .78rem/1.2 var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin:22px 0 10px}
+.cdlg-body ol.steps{margin:10px 0 4px}
+.dlg-copy{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin-top:8px}
+.dlg-notes{list-style:none;margin:14px 0 0;padding:0;display:grid;gap:8px}
+.dlg-notes li{padding:12px 14px;border-radius:14px;background:var(--surface-2);border:1px solid var(--line);font-size:.95rem;color:var(--ink-2)}
+.dlg-notes strong{color:var(--ink)}
+.dlg-others{list-style:none;margin:16px 0 0;padding:0;display:grid;gap:10px}
+.dlg-others li{padding:14px 16px;border-radius:16px;border:1px solid var(--line);background:var(--surface-2)}
+.dlg-others p{margin:0;font-size:.95rem;color:var(--ink-2)}
+.dlg-other-h{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin:0 0 6px!important;color:var(--ink)!important;font-size:1.05rem!important}
+.dlg-others .status{font-size:.64rem;padding:5px 8px}
+.dlg-more{margin:0}
+.cdlg-body .copy-status:empty{min-height:0;margin:0}
+.nw{white-space:nowrap}
+@media (max-width:639px){
+  dialog.cdlg{width:100%;margin:auto 0 0;max-height:none;height:calc(100% - 12px - env(safe-area-inset-top));border-radius:24px 24px 0 0}
+  dialog.cdlg[open]{animation-name:sheet-in}
+  .cdlg-head{padding:16px max(16px,env(safe-area-inset-right)) 12px max(20px,env(safe-area-inset-left))}
+  .cdlg-body{padding:16px max(20px,env(safe-area-inset-right)) calc(28px + env(safe-area-inset-bottom)) max(20px,env(safe-area-inset-left))}
+}
+@keyframes sheet-in{from{transform:translateY(40px);opacity:.4}to{transform:none;opacity:1}}
 
 /* motion */
 .rise{animation:rise .7s cubic-bezier(.2,.7,.2,1) both}
@@ -795,8 +956,9 @@ ${s.body}
 <p>Set it up before you drive. The driver keeps eyes on the road.</p>
 </div>
 <div>
-<nav aria-label="Footer">${links}<a href="/privacy"${cur("/privacy")}>Privacy</a><a href="/support"${cur("/support")}>Support</a><a href="https://github.com/volocent/plotspeaks">GitHub</a></nav>
+<nav aria-label="Footer">${links}<a href="/privacy"${cur("/privacy")}>Privacy</a><a href="/terms"${cur("/terms")}>Terms</a><a href="/support"${cur("/support")}>Support</a><a href="https://github.com/volocent/plotspeaks">GitHub</a></nav>
 <p>Stories are licensed <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a> unless a story page says otherwise. Fantasy adventures include rules material from the System Reference Document by Wizards of the Coast LLC, under <a href="https://creativecommons.org/licenses/by/4.0/legalcode">CC BY 4.0</a>, credited on each adventure&#39;s page.</p>
+<p>Claude, ChatGPT, Gemini and the other assistant names are trademarks of their owners. Plot Speaks isn't affiliated with or endorsed by them.</p>
 <p>© ${new Date().getUTCFullYear()} Volocent Labs LLC</p>
 </div>
 </div></footer>
@@ -819,6 +981,7 @@ ${s.body}
   var m=document.querySelector("details.menu");
   if(m){document.addEventListener("click",function(e){if(m.open&&!m.contains(e.target))m.open=false;});document.addEventListener("keydown",function(e){if(e.key==="Escape"&&m.open){m.open=false;m.querySelector("summary").focus();}});}
 })();
+${s.body.includes("data-dialog=") ? DIALOG_JS : ""}
 ${s.script ?? ""}
 </script>
 </body>
@@ -878,8 +1041,7 @@ ${WAVES}
 <p class="eyebrow rise">${icon("mic", 18)} Storytelling out loud</p>
 <h1 class="rise rise-2">Stories you <em>play</em> out loud.</h1>
 <p class="lead rise rise-3">Murder mysteries and fantasy adventures you play by voice with the AI assistant you already use. One narrator does every voice. You ask the questions. Made for car rides.</p>
-<div class="rise rise-3">${byoaHero()}</div>
-<div class="rise rise-4">${connectCard(origin, example, { id: "mcp-url" })}</div>
+<div class="rise rise-3">${connectPanel({ id: "start" })}</div>
 </div>
 ${lead ? `<figure class="voice rise rise-3" aria-label="Example of a story starting">
 <p class="voice-top"><span class="live" aria-hidden="true"></span> In the car, by voice</p>
@@ -894,7 +1056,7 @@ ${bars()}
 <div class="wrap">
 <div class="section-head"><p class="eyebrow">${icon("book", 18)} How it works</p><h2 id="how-h">Three steps, then just talk.</h2></div>
 <ol class="steps3">
-<li><h3>Connect once</h3><p>Tap Connect to Claude and then Add. No sign-in, and Claude's Free plan has room for it. Do it once, parked.</p></li>
+<li><h3>Connect once</h3><p>Tap Connect on your assistant and follow the short steps. No sign-in, and Claude's Free plan has room for it. Do it once, parked.</p></li>
 <li><h3>Open Plot Speaks</h3><p>Say “Open Plot Speaks” for a quick intro, then browse, start or write a story. Or name one: “Start ${esc(example)} with Plot Speaks.”</p></li>
 <li><h3>Play by talking</h3><p>Question suspects, search rooms, roll for initiative. Turns are short, and each one ends with a question for you.</p></li>
 </ol>
@@ -905,17 +1067,17 @@ ${bars()}
 <section class="section" id="byoa" aria-labelledby="byo-h">
 <div class="wrap">
 <div class="section-head">${byoaBadge()}<h2 id="byo-h">Use the assistant you already have.</h2>
-<p class="lead">Plot Speaks isn't another app. It's a library of stories that ChatGPT, Claude, Gemini or Le Chat can play with you. Your assistant is the narrator; Plot Speaks brings the story and keeps the answer key.</p></div>
+<p class="lead">Plot Speaks isn't another app. It's a library of stories that Claude, ChatGPT, Gemini and others can play with you. Your assistant is the narrator; Plot Speaks brings the story and keeps the answer key.</p></div>
 <div class="byo-grid">
 <div class="pill-card"><span class="ic-wrap">${icon("app")}</span><div><h3>No new app</h3><p>Play in the assistant app already on your phone, in the car.</p></div></div>
 <div class="pill-card"><span class="ic-wrap">${icon("user")}</span><div><h3>No account with us</h3><p>No sign-up, no email, no password. The connector has no sign-in.</p></div></div>
 <div class="pill-card"><span class="ic-wrap">${icon("card")}</span><div><h3>No subscription</h3><p>The stories are free. Your assistant runs on the plan you already have.</p></div></div>
 </div>
 <ul class="ways" aria-label="How each assistant plays">
-<li><h3>Claude <span class="status status-ok">Free plan works</span></h3><p>Add the connector in one tap. Claude's Free plan includes one custom connector, and Plot Speaks can be it.</p><p>Voice tested: the connector loads the story and checks your accusation.</p></li>
-<li><h3>ChatGPT <span class="status">Free and Plus: paste</span></h3><p>Custom connectors need a Business, Enterprise or Edu plan today. On Free and Plus, paste the story; a passenger holds the answer key on the passenger page.</p><p>A ChatGPT app listing is planned.</p></li>
-<li><h3>Gemini <span class="status">US, 18+</span></h3><p>Add it as a custom app on a personal Google account in the US. Not on work or school accounts.</p><p>Voice not tested yet.</p></li>
-<li><h3>Le Chat <span class="status">Free plan works</span></h3><p>Add it as a custom MCP connector, no sign-in needed, on the free plan too.</p><p>Voice not tested yet.</p></li>
+<li><h3>Claude <span class="status status-ok">Free plan works</span></h3><p>One tap to add. Voice tested: the connector loads the story and checks your accusation.</p></li>
+<li><h3>ChatGPT <span class="status">Free and Plus: paste</span></h3><p>Paste the story, and a passenger holds the answer key. Connectors need Business, Enterprise or Edu; an app listing is planned.</p></li>
+<li><h3>Gemini <span class="status">US, 18+</span></h3><p>A custom app on a personal Google account in the US. Voice not tested yet.</p></li>
+<li><h3>And more <span class="status">Voice untested</span></h3><p>Vibe (formerly Le Chat, free plan too), Perplexity and Grok can add it by its address.</p></li>
 </ul>
 <p style="margin-top:18px"><a class="link-arrow" href="/connect">Step-by-step for each assistant ${icon("arrow", 18)}</a></p>
 <div class="split">
@@ -924,7 +1086,7 @@ ${bars()}
 <p>Adventures work the same way: the big surprises stay with Plot Speaks until you reach them.</p></div>
 <div class="panel"><h3>${icon("shield", 26)} Your conversation stays with your assistant</h3>
 <p>Plot Speaks never hears you. It only sees what your assistant sends it: the story you picked, the name you accused, and any rating you give. We count those plays without names or accounts, to learn which stories work.</p>
-<p class="fine">The chat itself lives in your assistant account (ChatGPT, Claude, Gemini or Le Chat), under that company's privacy terms.</p></div>
+<p class="fine">The chat itself lives in your assistant account (Claude, ChatGPT, Gemini or another), under that company's privacy terms.</p></div>
 </div>
 </div>
 </section>
@@ -956,7 +1118,8 @@ ${sections}
 </div>
 </section>
 
-<section class="cta alt"><div class="wrap">${connectCard(origin, example, { id: "mcp-url-2" })}</div></section>`;
+<section class="cta alt"><div class="wrap">${connectPanel({ id: "cta", heading: CONNECT.headline })}</div></section>
+${connectDialogs({ url: origin + "/mcp", story: example })}`;
 
   return page({
     title: "Plot Speaks: murder mysteries you play out loud",
@@ -991,9 +1154,14 @@ ${stars(rating)}
 
 <div class="story-body">
 <div>
-<div class="block">
-${connectCard(origin, m.title, { id: "mcp-url", lead: `Add Plot Speaks to Claude once. The connector loads the story and ${isMystery ? "checks accusations for you, so nobody needs to hold the answer" : "hands over the hidden scenes for you, so nobody needs to hold them"}.`, passenger })}
-</div>
+<section class="block connect-row" aria-labelledby="play-h">
+<p class="eyebrow">${icon("plug", 18)} Connect</p>
+<h2 id="play-h">Play it with your assistant.</h2>
+<p>Connect Plot Speaks once. It loads the story and ${isMystery ? "checks accusations for you, so nobody needs to hold the answer" : "hands over the hidden scenes for you, so nobody needs to hold them"}.</p>
+${aiButtons()}
+<p class="saybox"><b>Then say</b>“Start ${esc(m.title)} with Plot Speaks.”</p>
+<p class="connect-alt">${icon("copy", 20)}<span>No connector? <a href="#paste">Paste the story</a> instead, and give a passenger <a href="${passenger}">the passenger page</a>.</span></p>
+</section>
 
 <div class="block">
 <h2>Phrases</h2>
@@ -1002,12 +1170,12 @@ ${isMystery ? `<p class="note" style="margin-top:16px">${icon("key", 20)}<span>T
 <p class="safety">${icon("shield", 20)}<span>Set everything up while parked. The driver never touches the phone once you're moving.</span></p>
 </div>
 
-<div class="block fallback">
+<div class="block fallback" id="paste">
 <h2>${icon("copy", 26)} No connector? Paste the story.</h2>
 <p>The way to play on ChatGPT Free and Plus, or any assistant without the connector. We've played it start to finish by voice on ChatGPT Free and Claude.</p>
 <div class="passenger-link">${icon("users", 22)}<p><strong>Playing by paste? Give this page to a passenger.</strong> <a href="${passenger}">The passenger page</a> holds the answer key: when the narrator says ${isMystery ? "“Wrangler, check the secrets”, the passenger taps the name the player accused" : "“Wrangler, cue S1”, the passenger taps that cue"} and reads the line aloud.</p></div>
 <div class="copyrow">
-<button class="btn btn-primary" id="copy" type="button">Copy the story</button>
+<button class="btn btn-primary" id="copy" type="button" data-copy-story>Copy the story</button>
 <span class="copied" id="copied" role="status" aria-live="polite"></span>
 </div>
 <p class="muted">Copies the whole story script. It ${isMystery ? "doesn't contain the answer" : "doesn't contain the hidden cues"}.</p>
@@ -1036,7 +1204,7 @@ ${isMystery ? `<p class="note" style="margin-top:16px">${icon("key", 20)}<span>T
 ${m.minutes ? `<div><dt>Length</dt><dd>${m.minutes} minutes${m.chapters && m.chapters > 1 ? `, ${m.chapters} chapters` : ""}</dd></div>` : ""}
 ${m.players ? `<div><dt>Players</dt><dd>${esc(playersLabel(m.players))}</dd></div>` : ""}
 ${m.rating ? `<div><dt>Rating</dt><dd>${esc(m.rating)}</dd></div>` : ""}
-<div><dt>Play with</dt><dd>Claude, Le Chat or Gemini, through the connector. ChatGPT or any assistant, by pasting.</dd></div>
+<div><dt>Play with</dt><dd>Claude, Gemini and others, through the connector. ChatGPT or any assistant, by pasting.</dd></div>
 <div><dt>Written by</dt><dd>${esc(m.author || "Volocent Labs")}</dd></div>
 </dl>
 </div>
@@ -1047,10 +1215,16 @@ ${srd}
 </div>
 </aside>
 </div>
-</div>`;
+</div>
+${connectDialogs({ url: origin + "/mcp", story: m.title, storyPage: { passenger, isMystery } })}`;
+  // Every "Copy the story" button (the paste section's and the ChatGPT pop-up's); each one's
+  // status line is the element after it.
   const script = `(function(){
-  var b=document.getElementById("copy"),s=document.getElementById("copied"),t=document.getElementById("story-text").textContent;
-  b.addEventListener("click",function(){window.psCopy(t,function(ok){s.textContent=ok?"Copied. Now paste it into a new chat.":"Couldn't copy. Open the script below and copy it by hand.";});});
+  var t=document.getElementById("story-text").textContent;
+  [].forEach.call(document.querySelectorAll("[data-copy-story]"),function(b){
+    var s=b.nextElementSibling||document.getElementById("copied");
+    b.addEventListener("click",function(){window.psCopy(t,function(ok){s.textContent=ok?"Copied. Now paste it into a new chat.":"Couldn't copy. Open the script on this page and copy it by hand.";});});
+  });
 })();`;
   return page({ title: `${m.title} · Plot Speaks`, description: m.pitch, body, origin, path: `/stories/${encodeURIComponent(m.slug)}`, script });
 }
@@ -1224,7 +1398,11 @@ const TABS_JS = `(function(){
     t.addEventListener("keydown",function(e){var k=e.key,n=tabs.length;if(k==="ArrowRight"||k==="ArrowLeft"){e.preventDefault();sel((i+(k==="ArrowRight"?1:n-1))%n,true);}else if(k==="Home"){e.preventDefault();sel(0,true);}else if(k==="End"){e.preventDefault();sel(n-1,true);}});});
   panels.forEach(function(p){p.setAttribute("role","tabpanel");p.tabIndex=0;});
   tl.classList.add("ready");
-  var h=location.hash.slice(1),start=Math.max(0,panels.findIndex(function(p){return p.id===h;}));sel(start);
+  // A hash names a panel, or something inside one (#lechat, #perplexity... inside #other).
+  // Old anchors from before the Other tab: #more, #copilot.
+  var h=location.hash.slice(1);if(h==="more")h="other";
+  var el=h?document.getElementById(h):null,start=Math.max(0,panels.findIndex(function(p){return el&&p.contains(el);}));sel(start);
+  if(el&&el!==panels[start])el.scrollIntoView({block:"start"});
 })();`;
 
 export function connectPage(stories: PublicStory[], origin: string): string {
@@ -1237,6 +1415,7 @@ export function connectPage(stories: PublicStory[], origin: string): string {
 <p class="plan">${fill(a.plan, url, example)}</p>
 ${a.button ? `<p><a class="btn btn-primary btn-big" href="${fill(a.button.href, url, example)}"${a.button.href.startsWith("{") ? ` rel="noopener"` : ""}>${icon(a.id === "claude" ? "plug" : "book", 20)}${esc(a.button.label)}</a></p>` : ""}
 ${a.steps.length ? `<ol class="steps">${a.steps.map((s) => `<li>${fill(s, url, example)}</li>`).join("")}</ol>` : ""}
+${a.others ? `<ul class="others">${OTHERS.map((o) => `<li id="${o.id}"><h3>${esc(o.name)} <span class="status">${esc(o.status)}</span></h3><p>${fill(o.line, url, example)}</p>${o.how ? `<p class="how">${fill(o.how, url, example)}</p>` : ""}</li>`).join("")}</ul>` : ""}
 ${a.open ? `<p class="saybox"><b>Then say</b>“${fill(a.open, url, example)}”<span class="saybox-sub">A quick intro, then browse, start or write a story.</span></p>` : ""}
 ${a.say ? `<p class="saybox${a.open ? " saybox-alt" : ""}"><b>${a.open ? "Or name a story" : "Then say"}</b>“${fill(a.say, url, example)}”</p>` : ""}
 <ul class="notes">${a.notes.map((n) => `<li class="note">${icon("check", 20)}<span>${fill(n, url, example)}</span></li>`).join("")}</ul>
@@ -1257,7 +1436,7 @@ ${panels}
 </div>`;
   return page({
     title: "Connect Plot Speaks to your assistant",
-    description: "Add the Plot Speaks connector once, with no sign-in, then say \"Open Plot Speaks\" or name a story. Steps for Claude, Le Chat, Gemini and ChatGPT.",
+    description: "Add the Plot Speaks connector once, with no sign-in, then say \"Open Plot Speaks\" or name a story. Steps for Claude, ChatGPT, Gemini and more.",
     body, origin, path: "/connect", script: TABS_JS,
   });
 }
@@ -1273,7 +1452,7 @@ export function howPage(stories: PublicStory[], origin: string): string {
 </header>
 <h2>Before you drive</h2>
 <ol class="steps">
-<li><a href="/connect">Add the Plot Speaks connector</a> to Claude (or Le Chat, or Gemini). On ChatGPT Free or Plus, or anywhere without the connector, copy a story from its page and paste it into a new chat.</li>
+<li><a href="/connect">Add the Plot Speaks connector</a> to Claude (or Gemini, Vibe and others). On ChatGPT Free or Plus, or anywhere without the connector, copy a story from its page and paste it into a new chat.</li>
 <li>Agree who's playing. Tell the narrator your names when it asks.</li>
 <li>Start in voice mode and say <strong>“Open Plot Speaks.”</strong> for a quick intro and the choice to browse, start or write a story. Or name it: <strong>“Start ${esc(example)} with Plot Speaks.”</strong> (Pasted a story? Say “Plot Speaks, start the story.”)</li>
 </ol>
@@ -1405,6 +1584,42 @@ export function supportPage(origin: string): string {
   return page({ title: "Support · Plot Speaks", description: "Help with Plot Speaks: quick fixes for the connector and the narrator, and how to reach us.", body, origin, path: "/support" });
 }
 
+// TERMS. Plain-language terms, written 2026-10-16 because ChatGPT's Plugin Directory requires a
+// terms URL. NOT LEGAL ADVICE: Ben should have a lawyer review this page before relying on it.
+// Keep it in step with privacyPage() and with what submissions.ts actually does (claim codes, review).
+export function termsPage(origin: string): string {
+  const body = `<div class="wrap narrow prose">
+<header class="page-head">
+<p class="eyebrow">${icon("book", 18)} Terms</p>
+<h1>The short version: play nicely, and never while driving.</h1>
+<p class="lead">Plot Speaks is run by Volocent Labs LLC. By using the site or the connector, you agree to these terms.</p>
+<p class="muted">Last updated 16 October 2026.</p>
+</header>
+<h2>Free, and as is</h2>
+<p>Plot Speaks is free to use. It's provided as is, without warranties of any kind. We can't promise it will always be available, error-free or unchanged: stories, features and the connector may change or stop.</p>
+<p>Your assistant (Claude, ChatGPT, Gemini or another) is a separate service under its own company's terms. Plot Speaks doesn't control what it says.</p>
+<h2>Never while driving</h2>
+<p class="safety">${icon("shield", 20)}<span>Set it up while parked. Once you're moving, the driver keeps eyes on the road and never touches the phone; a passenger handles anything that needs a tap.</span></p>
+<h2>The stories</h2>
+<p>Stories are licensed <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a> unless a story page says otherwise: share and adapt them for non-commercial use, with credit. Rules material from the System Reference Document 5.2.1 by Wizards of the Coast LLC is licensed <a href="https://creativecommons.org/licenses/by/4.0/legalcode">CC BY 4.0</a>, credited on each adventure's page.</p>
+<p>Family mysteries are written for children of about 7 to 10, to play with an adult.</p>
+<h2>Submitting a story</h2>
+<ul>
+<li>You must be 13 or older to submit a story.</li>
+<li>By submitting, you confirm the story is your own work and that you have the right to share it.</li>
+<li>You grant Volocent Labs LLC a licence to publish and adapt it on Plot Speaks under CC BY-NC 4.0, credited to the name you choose. A pen name is fine.</li>
+<li>A person reviews every submission. We may decline or remove any story.</li>
+<li>You can withdraw your story at any time with its claim code.</li>
+</ul>
+<h2>Privacy</h2>
+<p>What we store, and for how long, is on the <a href="/privacy">Privacy</a> page.</p>
+<h2>Contact</h2>
+<p>Open an issue on <a href="${ISSUES}">GitHub</a>. Issues are public, so leave out personal details.</p>
+<p style="margin:36px 0 64px"><a class="link-arrow" href="/support">Support ${icon("arrow", 18)}</a></p>
+</div>`;
+  return page({ title: "Terms · Plot Speaks", description: "Plot Speaks terms: free and as is, never while driving, story licences, and what submitting a story means.", body, origin, path: "/terms" });
+}
+
 export function notFoundPage(origin = ""): string {
   return page({ title: "Not found · Plot Speaks", description: "No story here.", origin, path: "/404", body: `<div class="wrap narrow"><header class="page-head">
 <p class="eyebrow">${icon("compass", 18)} Wrong turn</p>
@@ -1458,6 +1673,7 @@ export async function handleSite(request: Request, stories: PublicStory[], db: D
   if (path === "/write") return new Response(writePage(origin), { headers: HTML });
   if (path === "/privacy") return new Response(privacyPage(origin), { headers: HTML });
   if (path === "/support") return new Response(supportPage(origin), { headers: HTML });
+  if (path === "/terms") return new Response(termsPage(origin), { headers: HTML });
   if (path === "/site.webmanifest") return new Response(MANIFEST, { headers: { "content-type": "application/manifest+json", "cache-control": "public, max-age=3600" } });
   const m = /^\/stories\/([^/]+?)(\/story\.md|\/passenger\/?|\/)?$/.exec(url.pathname);
   if (!m && !path.startsWith("/stories")) return null;
