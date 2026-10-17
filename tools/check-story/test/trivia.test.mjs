@@ -48,7 +48,12 @@ test('checkTrivia: a board passes; duplicate values, missing answers and self-an
   assert.deepEqual(checkTrivia(board).filter((f) => f.severity === 'ERROR'), []);
   const bad = board.replace('| 200 | She won', '| 100 | She won').replace('| Nile |', '|  |').replace('Sides on a hexagon.', 'Six sides on a hexagon.');
   const msgs = checkTrivia(bad).map((f) => f.message).join('\n');
-  assert.match(msgs, /"Space" has two 100 clues/);
+  assert.match(msgs, /"Space" has no 200 clue/);
+  // A pool (two clues at one value) is fine; two clues with the same answer in a category are not.
+  const pool = board.replace('| 300 | A film:', '| 100 | The red planet again, by another clue. | Mars | | |\n| 300 | A film:');
+  assert.match(checkTrivia(pool).map((f) => f.message).join('\n'), /two clues with the answer "Mars"/);
+  const pool2 = board.replace('| 300 | A film:', '| 100 | The planet with the Great Red Spot. | Jupiter | | |\n| 300 | A film:');
+  assert.deepEqual(checkTrivia(pool2).filter((f) => f.severity === 'ERROR'), []);
   assert.match(msgs, /has no answer/);
   assert.match(checkTrivia('nothing').map((f) => f.message).join(), /needs "## Category/);
 });

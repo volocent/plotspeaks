@@ -73,6 +73,9 @@ function distance(a, b) {
  * is a person's full name ("Curie" for "Marie Curie"). Anything else is the challenge's job.
  */
 export function answerMatches(said, clue) {
+  // "Tony Stark (Iron Man)": either the answer or the aside in brackets may be the match.
+  const paren = /^(.*?)\s*\(([^)]+)\)\s*$/.exec(String(said ?? ''));
+  if (paren && (answerMatches(paren[1], clue) || answerMatches(paren[2], clue))) return true;
   const got = normAnswer(said);
   if (!got) return false;
   for (const key of [clue.answer, ...clue.also].map(normAnswer).filter(Boolean)) {
@@ -104,12 +107,15 @@ export function checkTrivia(secretsText) {
       names.add(c.name.toLowerCase());
     }
     if (!c.clues.length) out.push(err(c.line, `category "${c.name}" has no clues`));
-    if (c.final && c.clues.length !== 1) out.push(err(c.line, `the final has ${c.clues.length} clues; it has exactly one`));
-    const values = new Set();
+    if (!c.final) for (const v of [100, 200, 300, 400, 500]) if (c.clues.length && !c.clues.some((q) => q.value === v)) out.push(warn(c.line, `"${c.name}" has no ${v} clue`));
+    // A category may hold several clues per value (a pool): each game deals one per value, choosing
+    // ones the player hasn't seen when they are signed in. Every value 100 to 500 needs at least one.
+    const seenAnswers = new Set();
     for (const q of c.clues) {
       if (!q.value) out.push(err(q.line, `a clue in "${c.name}" has no value`));
-      if (!c.final && values.has(q.value)) out.push(err(q.line, `"${c.name}" has two ${q.value} clues`));
-      values.add(q.value);
+      const a = normAnswer(q.answer);
+      if (a && seenAnswers.has(a)) out.push(err(q.line, `"${c.name}" has two clues with the answer "${q.answer}"`));
+      seenAnswers.add(a);
       if (!q.steps.length) out.push(err(q.line, `a ${q.value} clue in "${c.name}" has no clue text`));
       if (!q.answer) out.push(err(q.line, `the ${q.value} clue in "${c.name}" has no answer`));
       for (const s of q.steps) {

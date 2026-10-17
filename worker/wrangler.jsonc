@@ -10,7 +10,10 @@
   "compatibility_date": "2026-09-01",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
-  "vars": { "ENVIRONMENT": "dev" },
+  "vars": { "ENVIRONMENT": "dev", "ACCOUNT_HOST": "account-dev.plotspeaks.com" },
+  // Optional accounts: OAuth grants for the account connector (src/account.ts).
+  "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "ed1b61a6ca714580932f38f7f1c87e81" }],
+  "routes": [{ "pattern": "account-dev.plotspeaks.com", "custom_domain": true }],
   "d1_databases": [
     { "binding": "DB", "database_name": "plotspeaks-dev", "database_id": "3c93a1ce-a864-405f-be55-01bd5ad3d565", "migrations_dir": "migrations" }
   ],
@@ -28,7 +31,10 @@
     "dev": {
       "name": "plotspeaks-dev",
       "workers_dev": true,
-      "vars": { "ENVIRONMENT": "dev" },
+      "vars": { "ENVIRONMENT": "dev", "ACCOUNT_HOST": "account-dev.plotspeaks.com" },
+      "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "ed1b61a6ca714580932f38f7f1c87e81" }],
+      // The account connector on dev, on its own host so dev mirrors prod.
+      "routes": [{ "pattern": "account-dev.plotspeaks.com", "custom_domain": true }],
       "ai": { "binding": "AI" },
       "assets": { "directory": "public", "binding": "ASSETS", "run_worker_first": ["/audio/*"] },
       "triggers": { "crons": ["23 3 * * *"] },
@@ -47,9 +53,13 @@
         { "pattern": "plotspeaks.com", "custom_domain": true },
         { "pattern": "www.plotspeaks.com", "custom_domain": true },
         // The old address: pages redirect to plotspeaks.com; /mcp keeps answering for existing connectors.
-        { "pattern": "plotspeaks.volocent.com", "custom_domain": true }
+        { "pattern": "plotspeaks.volocent.com", "custom_domain": true },
+        // The connector with an account (optional sign-in). Its own host, so plotspeaks.com/mcp stays a
+        // server with no sign-in and serves no OAuth metadata.
+        { "pattern": "account.plotspeaks.com", "custom_domain": true }
       ],
-      "vars": { "ENVIRONMENT": "production" },
+      "vars": { "ENVIRONMENT": "production", "ACCOUNT_HOST": "account.plotspeaks.com" },
+      "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "5ae9f7caeef14d809e71e9c49334ffb6" }],
       "ai": { "binding": "AI" },
       "assets": { "directory": "public", "binding": "ASSETS", "run_worker_first": ["/audio/*"] },
       "triggers": { "crons": ["23 3 * * *"] },

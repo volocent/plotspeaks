@@ -15,7 +15,7 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { createMcpHandler } from "agents/mcp/server";
 import { z } from "zod";
 import stories from "./generated/stories.json";
-import { handleSite, notFoundPage, siteOrigin, type PublicStory } from "./site";
+import { handleSite, notFoundPage, siteOrigin, accountPage, type PublicStory } from "./site";
 import { LENGTHS, WRITE_GENRES, writeStory, reviewStory } from "./studio";
 import { submitStory, withdrawSubmission, loadApprovedStories, handleAdmin, serveSubmissionCover, listApprovedSubmissions, sameKey, type SubEnv, type Builtins, type PlayStory, type Ending } from "./submissions";
 import { runRetention } from "./retention";
@@ -23,13 +23,16 @@ import { countPage, countMcp, bump } from "./usage";
 import { assistantOf } from "./stats";
 import { matchStory, matchEnding, sortedNames } from "../../tools/worker-data/match.mjs";
 import { initialState, renderNode, matchChoice, advance, loadState, saveStateStatement, offered as branchOffered, type BranchState } from "./branching";
-import { newTrivia, renderBoard, askQuestion, answerQuestion, challenge, loadTrivia, saveTrivia, type Step } from "./games";
+import { newTrivia, dealtBoard, clueId, renderBoard, askQuestion, answerQuestion, challenge, loadTrivia, saveTrivia, type Step, type TriviaBoard } from "./games";
 import { newWorld, applyChanges, recall, roll as rollDice, newCode, codeHash, loadWorld, saveWorld, type World, type WorldChanges } from "./world";
+import OAuthProvider from "@cloudflare/workers-oauth-provider";
+import { accountSite, type AccountEnv } from "./account";
+import { currentUser, startSignIn, finishSignIn, signOut, deleteAccount, signInConfigured, noteStart, noteOutcome, historyOf, playedSlugs, type AuthEnv } from "./auth";
 
 type Story = PlayStory;
 const STORIES = stories as unknown as Story[]; // generated JSON: its inferred type is a union per story
 // The catalog site gets the slug and the public story.md text ONLY: never endings or cues.
-const toPublic = (s: Story): PublicStory => ({ slug: s.slug, story: s.story });
+const toPublic = (s: Story): PublicStory => ({ slug: s.slug, story: s.story, ...(s.testing ? { testing: true } : {}) });
 const PUBLIC_STORIES: PublicStory[] = STORIES.filter((s) => !s.preview).map(toPublic);
 const PREVIEW_STORIES: PublicStory[] = STORIES.filter((s) => s.preview).map(toPublic);
 const BUILTINS: Builtins = { slugs: new Set(STORIES.map((s) => s.slug)), storyFor: (slug) => STORIES.find((s) => s.slug === slug)?.story ?? null };
@@ -92,10 +95,11 @@ function matchesGenre(s: Story, genre?: (typeof LIST_GENRES)[number]): boolean {
   return c === genre;
 }
 const listLine = (s: Story) =>
-  `${s.title} (slug: ${s.slug}; ${KIND_NAMES[kindOfStory(s)].toLowerCase()}${categoryOf(s) === "dark" ? ", dark" : ""}${isFamilyStory(s) ? ", for families" : ""}; ${s.players} players; about ${s.duration_minutes} minutes)`;
+  `${s.title} (slug: ${s.slug}; ${KIND_NAMES[kindOfStory(s)].toLowerCase()}${categoryOf(s) === "dark" ? ", dark" : ""}${isFamilyStory(s) ? ", for families" : ""}; ${s.players} players; about ${s.duration_minutes} minutes${s.testing ? "; new, being tested" : ""})`;
 
 // open_plot_speaks: what the narrator can say when the user opens Plot Speaks without naming a story.
 const OPEN_QUESTION = "Would you like to hear what stories there are, start one, or write your own?";
+const ACCOUNT_NOTE = "plotspeaks.com/account";
 const OPEN_INTRO =
   "Plot Speaks is interactive stories and games you play out loud: one narrator tells the story and plays every character, and you ask the questions and make the choices. " +
   "It's made for car rides, with nothing to look at. In a mystery the answer stays hidden, even from the narrator, until you accuse someone. " +
@@ -134,7 +138,10 @@ const prefaceFor = (s: Story) =>
     : kindOfStory(s) === "trivia" ? "This is a trivia game: you host it, and Plot Speaks holds every clue and answer.\n\n"
     : "The hidden scenes stay on the Plot Speaks server. When the script calls for a cue, call get_cue and narrate its read-aloud part.\n\n") +
   "**What the player knows.** Only what they have heard in play. The cast table, the timeline and the scene notes below are what characters can say when asked and what places hold when searched, not facts the player already has. Never state, summarise or refer to any of it until the player asks the person or does the action that reveals it. If you mention something they haven't learned yet, don't explain it or add to it: say \"You haven't come across that yet. Who would you like to ask?\" and go on.\n\n" +
-  "**No signal.** If a Plot Speaks call fails, say so in one sentence, keep narrating from this script, and try again when the player is ready; the play id still works. Never invent a verdict, a cue or a reveal.\n\n";
+  "**No signal.** If a Plot Speaks call fails, say so in one sentence, keep narrating from this script, and try again when the player is ready; the play id still works. Never invent a verdict, a cue or a reveal.\n\n" +
+  (s.testing
+    ? "**This one is new and being tested.** Say so in one short sentence before you begin. At the end, when you ask for feedback, ask especially how it worked for them: anything confusing, anything that didn't work, what they enjoyed. Pass it to rate_story as feedback in their words.\n\n"
+    : "");
 
 const log = (event: string, data: Record<string, unknown>) => console.log(JSON.stringify({ event, ...data }));
 
@@ -144,7 +151,8 @@ const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: 
 const RECORDS = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false };
 
 // chatgpt: the request came from ChatGPT (its User-Agent, or openai/* keys in a tools/call _meta).
-type Ctx = { db?: D1Database; tester: boolean; client: string | null; chatgpt: boolean; env: Env; ip: string };
+// userId: the signed-in person on the account connector; null on the open one.
+type Ctx = { db?: D1Database; tester: boolean; client: string | null; chatgpt: boolean; env: Env; ip: string; userId: string | null };
 
 // Built-in stories first, then approved submissions from D1 (same shape; secrets stay server-side).
 async function allStories(ctx: Ctx): Promise<Story[]> {
@@ -251,9 +259,21 @@ function createServer(ctx: Ctx) {
     },
     async ({ skip_intro, instructions }) => {
       const all = await catalog(ctx);
-      log("open_plot_speaks", { stories: all.length, skip_intro: Boolean(skip_intro), instructions: Boolean(instructions) });
+      log("open_plot_speaks", { stories: all.length, skip_intro: Boolean(skip_intro), instructions: Boolean(instructions), signed_in: Boolean(ctx.userId) });
+      // A signed-in player who has played before: a welcome back, the intro skipped, and a few
+      // things they haven't played yet.
+      let back: string | null = null;
+      if (ctx.userId) {
+        const recent = await historyOf(ctx.db, ctx.userId, 3);
+        if (recent.length) {
+          const played = await playedSlugs(ctx.db, ctx.userId);
+          const fresh = all.filter((s) => !played.has(s.slug)).slice(0, 3).map((s) => s.title);
+          back = `WELCOME BACK (they've played before; skip the intro unless they ask): last time, ${recent[0].title}${recent[0].outcome ? ` (${recent[0].outcome})` : ""}.${fresh.length ? ` Not played yet: ${fresh.join(", ")}.` : ""} list_stories with not_played: true lists everything they haven't played.`;
+        }
+      }
       return text([
-        skip_intro && !instructions ? null : `INTRO (to say aloud, in your own narrator voice):\n${OPEN_INTRO}`,
+        back,
+        (skip_intro || back) && !instructions ? null : `INTRO (to say aloud, in your own narrator voice):\n${OPEN_INTRO}`,
         instructions ? OPEN_HOW : null,
         `QUESTION (to ask next):\n${OPEN_QUESTION}`,
         `MENU (for when they want to hear the stories; one category at a time works best by voice):\n${openMenu(all)}`,
@@ -274,17 +294,44 @@ function createServer(ctx: Ctx) {
         genre: (gpt ? z.enum(LIST_GENRES_GPT) : z.enum(LIST_GENRES)).optional().describe(
           "Within mysteries and adventures: murder-mystery (all murder mysteries), classic (murder mysteries that aren't dark), dark (dark murder mysteries) or adventure"),
         group_by_category: z.boolean().optional().describe("True to group the list under kind headings"),
+        not_played: z.boolean().optional().describe("True to leave out what this player has already played (signed-in players only)"),
       },
     },
-    async ({ kind, genre, group_by_category }) => {
-      log("list_stories", { kind: kind ?? null, genre: genre ?? null, grouped: Boolean(group_by_category) });
-      const shown = (await catalog(ctx)).filter((s) => (!kind || kindOfStory(s) === kind) && matchesGenre(s, genre));
-      if (!group_by_category) return text(shown.map(listLine).join("\n") || "Nothing of that kind yet.");
+    async ({ kind, genre, group_by_category, not_played }) => {
+      log("list_stories", { kind: kind ?? null, genre: genre ?? null, grouped: Boolean(group_by_category), not_played: Boolean(not_played) });
+      let shown = (await catalog(ctx)).filter((s) => (!kind || kindOfStory(s) === kind) && matchesGenre(s, genre));
+      let note = "";
+      if (not_played) {
+        if (!ctx.userId) note = `\n\n(Plot Speaks can't tell what this player has played: they aren't signed in. With an account, at ${ACCOUNT_NOTE}, it remembers.)`;
+        else {
+          const played = await playedSlugs(ctx.db, ctx.userId);
+          shown = shown.filter((s) => !played.has(s.slug));
+          if (!shown.length) return text("They've played everything of that kind. Offer another kind, or a favourite again.");
+        }
+      }
+      if (!group_by_category) return text((shown.map(listLine).join("\n") || "Nothing of that kind yet.") + note);
       const groups = KIND_ORDER.map((k) => {
         const inK = shown.filter((s) => kindOfStory(s) === k);
         return inK.length ? `${KIND_NAMES[k]}:\n${inK.map((s) => `- ${listLine(s)}`).join("\n")}` : null;
       }).filter(Boolean);
-      return text(groups.join("\n\n") || "Nothing of that kind yet.");
+      return text((groups.join("\n\n") || "Nothing of that kind yet.") + note);
+    },
+  );
+
+  server.registerTool(
+    "my_history",
+    {
+      title: "What I've played",
+      annotations: { ...READ_ONLY, title: "What I've played" },
+      description: "Returns what a signed-in Plot Speaks player has played, newest first, with how each ended. Without an account it says how to get one.",
+      inputSchema: { limit: z.number().int().min(1).max(50).optional().describe("How many to list (default 15)") },
+    },
+    async ({ limit }) => {
+      log("my_history", { signed_in: Boolean(ctx.userId) });
+      if (!ctx.userId) return text(`This player isn't signed in, so Plot Speaks has no history for them. To have it remember, they can add the connector with an account (${ACCOUNT_NOTE}) and sign in with Google once. Everything works without it.`);
+      const rows = await historyOf(ctx.db, ctx.userId, limit ?? 15);
+      if (!rows.length) return text("Nothing played yet on this account.");
+      return text(`PLAYED (newest first):\n${rows.map((r) => `- ${r.title} (${r.story}; ${KIND_NAMES[(KIND_ORDER as readonly string[]).includes(r.kind) ? r.kind as KindId : "mystery"].toLowerCase()}), ${new Date(r.started_at).toISOString().slice(0, 10)}: ${r.outcome ?? "not finished"}`).join("\n")}`);
     },
   );
 
@@ -301,19 +348,21 @@ function createServer(ctx: Ctx) {
         chapter: z.number().int().min(1).max(9).optional().describe("For a two-chapter story: 2 to get chapter 2 (default 1)"),
         play_id: PLAY_ID.optional().describe("With chapter 2: the play id from chapter 1, to keep the same play"),
         resume_code: z.string().max(80).optional().describe("For a campaign: the three-word code from an earlier session, to carry on where it left off"),
+        new_campaign: z.boolean().optional().describe("For a campaign, when the player is signed in and has one already: true to start a fresh one instead of carrying on"),
       },
     },
-    async ({ slug, chapter, play_id, resume_code }) => {
+    async ({ slug, chapter, play_id, resume_code, new_campaign }) => {
       const r = await resolveStory(ctx, slug);
       log("start_story", { found: r.s?.slug ?? null, chapter: chapter ?? 1, resume: Boolean(resume_code) });
       if (!r.s) return fail(r.error);
       const s = r.s;
-      // Carrying on a campaign: the same play, its world, and the script; no new play or code.
-      if (resume_code && kindOfStory(s) === "campaign") {
+      // Carrying on a campaign: by its code, or, for a signed-in player, their latest one of this
+      // story (unless they asked for a new one). The same play, its world, and the script.
+      if (kindOfStory(s) === "campaign" && (resume_code || (ctx.userId && !new_campaign))) {
         const c = await campaignPlay(s.slug, undefined, resume_code);
-        if ("error" in c) return fail(c.error);
-        return text(
-          `You are the narrator for "${s.title}", carrying on a campaign. Story slug: ${s.slug}. Play id: ${c.playId} (pass it to world_update, world_recall and rate_story). The resume code stays "${resume_code.trim().toLowerCase()}".\n\n` +
+        if ("error" in c && resume_code) return fail(c.error);
+        if (!("error" in c)) return text(
+          `You are the narrator for "${s.title}", carrying on a campaign${resume_code ? "" : " (found on their account; if they'd rather start over, call start_story with new_campaign: true)"}. Story slug: ${s.slug}. Play id: ${c.playId} (pass it to world_update, world_recall and rate_story).${resume_code ? ` The resume code stays "${resume_code.trim().toLowerCase()}".` : ""}\n\n` +
           `${prefaceFor(s)}${(s.story_connector?.[0]) ?? s.story}\n\n## Where the campaign stands\n${recall(c.w)}\n\nGive the players a short spoken recap of the story so far, then ask what they do.`,
         );
       }
@@ -330,7 +379,8 @@ function createServer(ctx: Ctx) {
       }
       if (!playId) {
         playId = crypto.randomUUID();
-        await record(ctx, "INSERT INTO plays (id, story, client, tester, started_at) VALUES (?, ?, ?, ?, ?)", playId, s.slug, ctx.client, ctx.tester ? 1 : 0, Date.now());
+        await record(ctx, "INSERT INTO plays (id, story, client, tester, started_at, user_id) VALUES (?, ?, ?, ?, ?, ?)", playId, s.slug, ctx.client, ctx.tester ? 1 : 0, Date.now(), ctx.userId);
+        await noteStart(ctx.db, ctx.userId, { play_id: playId, story: s.slug, title: s.title, kind: kindOfStory(s) });
       }
       const more = n < parts.length ? `, and to start_story with chapter: ${n + 1} for the next chapter` : "";
       // A choose-your-path story starts its state here and hands out the opening node only.
@@ -345,11 +395,12 @@ function createServer(ctx: Ctx) {
         }
         opening = `\n\n## This campaign\nRESUME CODE: "${code}". Tell the players now, and again at the end of every session: next time, in a new chat, they say "Continue my Plot Speaks campaign ${s.title}, code ${code}" and you call start_story with resume_code.\n\n${recall(w)}`;
       } else if (s.trivia) {
-        const st = newTrivia();
+        // Deal this game's clues from the pools, avoiding ones a signed-in player has seen.
+        const st = newTrivia(s.trivia, await seenClues(ctx, s.slug));
         if (ctx.db) {
           try { await saveTrivia(ctx.db, playId, st).run(); } catch (e) { log("db_error", { message: String(e).slice(0, 200) }); }
         }
-        opening = `\n\n## The board\n${renderBoard(s.trivia, st)}`;
+        opening = `\n\n## The board\n${renderBoard(dealtBoard(s.trivia, st), st)}`;
       } else if (s.picks?.length) {
         // One hidden pick per play, for the mode where the narrator thinks of something.
         const pick = s.picks[Math.floor(Math.random() * s.picks.length)];
@@ -426,6 +477,7 @@ function createServer(ctx: Ctx) {
           try { await saveStateStatement(db, play_id, next).run(); } catch (e) { log("db_error", { message: String(e).slice(0, 200) }); }
         }
       }
+      if (ending) await noteOutcome(ctx.db, ctx.userId, play_id, `ending: ${ending}`);
       return text(renderNode(s.branches, next, { title: s.title }));
     },
   );
@@ -446,15 +498,21 @@ function createServer(ctx: Ctx) {
       if (ownPlay) st = await loadTrivia(ctx.db, play_id);
     } catch (e) { log("db_error", { message: String(e).slice(0, 200) }); }
     if (!ownPlay) return fail(`I couldn't find that game of ${s.title}. Call start_story to begin it; it returns a play id.`);
-    const out = await run(s.trivia, st ?? newTrivia());
+    const state = st ?? newTrivia(s.trivia);
+    const view = dealtBoard(s.trivia, state);
+    const out = await run(view, state);
     log(tool, { story: s.slug, error: Boolean(out.error), event: out.event?.verdict ?? null });
     if (out.error) return fail(out.text);
+    // A clue just ruled on joins a signed-in player's history, so later games deal around it.
+    const ruled = out.state.asked.filter((k) => !state.asked.includes(k));
+    if (ruled.length) await rememberClues(ctx, s.slug, view, ruled);
     if (ctx.db) {
-      const over = out.state.asked.length >= s.trivia.categories.reduce((n, c) => n + c.clues.length, 0);
+      const over = out.state.asked.length >= view.categories.reduce((n, c) => n + c.clues.length, 0);
       await recordBatch(ctx, over ? play_id : null, s.slug, (d) => [
         saveTrivia(d, play_id, out.state),
         ...(out.event ? [d.prepare(`INSERT INTO play_events (play_id, story, kind, detail, verdict, at) VALUES (${PLAY_OF}, ?, ?, ?, ?, ?)`).bind(play_id, s.slug, s.slug, out.event.kind, out.event.detail.slice(0, 120), out.event.verdict ?? null, Date.now())] : []),
         ...(over ? [d.prepare(`INSERT INTO play_events (play_id, story, kind, detail, at) VALUES (${PLAY_OF}, ?, 'ending', 'board cleared', ?)`).bind(play_id, s.slug, s.slug, Date.now())] : []),
+        ...(over && ctx.userId ? [d.prepare("UPDATE user_history SET outcome = ?, finished_at = ? WHERE user_id = ? AND play_id = ?").bind(`board cleared: ${Object.entries(out.state.scores).map(([n, v]) => `${n} ${v}`).join(", ").slice(0, 70) || "no points"}`, Date.now(), ctx.userId, play_id)] : []),
       ]);
     }
     return text(out.text);
@@ -521,6 +579,8 @@ function createServer(ctx: Ctx) {
     let id = play_id ?? "";
     try {
       if (!id && resume_code) id = (await db.prepare("SELECT play_id FROM campaign_codes WHERE code_hash = ?").bind(await codeHash(resume_code)).first<{ play_id: string }>())?.play_id ?? "";
+      // Signed in: their latest campaign of this story, no code needed.
+      if (!id && !resume_code && ctx.userId) id = (await db.prepare("SELECT p.id FROM plays p JOIN play_state s ON s.play_id = p.id WHERE p.user_id = ? AND p.story = ? AND s.kind = 'campaign' ORDER BY s.updated_at DESC LIMIT 1").bind(ctx.userId, r.s.slug).first<{ id: string }>())?.id ?? "";
       const play = id ? await db.prepare("SELECT story FROM plays WHERE id = ?").bind(id).first<{ story: string }>() : null;
       if (play?.story !== r.s.slug) return { error: resume_code ? `No ${r.s.title} campaign has the code "${resume_code.slice(0, 60)}". Ask the players to say it again, word by word.` : `I couldn't find that ${r.s.title} campaign. Ask for its resume code, or start a new one with start_story.` };
       const w = await loadWorld(db, id);
@@ -640,6 +700,7 @@ function createServer(ctx: Ctx) {
       await recordBatch(ctx, play_id, s.slug, (db) => [
         db.prepare(`INSERT INTO play_events (play_id, story, kind, detail, verdict, at) VALUES (${PLAY_OF}, ?, 'accusation', ?, ?, ?)`).bind(play_id ?? null, s.slug, s.slug, e.name, e.verdict, Date.now()),
       ]);
+      await noteOutcome(ctx.db, ctx.userId, play_id, e.verdict === "correct" ? `solved (${e.name})` : `accused ${e.name}`);
       return text(`${e.text}\n\nmatched: ${e.name} (for you, not to read aloud: if that isn't who the player meant, ask them and check again)`);
     },
   );
@@ -682,6 +743,7 @@ function createServer(ctx: Ctx) {
         db.prepare(`INSERT INTO play_events (play_id, story, kind, detail, at) VALUES (${PLAY_OF}, ?, 'reveal', ?, ?)`).bind(play_id, s.slug, s.slug, gave_up ? "gave_up" : "after_accusation", Date.now()),
       ]);
       // Until a story has its ## Full reveal section, the culprit's Endings detail line stands in.
+      if (gave_up) await noteOutcome(ctx.db, ctx.userId, play_id, "gave up");
       const readAloud = s.full_reveal?.read_aloud ?? correct.map((e) => e.text.replace(/^Correct\.\s*/, "")).join("\n\n");
       const out = [`READ ALOUD (the solution, in your narrator voice; this ends the mystery):\n${readAloud}`];
       if (s.full_reveal?.afterward) {
@@ -851,7 +913,11 @@ const hasOpenAiMeta = (msgs: any[]) =>
   msgs.some((m) => m && m.method === "tools/call" && m.params && typeof m.params._meta === "object" && m.params._meta !== null
     && Object.keys(m.params._meta).some((k) => k.startsWith("openai/")));
 
-type Env = SubEnv & { ASSETS?: { fetch: (request: Request) => Promise<Response> }; OPENAI_APPS_CHALLENGE?: string; TESTER_KEY?: string };
+type Env = SubEnv & AuthEnv & {
+  ASSETS?: { fetch: (request: Request) => Promise<Response> }; OPENAI_APPS_CHALLENGE?: string; TESTER_KEY?: string;
+  // Optional accounts: the account connector's host name, and the KV namespace the OAuth provider keeps grants in.
+  ACCOUNT_HOST?: string; OAUTH_KV?: KVNamespace;
+};
 const MAX_BODY_BYTES = 1_000_000;
 
 // ------------------------------------------------------------------ audio with byte ranges
@@ -964,11 +1030,76 @@ async function handlePassengerApi(request: Request, env: Env): Promise<Response 
   return apiJson({ read_aloud: c.read_aloud });
 }
 
+// ------------------------------------------------------------------ accounts: memory and site pages
+
+/** Trivia clues a signed-in player has heard on this board (empty for the open connector). */
+async function seenClues(ctx: Ctx, slug: string): Promise<Set<string>> {
+  if (!ctx.db || !ctx.userId) return new Set();
+  try {
+    const { results } = await ctx.db.prepare("SELECT clue FROM user_seen WHERE user_id = ? AND story = ?").bind(ctx.userId, slug).all<{ clue: string }>();
+    return new Set((results ?? []).map((r) => r.clue));
+  } catch { return new Set(); }
+}
+/** Adds the clues just ruled on to a signed-in player's history for this board. */
+async function rememberClues(ctx: Ctx, slug: string, view: TriviaBoard, keys: string[]) {
+  if (!ctx.db || !ctx.userId) return;
+  const db = ctx.db, userId = ctx.userId;
+  const ids = keys.map((k) => {
+    const [cat, value] = k.split("|");
+    const c = view.categories.find((x) => x.name.toLowerCase() === cat);
+    const q = c?.final ? c.clues[0] : c?.clues.find((x) => String(x.value) === value);
+    return c && q ? clueId(c.name, q) : null;
+  }).filter((x): x is string => Boolean(x));
+  if (!ids.length) return;
+  try { await db.batch(ids.map((id) => db.prepare("INSERT OR IGNORE INTO user_seen (user_id, story, clue, at) VALUES (?, ?, ?, ?)").bind(userId, slug, id, Date.now()))); } catch { /* memory never breaks play */ }
+}
+
+/** /auth/google/*, /account, /account/signout and /account/delete on the site host. */
+async function handleAccountPages(request: Request, env: Env): Promise<Response | null> {
+  const url = new URL(request.url);
+  const p = url.pathname;
+  if (p === "/auth/google/start") return startSignIn(request, env);
+  if (p === "/auth/google/callback") return finishSignIn(request, env);
+  if (!p.startsWith("/account")) return null;
+  const origin = siteOrigin(url);
+  // Forms post from this site only (the session cookie would ride along on a cross-site post).
+  const sameOrigin = (request.headers.get("origin") ?? origin) === origin;
+  if (p === "/account/signout" && request.method === "POST" && sameOrigin) return signOut(request, env);
+  const user = await currentUser(request, env);
+  if (p === "/account/delete" && request.method === "POST" && sameOrigin && user) {
+    await deleteAccount(env, user.id);
+    return signOut(request, env);
+  }
+  if (p !== "/account" || request.method !== "GET") return null;
+  const history = user ? await historyOf(env.DB, user.id) : [];
+  const resp = new Response(accountPage({ user, history, configured: signInConfigured(env), accountMcp: env.ACCOUNT_HOST ? `https://${env.ACCOUNT_HOST}/mcp` : null }, origin), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-robots-tag": "noindex" } });
+  return withAccountLink(request, env, resp);
+}
+
+/** Puts "Sign in" or the person's first name in the page header (site pages leave a marker for it). */
+async function withAccountLink(request: Request, env: Env, res: Response): Promise<Response> {
+  if (!(res.headers.get("content-type") ?? "").startsWith("text/html")) return res;
+  const body = await res.text();
+  if (!body.includes("<!--ACCOUNT-->")) return new Response(body, res);
+  const user = signInConfigured(env) ? await currentUser(request, env) : null;
+  const label = user ? esc((user.name ?? "").split(" ")[0] || "Account") : "Sign in";
+  const link = signInConfigured(env) ? `<a class="acct" href="/account">${label}</a>` : "";
+  const headers = new Headers(res.headers);
+  if (user) headers.set("cache-control", "private, no-store");
+  // The Connect page offers the account connector only once sign-in is switched on.
+  const accountUrl = env.ACCOUNT_HOST ? `https://${env.ACCOUNT_HOST}/mcp` : "";
+  const connectNote = signInConfigured(env) && accountUrl
+    ? `<div class="note">${"<strong>Want it to remember what you've played?</strong>"} Use the connector with an account instead: <a class="btn btn-ghost btn-sm" href="https://claude.ai/customize/connectors?modal=add-custom-connector&amp;connectorName=${encodeURIComponent("Plot Speaks")}&amp;connectorUrl=${encodeURIComponent(accountUrl)}" rel="noopener">Connect with my account</a> or add <code>${esc(accountUrl)}</code>. Claude asks you to sign in with Google once. Then you can ask for "a mystery I haven't played", trivia skips questions you've heard, and campaigns pick up without a code. <a href="/account">More about accounts</a></div>`
+    : "";
+  return new Response(body.replace("<!--ACCOUNT-->", link).replace("<!--ACCOUNT-CONNECT-->", connectNote), { status: res.status, headers });
+}
+const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
 // 301 for pages; 308 (method-preserving) for anything else, so a redirected POST stays a POST (S15).
 const redirect = (request: Request, to: string) => Response.redirect(to, request.method === "GET" || request.method === "HEAD" ? 301 : 308);
 
-export default {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext) {
+// The site and the open connector (plotspeaks.com).
+async function mainFetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     // Plain http reaches the custom domain too, and the site builds its "Connect to Claude" link from
     // the request's origin; Claude refuses an http connector URL (Ben, 2026-10-16). Send everyone to https.
@@ -1004,6 +1135,9 @@ export default {
     // The passenger page's answer-key endpoints (public, one answer at a time, like the MCP tools).
     const api = await handlePassengerApi(request, env);
     if (api) return api;
+    // Optional accounts on the site: Google sign-in, the account page, signing out, deleting.
+    const acct = await handleAccountPages(request, env);
+    if (acct) return acct;
     // The catalog pages are public: they show only public story text (see site.ts). The access
     // key below applies to the MCP endpoint only.
     if (url.pathname !== "/mcp") {
@@ -1013,7 +1147,7 @@ export default {
       if (site) {
         // A tally per page view, for the admin stats (src/usage.ts): counts only, no visitor data.
         ctx.waitUntil(countPage(env.DB, request, site));
-        return site;
+        return withAccountLink(request, env, site);
       }
     }
     // Dev lock (Ben, 2026-10-15): until real sign-in arrives in M5, the dev server answers only
@@ -1031,6 +1165,12 @@ export default {
     if (url.pathname !== "/mcp") {
       return new Response(notFoundPage(siteOrigin(url)), { status: 404, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
     }
+    return serveMcp(request, env, ctx, null);
+}
+
+// The MCP endpoint, for both connectors: the open one (userId null) and the account one, where the
+// OAuth provider has checked the token and passes the signed-in person's id.
+async function serveMcp(request: Request, env: Env, ctx: ExecutionContext, userId: string | null): Promise<Response> {
     // The largest legitimate body is a submit_story call (two 60,000-character files); anything
     // bigger is refused before it is parsed, twice, on a 128 MB isolate.
     if (request.method === "POST" && Number(request.headers.get("content-length") ?? 0) > MAX_BODY_BYTES) {
@@ -1052,7 +1192,8 @@ export default {
     // Claude's connector form only accepts approved header names, so the key is read from the
     // standard places: X-API-Key, or Authorization: Bearer <key>.
     const presented = request.headers.get("x-api-key") ?? (/^Bearer\s+(.+)$/i.exec(request.headers.get("authorization") ?? "") || [])[1] ?? "";
-    if (env.DEV_ACCESS_KEY && !openHandshake && !sameKey(presented.trim(), env.DEV_ACCESS_KEY)) {
+    // On the account connector the OAuth token is the key, so the dev lock applies to the open one only.
+    if (!userId && env.DEV_ACCESS_KEY && !openHandshake && !sameKey(presented.trim(), env.DEV_ACCESS_KEY)) {
       log("rejected", { reason: "missing or wrong access key" });
       if (request.method === "POST") ctx.waitUntil(countMcp(env.DB, msgs, null, false, "rejected"));
       // 403, not 401: MCP clients treat a 401 as "start an OAuth sign-in", and this server has none.
@@ -1070,9 +1211,38 @@ export default {
     // MCP requests, tool calls and errors are tallied for the admin stats (src/usage.ts), from a
     // clone of the reply read after it has gone out. Only POSTs carry JSON-RPC messages. The
     // handler catches its own exceptions and answers 500, which the tally records as http_5xx.
-    const res = await createMcpHandler(() => createServer({ db: env.DB, tester, client, chatgpt, env, ip }))(request, env, ctx);
+    const res = await createMcpHandler(() => createServer({ db: env.DB, tester, client, chatgpt, env, ip, userId }), { route: "/mcp" })(request, env, ctx);
     if (request.method === "POST") ctx.waitUntil(countMcp(env.DB, msgs, res.clone(), tester));
     return res;
+}
+
+// The account connector's host: OAuth (discovery, dynamic client registration, tokens) around the
+// same MCP endpoint. Plays made through it belong to the signed-in person.
+// One provider per account host (account.plotspeaks.com on prod, account-dev on dev), built on first use.
+const accountProviders = new Map<string, OAuthProvider<Env>>();
+const accountProviderFor = (host: string) => {
+  let p = accountProviders.get(host);
+  if (!p) { p = makeAccountProvider(`https://${host}`); accountProviders.set(host, p); }
+  return p;
+};
+const makeAccountProvider = (origin: string) => new OAuthProvider<Env>({
+  resourceMetadata: { resource: `${origin}/mcp`, authorization_servers: [origin], bearer_methods_supported: ["header"], resource_name: "Plot Speaks (with your account)" },
+  apiRoute: "/mcp",
+  apiHandler: { fetch: (request: Request, env: Env, ctx: ExecutionContext) => serveMcp(request, env, ctx, String((ctx as unknown as { props?: { userId?: string } }).props?.userId ?? "") || null) },
+  defaultHandler: { fetch: (request: Request, env: Env) => accountSite(request, env as unknown as AccountEnv) },
+  authorizeEndpoint: "/authorize",
+  tokenEndpoint: "/token",
+  clientRegistrationEndpoint: "/register",
+  scopesSupported: ["play"],
+  accessTokenTTL: 3600,
+  refreshTokenTTL: 180 * 86400,
+});
+
+export default {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext) {
+    const host = new URL(request.url).hostname;
+    if (env.ACCOUNT_HOST && host === env.ACCOUNT_HOST && env.OAUTH_KV) return accountProviderFor(host).fetch(request, env, ctx);
+    return mainFetch(request, env, ctx);
   },
 
   // Daily Cron Trigger (wrangler.jsonc "triggers"): 90-day log retention, see src/retention.ts.

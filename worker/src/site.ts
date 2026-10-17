@@ -25,13 +25,13 @@
 // passenger page works without them (it needs script to fetch a line on tap).
 import { kindOf, isFamily } from "../../tools/check-story/rules.mjs";
 
-export type PublicStory = { slug: string; story: string };
+export type PublicStory = { slug: string; story: string; testing?: boolean };
 export type RatingSummary = { avg: number; count: number };
 
 type Meta = {
   slug: string; title: string; description: string; genre: string; tone: string; kind: string; audience: string; players: string;
   minutes: number | null; chapters: number | null; rating: string; license: string;
-  rulesSystem: string; author: string; pitch: string;
+  rulesSystem: string; author: string; pitch: string; testing: boolean;
 };
 
 const esc = (s: string) =>
@@ -67,6 +67,7 @@ export function meta(p: PublicStory): Meta {
     rulesSystem: field("rules_system"),
     author: field("author"),
     pitch: pitch || plain(beat1 ? beat1[1] : description),
+    testing: Boolean(p.testing),
   };
 }
 
@@ -572,6 +573,19 @@ p{margin:0 0 1em}
 .nav a:hover{color:var(--ink);background:var(--accent-soft)}
 .nav a[aria-current=page]{color:var(--ink);background:var(--accent-soft)}
 .top .btn-connect{display:none}
+.acct{font-weight:700;font-size:.95rem;text-decoration:none;color:var(--ink);padding:9px 14px;border-radius:999px;border:1.5px solid var(--line-2);white-space:nowrap}
+.acct:hover{border-color:var(--accent)}
+.why{display:grid;gap:12px;padding:0;list-style:none;margin:20px 0 28px}
+.why li{padding:14px 16px;border-radius:14px;background:var(--surface);border:1px solid var(--line)}
+.door-grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr))}
+.door{display:flex;align-items:center;gap:16px;padding:20px;border-radius:20px;background:var(--surface);border:1.5px solid var(--line-2);box-shadow:var(--shadow);text-decoration:none;color:var(--ink)}
+.door:hover{border-color:var(--accent)}
+.door > span:nth-child(2){flex:1;display:grid;gap:4px;min-width:0}
+.door strong{font-family:var(--serif);font-size:1.5rem}
+.door .ic-wrap{flex:none;display:grid;place-items:center;width:52px;height:52px;border-radius:16px;color:#fff}
+.door-n{font-weight:700;color:var(--accent)}
+.door-p{color:var(--ink-2);font-size:.98rem}
+.testing-note{margin:0 0 22px}
 .menu{position:relative}
 .menu summary{list-style:none;cursor:pointer;display:grid;place-items:center;width:44px;height:44px;border-radius:12px;border:1px solid var(--line);background:var(--surface)}
 .menu summary::-webkit-details-marker{display:none}
@@ -1038,7 +1052,7 @@ dialog.cdlg::backdrop{background:rgba(6,14,26,.6);-webkit-backdrop-filter:blur(3
 type Shell = { title: string; description: string; body: string; origin: string; path: string; script?: string };
 // The four pages, shown as tabs under the header on every page (Ben, 2026-10-17: separate pages
 // with tabs, not one long home page).
-const NAV: [string, string][] = [["/", "Stories"], ["/games", "Games"], ["/connect", "Connect"], ["/how-it-works", "How it works"], ["/write", "Write"]];
+const NAV: [string, string][] = [["/", "Home"], ["/stories", "Stories"], ["/games", "Games"], ["/connect", "Connect"], ["/how-it-works", "How it works"], ["/write", "Write"]];
 
 const FONTS = "https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT@0,9..144,400..700,0..100;1,9..144,400..700,0..100&family=Plus+Jakarta+Sans:wght@400..800&display=swap";
 
@@ -1082,6 +1096,7 @@ function page(s: Shell): string {
 <header class="top"><div class="wrap">
 <a class="brand" href="/" aria-label="Plot Speaks home"><img src="/mark-96.jpg" alt="" width="38" height="38"><span class="wordmark">Plot <span>Speaks</span></span></a>
 <nav class="nav" aria-label="Main">${links}</nav>
+<!--ACCOUNT-->
 <a class="btn btn-primary btn-sm btn-connect" href="/connect">${icon("plug", 18)}Connect</a>
 </div>
 <nav class="pagetabs" aria-label="Pages"><div class="wrap">${links}</div></nav>
@@ -1214,8 +1229,11 @@ const exampleTitle = (metas: Meta[]) => (metas.find((m) => m.slug === "example-d
 
 // testing: in the catalog's preview list. Marked, and the card says the exact phrase that starts it.
 function storyCard(m: Meta, r: RatingSummary | undefined, testing = false): string {
-  return `<li class="card${testing ? " card-testing" : ""}" data-cat="${categoryOf(m).id}">
-<div style="position:relative">${cover(m)}${m.minutes ? `<span class="badge">${icon("clock", 13)}${m.minutes} min</span>` : ""}${testing ? `<span class="badge badge-testing">In testing</span>` : ""}</div>
+  // "Being tested": published and new (catalog "testing"); a preview piece (testing=true here) also
+  // shows the phrase that starts it, since it starts only by exact name.
+  const flagged = testing || m.testing;
+  return `<li class="card${flagged ? " card-testing" : ""}" data-cat="${categoryOf(m).id}">
+<div style="position:relative">${cover(m)}${m.minutes ? `<span class="badge">${icon("clock", 13)}${m.minutes} min</span>` : ""}${flagged ? `<span class="badge badge-testing">Being tested</span>` : ""}</div>
 <div class="card-body">
 <h4 class="title"><a href="/stories/${encodeURIComponent(m.slug)}">${esc(m.title)}</a></h4>
 <p class="by">Written by ${esc(authorOf(m))}</p>
@@ -1252,14 +1270,14 @@ const FILTER_JS = `(function(){
 const STORY_KINDS = ["mystery", "adventure", "branching"];
 const GAME_KINDS = ["trivia", "game", "campaign"];
 
-export function catalogPage(stories: PublicStory[], ratings: Map<string, RatingSummary>, origin = "", previews: PublicStory[] = [], tab: "stories" | "games" = "stories"): string {
+export function catalogPage(stories: PublicStory[], ratings: Map<string, RatingSummary>, origin = "", previews: PublicStory[] = [], tab: "home" | "stories" | "games" = "home"): string {
   const listedMetas = stories.map(meta);
   const example = exampleTitle(listedMetas);
   const lead = listedMetas.find((m) => m.slug === "example-dinner-party") ?? listedMetas[0];
   // One shelf per kind on this tab that has anything in it (an empty kind is not shown): the listed
   // pieces first, then those still in testing, marked, with the phrase that starts them (they start
   // only by exact name). Inside a shelf with more than one category, chips filter the cards.
-  const kinds = tab === "games" ? GAME_KINDS : STORY_KINDS;
+  const kinds = tab === "games" ? GAME_KINDS : tab === "stories" ? STORY_KINDS : [...STORY_KINDS, ...GAME_KINDS];
   const testing = new Set(previews.map((p) => p.slug));
   const metas = [...listedMetas, ...previews.map(meta)].filter((m) => kinds.includes(kindShelf(m).id));
   const byTitle = (a: Meta, b: Meta) => Number(testing.has(a.slug)) - Number(testing.has(b.slug)) || sortKey(a.title).localeCompare(sortKey(b.title));
@@ -1284,22 +1302,36 @@ ${g.items.map((m) => storyCard(m, ratings.get(m.slug), testing.has(m.slug))).joi
 </ul>
 </section>`).join("\n");
 
-  if (tab === "games") {
-    const gamesBody = `<div class="wrap">
+  // Anything on this tab marked as being tested: a note asking for feedback.
+  const testingCount = metas.filter((m) => m.testing || testing.has(m.slug)).length;
+  const testingNote = testingCount ? `<p class="note testing-note">${icon("star", 20)}<span><strong>New, and being tested.</strong> ${testingCount} of these are fresh${tab === "games" ? "" : " and still being tested"}. Try one and tell us how it worked for you: your assistant asks at the end, or write to <a href="mailto:${CONTACT}">${CONTACT}</a>.</span></p>` : "";
+
+  if (tab === "games" || tab === "stories") {
+    const games = tab === "games";
+    const listBody = `<div class="wrap">
 <header class="page-head">
-<p class="eyebrow">${icon("star", 18)} Games</p>
-<h1>Games the whole car can play.</h1>
-<p class="lead">Your assistant hosts: trivia boards with scores and challenges, twenty questions, story games, Werewolf on one shared phone, and campaigns that pick up where you left off.</p>
+<p class="eyebrow">${icon(games ? "star" : "book", 18)} ${games ? "Games" : "Stories"}</p>
+<h1>${games ? "Games the whole car can play." : "Pick tonight's story."}</h1>
+<p class="lead">${games
+  ? "Your assistant hosts: trivia boards with scores and challenges, twenty questions, story games, Werewolf on one shared phone, and campaigns that pick up where you left off."
+  : "Every one is free and written for one narrator doing all the voices: mysteries where you name the culprit, adventures with dice, and stories where you choose the path."}</p>
 </header>
+${testingNote}
 ${chips}
 <div id="stories-list">
 ${sections}
 </div>
 </div>
 ${connectDialogs({ url: origin + "/mcp", story: example })}`;
-    return page({ title: "Games · Plot Speaks", description: "Trivia, twenty questions, story games, Werewolf for a car, and D&D-style campaigns, played by voice with your own assistant.", body: gamesBody, origin, path: "/games", script: FILTER_JS });
+    return page({ title: games ? "Games · Plot Speaks" : "Stories · Plot Speaks",
+      description: games ? "Trivia, twenty questions, story games, Werewolf for a car, and D&D-style campaigns, played by voice with your own assistant." : "Murder mysteries, fantasy adventures and choose-your-path stories you play by voice with your own assistant.",
+      body: listBody, origin, path: games ? "/games" : "/stories", script: FILTER_JS });
   }
-
+  // Home: the counts behind the two doors.
+  const everything = [...listedMetas, ...previews.map(meta)];
+  const allStories = everything.filter((m) => STORY_KINDS.includes(kindShelf(m).id));
+  const allGames = everything.filter((m) => GAME_KINDS.includes(kindShelf(m).id));
+  const anyTesting = everything.some((m) => m.testing || testing.has(m.slug));
   const body = `<section class="hero">
 ${WAVES}
 <div class="wrap hero-grid">
@@ -1313,14 +1345,14 @@ ${lead ? sampleCard(lead) : ""}
 </div>
 </section>
 
-<section class="section" id="stories" aria-labelledby="stories-h">
+<section class="section" aria-labelledby="pick-h">
 <div class="wrap">
-<div class="section-head"><p class="eyebrow">${icon("book", 18)} The stories</p><h2 id="stories-h">Pick tonight's story.</h2>
-<p class="lead">Every one is free, written for one narrator doing all the voices, and tested by voice before it goes up.</p></div>
-${chips}
-<div id="stories-list">
-${sections}
+<div class="section-head"><h2 id="pick-h">What do you feel like?</h2></div>
+<div class="door-grid">
+<a class="door" href="/stories"><span class="ic-wrap kind-mystery">${icon("book", 26)}</span><span><strong>Stories</strong><span class="door-n">${allStories.length} to play</span><span class="door-p">Murder mysteries, fantasy adventures, and stories where you choose the path.</span></span>${icon("arrow", 22)}</a>
+<a class="door" href="/games"><span class="ic-wrap kind-trivia">${icon("star", 26)}</span><span><strong>Games</strong><span class="door-n">${allGames.length} to play</span><span class="door-p">Trivia with challenges, twenty questions, Werewolf for the car, and D&amp;D-style campaigns.</span></span>${icon("arrow", 22)}</a>
 </div>
+${anyTesting ? `<p class="note testing-note">${icon("star", 20)}<span><strong>New stories and games are being tested.</strong> Try one and tell us how it worked for you: your assistant asks at the end.</span></p>` : ""}
 </div>
 </section>
 
@@ -1669,6 +1701,7 @@ ${a.button ? `<p><a class="btn btn-primary btn-big" href="${fill(a.button.href, 
 ${a.steps.length ? `<ol class="steps">${a.steps.map((s) => `<li>${fill(s, url, example)}</li>`).join("")}</ol>` : ""}
 ${a.others ? `<ul class="others">${OTHERS.map((o) => `<li id="${o.id}"><h3>${esc(o.name)} <span class="status">${esc(o.status)}</span></h3><p>${fill(o.line, url, example)}</p>${o.how ? `<p class="how">${fill(o.how, url, example)}</p>` : ""}</li>`).join("")}</ul>` : ""}
 ${a.open ? `<p class="saybox"><b>Then say</b>“${fill(a.open, url, example)}”<span class="saybox-sub">A quick intro, then browse, start or write a story.</span></p>` : ""}
+${a.id === "claude" ? "<!--ACCOUNT-CONNECT-->" : ""}
 ${a.say ? `<p class="saybox${a.open ? " saybox-alt" : ""}"><b>${a.open ? "Or name a story" : "Then say"}</b>“${fill(a.say, url, example)}”</p>` : ""}
 <ul class="notes">${a.notes.map((n) => `<li class="note">${icon("check", 20)}<span>${fill(n, url, example)}</span></li>`).join("")}</ul>
 </section>`).join("\n");
@@ -1858,6 +1891,7 @@ export function privacyPage(origin: string): string {
 <li><strong>Trivia:</strong> the clues played, the scores, the names you give for scoring, and your last answer (in your words, so a challenge can be judged). A challenged answer is sent to three AI models on Cloudflare Workers AI to judge; nothing else about you goes with it.</li>
 <li><strong>Campaigns:</strong> the world your game builds (your characters' names and stats, places, people met, quests, one-line notes of what happened) and a hashed three-word resume code. Kept while you keep playing: deleted 90 days after the last session.</li>
 <li><strong>Dice:</strong> rolled on the server and not stored.</li>
+<li><strong>If you sign in (optional):</strong> your Google account's id, email and name; a session cookie on this site (we keep only a fingerprint of it, not the cookie); what you've played and how it ended; and the trivia questions you've heard. That is all: no Google password, no contacts, no conversations. You can delete it all at <a href="/account">your account page</a>.</li>
 <li><strong>Adventure cues:</strong> which hidden scene was fetched, and the time.</li>
 <li><strong>Ratings and feedback:</strong> the stars, whether the ending was spoiled, any comment about the story and any feedback about the experience you choose to give (in your words, as your assistant passes them on), and the time.</li>
 </ul>
@@ -1875,6 +1909,7 @@ export function privacyPage(origin: string): string {
 <tr><td>Play logs (stories started, accusations, cues)</td><td>90 days, then deleted automatically.</td></tr>
 <tr><td>Ratings</td><td>The stars and the spoiler answer are kept. Any comment or feedback is deleted after 90 days.</td></tr>
 <tr><td>Where a story or game stands (choices, scores, campaign worlds)</td><td>Deleted with its play after 90 days; a campaign 90 days after its last session.</td></tr>
+<tr><td>Your account and its history (only if you sign in)</td><td>Kept until you delete the account, or two years after you last sign in. Sign-in sessions end after 90 days.</td></tr>
 <tr><td>Rate-limit records (the salted IP hash)</td><td>2 days, then deleted.</td></tr>
 <tr><td>Daily tallies (page views, tool calls, errors: numbers only)</td><td>About 13 months, then deleted.</td></tr>
 <tr><td>Rejected submissions</td><td>90 days, then deleted.</td></tr>
@@ -1920,6 +1955,40 @@ export function supportPage(origin: string): string {
 // TERMS. Plain-language terms, written 2026-10-16 because ChatGPT's Plugin Directory requires a
 // terms URL. NOT LEGAL ADVICE: Ben should have a lawyer review this page before relying on it.
 // Keep it in step with privacyPage() and with what submissions.ts actually does (claim codes, review).
+// ============================================================================ ACCOUNT
+type AccountView = { user: { name: string | null; email: string | null } | null; history: { story: string; title: string; kind: string; started_at: number; outcome: string | null }[]; configured: boolean; accountMcp: string | null };
+const WHY_SIGN_IN = `<ul class="why">
+<li><strong>No repeats.</strong> Ask for "a murder mystery I haven't played" and your assistant knows which ones you have. Trivia boards deal you questions you haven't heard yet.</li>
+<li><strong>Campaigns that wait for you.</strong> Pick up your D&amp;D-style campaign in any new chat, with no code to remember.</li>
+<li><strong>Your history.</strong> Every story and game you've played, and how it ended, here on this page.</li>
+<li><strong>Still optional.</strong> Everything works without an account, as it always has. Signing in only adds the memory.</li>
+</ul>`;
+export function accountPage(v: AccountView, origin: string): string {
+  const when = (t: number) => new Date(t).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  const kindName = (k: string) => KINDS.find((x) => x.id === k)?.name ?? "Story";
+  const body = !v.configured
+    ? `<div class="wrap narrow prose"><header class="page-head"><p class="eyebrow">${icon("user", 18)} Account</p><h1>Accounts are coming.</h1><p class="lead">Sign-in with Google isn't switched on yet. Everything works without it.</p></header>${WHY_SIGN_IN}</div>`
+    : !v.user
+    ? `<div class="wrap narrow prose"><header class="page-head"><p class="eyebrow">${icon("user", 18)} Account</p><h1>Sign in to let Plot Speaks remember.</h1>
+<p class="lead">Optional. Sign in with your Google account, and Plot Speaks keeps a memory of what you've played.</p></header>
+${WHY_SIGN_IN}
+<p><a class="btn btn-primary btn-big" href="/auth/google/start?next=/account">${icon("user", 20)}Sign in with Google</a></p>
+<p class="muted">We keep your Google account id, email and name, and what you play. Not your conversations: those stay with your assistant. Delete it all here any time. <a href="/privacy">Privacy</a></p></div>`
+    : `<div class="wrap narrow prose"><header class="page-head"><p class="eyebrow">${icon("user", 18)} Account</p><h1>Hi${v.user.name ? `, ${esc(v.user.name.split(" ")[0])}` : ""}.</h1>
+<p class="lead">Signed in${v.user.email ? ` as ${esc(v.user.email)}` : ""}. Plot Speaks remembers what you play here and through the account connector.</p></header>
+${v.accountMcp ? `<div class="note">${icon("plug", 20)}<span><strong>Let your assistant remember too.</strong> Add the connector with your account: <code>${esc(v.accountMcp)}</code>. Your assistant asks you to sign in with Google once. (The usual address, <code>${esc(origin)}/mcp</code>, keeps working with no sign-in and no memory.)</span></div>` : ""}
+<h2>What you've played</h2>
+${v.history.length ? `<div class="table-wrap"><table class="phrases"><thead><tr><th scope="col">Story or game</th><th scope="col">Kind</th><th scope="col">Started</th><th scope="col">How it ended</th></tr></thead><tbody>
+${v.history.map((h) => `<tr><td><a href="/stories/${encodeURIComponent(h.story)}">${esc(h.title)}</a></td><td>${esc(kindName(h.kind))}</td><td>${when(h.started_at)}</td><td>${esc(h.outcome ?? "not finished")}</td></tr>`).join("\n")}
+</tbody></table></div>` : `<p>Nothing yet. Plays through the account connector show up here.</p>`}
+<h2>Your account</h2>
+<form method="post" action="/account/signout" style="display:inline"><button class="btn btn-ghost" type="submit">Sign out</button></form>
+<details class="script" style="margin-top:22px"><summary>Delete my account</summary>
+<p>This deletes your account, your history and the trivia questions you've heard. Plays already counted stay as anonymous numbers. It can't be undone.</p>
+<form method="post" action="/account/delete"><button class="btn btn-primary" type="submit">Delete my account and history</button></form></details></div>`;
+  return page({ title: "Account · Plot Speaks", description: "Optional sign-in with Google, so Plot Speaks remembers what you've played.", body, origin, path: "/account" });
+}
+
 // ============================================================================ PREVIEW
 // The pieces waiting for Ben's voice check (stories/catalog.json "preview"), by kind, each with the
 // phrase that starts it. They start only by exact name, so the phrase is the test.
@@ -2119,6 +2188,9 @@ export async function handleSite(request: Request, stories: PublicStory[], db: D
   const origin = siteOrigin(url);
   if (path === "/" || path === "/index.html") {
     return new Response(catalogPage(stories, await loadRatings(db), origin, previews), { headers: HTML });
+  }
+  if (path === "/stories") {
+    return new Response(catalogPage(stories, await loadRatings(db), origin, previews, "stories"), { headers: HTML });
   }
   if (path === "/games") {
     return new Response(catalogPage(stories, await loadRatings(db), origin, previews, "games"), { headers: HTML });

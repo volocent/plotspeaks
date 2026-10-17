@@ -43,6 +43,17 @@ export async function runRetention(db: D1Database | undefined, now = Date.now())
   try {
     counts.play_state = (await db.prepare("DELETE FROM play_state WHERE updated_at < ? OR play_id NOT IN (SELECT id FROM plays)").bind(old).run()).meta?.changes ?? 0;
   } catch { /* table not there yet */ }
+  // Accounts (migration 0010): expired sessions go; an account unused for two years goes with its history.
+  try {
+    counts.sessions = (await db.prepare("DELETE FROM sessions WHERE expires_at < ?").bind(now).run()).meta?.changes ?? 0;
+    const stale = now - 730 * DAY;
+    const r = await db.batch([
+      db.prepare("DELETE FROM user_history WHERE user_id IN (SELECT id FROM users WHERE last_seen_at < ?)").bind(stale),
+      db.prepare("DELETE FROM user_seen WHERE user_id IN (SELECT id FROM users WHERE last_seen_at < ?)").bind(stale),
+      db.prepare("DELETE FROM users WHERE last_seen_at < ?").bind(stale),
+    ]);
+    counts.stale_accounts = r[2]?.meta?.changes ?? 0;
+  } catch { /* tables not there yet */ }
   try {
     counts.campaign_codes = (await db.prepare("DELETE FROM campaign_codes WHERE play_id NOT IN (SELECT id FROM plays)").run()).meta?.changes ?? 0;
   } catch { /* table not there yet */ }

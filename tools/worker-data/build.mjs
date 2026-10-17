@@ -42,6 +42,8 @@ const catalogOnly = process.argv.includes("--catalog");
 // by exact title or slug, so Ben can play one by voice on production before it is published.
 const catalogJson = JSON.parse(readFileSync(join(root, "stories", "catalog.json"), "utf8"));
 const previewSet = new Set(catalogJson.preview ?? []);
+// "testing": published to everyone, marked as new and being tested (a badge, and a feedback ask).
+const testingSet = new Set(catalogJson.testing ?? []);
 const published = catalogOnly ? new Set([...catalogJson.published, ...previewSet]) : null;
 
 for (const slug of readdirSync(join(root, "stories")).sort()) {
@@ -93,6 +95,7 @@ for (const slug of readdirSync(join(root, "stories")).sort()) {
   stories.push({
     slug,
     preview: previewSet.has(slug),
+    testing: testingSet.has(slug),
     title: field(fm, "title") || slug,
     genre: field(fm, "genre"),
     tone: field(fm, "tone").toLowerCase(),

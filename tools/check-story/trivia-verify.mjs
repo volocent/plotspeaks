@@ -19,7 +19,8 @@ if (!cmd || !dir) { console.error('usage: trivia-verify.mjs clues <dir> <out.jso
 const secrets = join(resolve(dir), 'secrets.md');
 if (!existsSync(secrets)) { console.error(`no secrets.md in ${dir}`); process.exit(2); }
 const { categories } = parseTrivia(readFileSync(secrets, 'utf8'));
-const clues = categories.flatMap((c) => c.clues.map((q) => ({ id: `${c.final ? 'final' : c.name}|${q.value}`.toLowerCase(), category: c.final ? `Final: ${c.name}` : c.name, value: q.value, q })));
+// A pooled board has several clues at one category and value, so each id carries its place in the pool.
+const clues = categories.flatMap((c) => c.clues.map((q, i) => ({ id: `${c.final ? 'final' : c.name}|${q.value}|${c.clues.slice(0, i).filter((x) => x.value === q.value).length + 1}`.toLowerCase(), category: c.final ? `Final: ${c.name}` : c.name, value: q.value, q })));
 
 if (cmd === 'clues') {
   writeFileSync(files[0], JSON.stringify(clues.map(({ id, category, value, q }) => ({ id, category, value, clue: q.steps.join(' / ') })), null, 2));
@@ -28,7 +29,9 @@ if (cmd === 'clues') {
   const sets = files.map((f) => JSON.parse(readFileSync(f, 'utf8')));
   const doubtful = [];
   for (const { id, q } of clues) {
-    const got = sets.map((s) => s[id] ?? '');
+    // An answers file is an object by id, or an array in the clue file's order.
+    const at = clues.findIndex((x) => x.id === id);
+    const got = sets.map((s) => (Array.isArray(s) ? s[at] : s[id]) ?? '');
     const hits = got.filter((a) => answerMatches(a, q)).length;
     if (hits < sets.length) doubtful.push({ id, key: q.answer, hits, answers: got });
   }

@@ -53,6 +53,8 @@ export type PlayStory = {
   picks?: string[];
   // In stories/catalog.json "preview": served when named exactly, never listed (Ben's voice check).
   preview?: boolean;
+  // In stories/catalog.json "testing": published, but new and being tested (badge, feedback ask).
+  testing?: boolean;
 };
 /** kind and audience from a story's front matter (the same rules as the lint and the build). */
 export function kindFields(story: string, genre: string): { kind: string; audience: "general" | "family" } {

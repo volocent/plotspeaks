@@ -71,7 +71,7 @@ if (openServer) {
 }
 
 // ---------------------------------------------------------------- the tool surface (review S7, S8, B2)
-const EXPECTED_TOOLS = ['open_plot_speaks', 'list_stories', 'start_story', 'choose', 'game_board', 'game_question', 'game_answer', 'game_challenge', 'roll', 'world_recall', 'world_update', 'check_accusation', 'reveal_solution', 'get_cue', 'rate_story', 'write_story', 'review_story', 'submit_story', 'withdraw_submission'];
+const EXPECTED_TOOLS = ['open_plot_speaks', 'list_stories', 'my_history', 'start_story', 'choose', 'game_board', 'game_question', 'game_answer', 'game_challenge', 'roll', 'world_recall', 'world_update', 'check_accusation', 'reveal_solution', 'get_cue', 'rate_story', 'write_story', 'review_story', 'submit_story', 'withdraw_submission'];
 const toolList = (await rpc('tools/list', {})).json?.result?.tools ?? [];
 const tools = toolList.map((t) => t.name);
 ok(EXPECTED_TOOLS.every((t) => tools.includes(t)) && tools.length === EXPECTED_TOOLS.length, `tools: ${tools.join(', ')}`);
@@ -286,21 +286,25 @@ const triviaSlug = (triviaCandidates.find((s) => s.trivia.categories.find((c) =>
 const triviaBoard = genStories.find((s) => s.slug === triviaSlug)?.trivia;
 if (triviaSlug && triviaBoard) {
   const cat = triviaBoard.categories.find((c) => !c.final);
-  const q = cat.clues[0];
+  // Boards hold pools (several clues per value) and each game deals one, so the clue dealt is found
+  // by its text in what game_question returns.
+  const dealtFrom = (text, value) => cat.clues.find((x) => x.value === value && text.includes(x.steps[0]));
+  let q = cat.clues.find((x) => x.value === 100) ?? cat.clues[0];
   const tStart = await call('start_story', { slug: triviaSlug });
   const tPlay = (/Play id: ([0-9a-f-]{36})/.exec(tStart) || [])[1];
   ok(Boolean(tPlay) && /## The board/.test(tStart) && tStart.includes(cat.name), `start_story on a trivia board returns the board (${triviaSlug})`);
   const allAnswers = triviaBoard.categories.flatMap((c) => c.clues.map((x) => x.answer)).filter((a) => a.length >= 4);
   ok(!allAnswers.some((a) => tStart.includes(`Answer: ${a}`) || new RegExp(`\\b${a.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(tStart.split('## The board')[1] ?? '')), 'the board shows no answers');
   const clue = await call('game_question', { slug: triviaSlug, play_id: tPlay, category: cat.name, value: q.value });
+  q = dealtFrom(clue, q.value) ?? q;
   ok(/^CLUE/.test(clue) && clue.includes(q.steps[0]) && !(q.answer.length >= 4 && clue.toLowerCase().includes(q.answer.toLowerCase())), 'game_question gives the clue and not its answer');
   const again = await result('game_question', { slug: triviaSlug, play_id: tPlay, category: 'no such category' });
   ok(isErr(again) && /no category called/.test(again?.content?.[0]?.text ?? ''), 'an unknown category is refused with the list');
   const wrong = await call('game_answer', { slug: triviaSlug, play_id: tPlay, answer: 'zebra quantum pancake', player: 'Smoke' });
   ok(q.steps.length > 1 ? /^NOT YET/.test(wrong) : /^NOT RIGHT/.test(wrong) && wrong.includes(q.answer), 'a wrong answer is ruled wrong (or gets the next step) and the answer is given after the ruling');
   if (q.steps.length === 1) {
-    const q2 = cat.clues[1];
-    await call('game_question', { slug: triviaSlug, play_id: tPlay, category: cat.name, value: q2.value });
+    const clue2 = await call('game_question', { slug: triviaSlug, play_id: tPlay, category: cat.name, value: 200 });
+    const q2 = dealtFrom(clue2, 200);
     const right = await call('game_answer', { slug: triviaSlug, play_id: tPlay, answer: `what is ${q2.answer}`, player: 'Smoke' });
     ok(/^CORRECT/.test(right) && new RegExp(`Smoke ${q2.value}`).test(right), 'a right answer scores its value for the named player');
     const noChallenge = await result('game_challenge', { slug: triviaSlug, play_id: tPlay });
@@ -382,14 +386,37 @@ ok(/^STATUS: passes format checks/.test(cleanReview), `review_story passes a cle
 const unescape = (h) => h.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
 const get = async (path) => { const r = await fetch(`${base}${path}`); return { status: r.status, type: r.headers.get('content-type') ?? '', body: await r.text() }; };
 
+// Home and Stories are separate tabs (2026-10-17): home has the hero, the sample and two doors.
 const home = await get('/');
 ok(home.status === 200 && /text\/html/.test(home.type), `GET / is an HTML page (${home.status})`);
-const slugs = [...home.body.matchAll(/href="\/stories\/([^"/]+)"/g)].map((m) => decodeURIComponent(m[1]));
-ok(slugs.includes('example-dinner-party') && slugs.includes('keepers-bell'), `GET / lists the stories (${slugs.join(', ')})`);
-ok(/The Last Toast/.test(home.body) && /The Keeper(&#39;|')s Bell/.test(home.body), 'GET / shows story titles');
+ok(/href="\/stories"/.test(home.body) && /href="\/games"/.test(home.body) && /class="pagetabs"/.test(home.body), 'GET / links Stories and Games and has the page tabs');
 ok(/<audio controls preload="none" src="\/audio\/sample-last-toast\.mp3"/.test(home.body) && /class="btn btn-ghost btn-sm sample-btn" hidden aria-label="Play a/.test(home.body), 'GET / has the audio sample (a plain player without JS, a play button with it)');
-const firstAdventure = home.body.search(/genre-adventure"/), lastMystery = home.body.lastIndexOf('genre-murder-mystery"');
-ok(firstAdventure === -1 || lastMystery === -1 || lastMystery < firstAdventure, 'GET / lists mysteries first');
+const storiesTab = await get('/stories');
+const slugs = [...storiesTab.body.matchAll(/href="\/stories\/([^"/]+)"/g)].map((m) => decodeURIComponent(m[1]));
+ok(slugs.includes('example-dinner-party') && slugs.includes('keepers-bell'), `GET /stories lists the stories (${slugs.length})`);
+ok(/The Last Toast/.test(storiesTab.body) && /The Keeper(&#39;|')s Bell/.test(storiesTab.body), 'GET /stories shows story titles');
+const firstAdventure = storiesTab.body.search(/genre-adventure"/), lastMystery = storiesTab.body.lastIndexOf('genre-murder-mystery"');
+ok(firstAdventure === -1 || lastMystery === -1 || lastMystery < firstAdventure, 'GET /stories lists mysteries first');
+// Pieces being tested: published, listed, marked on the site, and the narrator asks for feedback.
+const testingStories = genStories.filter((s) => s.testing);
+if (testingStories.length) {
+  const t = testingStories.find((s) => s.kind === 'trivia') ?? testingStories[0];
+  ok((await call('list_stories', {})).includes(`slug: ${t.slug}`) && /new, being tested/.test(await call('list_stories', {})), 'pieces being tested are listed, marked "new, being tested"');
+  ok(/being tested/.test(await call('start_story', { slug: t.slug })), 'a piece being tested tells the narrator to say so and ask for feedback');
+  const gamesTab = await get('/games');
+  ok(/Being tested/.test(gamesTab.body) && /testing-note/.test(gamesTab.body), 'the Games tab marks pieces being tested and asks for feedback');
+}
+// Accounts: optional; the open connector's host serves no OAuth metadata, the account host does.
+const acctPage = await get('/account');
+ok(acctPage.status === 200 && /Sign in|Accounts are coming|Hi/.test(acctPage.body), `GET /account answers (${acctPage.status})`);
+ok((await fetch(`${base}/.well-known/oauth-authorization-server`)).status === 404, 'the open connector host serves no OAuth metadata (it has no sign-in)');
+const accountHost = base.includes('plotspeaks.com') ? 'https://account.plotspeaks.com' : 'https://account-dev.plotspeaks.com';
+try {
+  const noToken = await fetch(`${accountHost}/mcp`, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'smoke', version: '1' } } }) });
+  ok(noToken.status === 401 && /resource_metadata/.test(noToken.headers.get('www-authenticate') ?? ''), `the account connector asks for sign-in (401 with resource metadata; ${noToken.status})`);
+  const meta = await (await fetch(`${accountHost}/.well-known/oauth-authorization-server`)).json().catch(() => ({}));
+  ok(typeof meta.authorization_endpoint === 'string' && typeof meta.registration_endpoint === 'string', 'the account host publishes OAuth metadata with dynamic client registration');
+} catch (e) { ok(false, `the account host answers (${String(e).slice(0, 80)})`); }
 
 const dinner = await get('/stories/example-dinner-party');
 ok(dinner.status === 200 && /<h1>The Last Toast<\/h1>/.test(dinner.body), 'GET /stories/example-dinner-party has the title');
