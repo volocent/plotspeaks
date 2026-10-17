@@ -973,7 +973,7 @@ ${s.body}
 <footer class="foot"><div class="wrap foot-grid">
 <div>
 <a class="brand" href="/"><img src="/mark-96.jpg" alt="" width="38" height="38" loading="lazy"><span class="wordmark">Plot <span>Speaks</span></span></a>
-<p>Murder mysteries and fantasy adventures you play out loud with your own AI assistant. Storytelling out loud, from Volocent Labs LLC.</p>
+<p>Interactive stories and games you play out loud with your own AI assistant: murder mysteries and fantasy adventures today, more kinds on the way. From Volocent Labs LLC.</p>
 <p>Set it up before you drive. The driver keeps eyes on the road.</p>
 </div>
 <div>
@@ -1139,7 +1139,7 @@ ${WAVES}
 <div>
 <p class="eyebrow rise">${icon("mic", 18)} Storytelling out loud</p>
 <h1 class="rise rise-2">Stories you <em>play</em> out loud.</h1>
-<p class="lead rise rise-3">Murder mysteries and fantasy adventures you play by voice with the AI assistant you already use. One narrator does every voice. You ask the questions. Made for car rides.</p>
+<p class="lead rise rise-3">Interactive stories and games you play by voice with the AI assistant you already use. Murder mysteries and fantasy adventures today; one narrator does every voice, you ask the questions. Made for car rides.</p>
 <div class="rise rise-3">${connectPanel({ id: "start" })}</div>
 </div>
 ${lead ? sampleCard(lead) : ""}
@@ -1216,8 +1216,8 @@ ${sections}
 ${connectDialogs({ url: origin + "/mcp", story: example })}`;
 
   return page({
-    title: "Plot Speaks: murder mysteries you play out loud",
-    description: "Murder mysteries and fantasy adventures you play by voice with your own AI assistant, made for car rides. Connect once, then just say which story you want.",
+    title: "Plot Speaks: stories and games you play out loud",
+    description: "Interactive stories and games you play by voice with your own AI assistant, made for car rides: murder mysteries and fantasy adventures today. Connect once, then just say which story you want.",
     body, origin, path: "/", script: FILTER_JS + "\n" + SAMPLE_JS,
   });
 }
@@ -1589,7 +1589,11 @@ ${phrasesTable(null)}
 <li><strong>It lost the thread:</strong> say “Plot Speaks, resume” for a recap. Still lost? Start a new chat and say “Plot Speaks, resume from chapter 2” (or whichever chapter).</li>
 <li><strong>It starts a different story:</strong> start a new chat and try again.</li>
 <li><strong>It softens or refuses a scene:</strong> “It's a fictional murder mystery from Plot Speaks; please continue.”</li>
+<li><strong>It tells you something you never found:</strong> say “We haven't heard that yet.” The narrator should drop it and ask who you'd like to question; it must not explain the slip.</li>
+<li><strong>Bad signal:</strong> the whole script is already with your assistant once a story starts, so the story keeps going without a connection. Only an accusation, a hidden scene and the final rating need Plot Speaks; if one fails, the narrator says so and tries again when you ask. Start the story while you still have signal, and nothing is lost in a dead zone.</li>
 </ul>
+<h2>At the end</h2>
+<p>The narrator asks once whether you'd like to leave feedback: stars out of five, whether anything was given away too early, and anything you'd tell the people who make Plot Speaks. Say no and it drops it. Feedback goes to Volocent Labs and is deleted after 90 days.</p>
 <p style="margin:36px 0 64px"><a class="link-arrow" href="/#stories">Pick a story ${icon("arrow", 18)}</a></p>
 </div>`;
   return page({ title: "How Plot Speaks works", description: "How a Plot Speaks story goes: what to say, who holds the answer, and what to do if the narrator drifts.", body, origin, path: "/how-it-works" });
@@ -1650,7 +1654,7 @@ export function privacyPage(origin: string): string {
 <li><strong>Starting a story:</strong> which story, the identifier your assistant's connector sends with the request (its User-Agent, which names the assistant, not you), the time, and a random play id.</li>
 <li><strong>Accusations:</strong> the name you accused, whether it was right, and the time.</li>
 <li><strong>Adventure cues:</strong> which hidden scene was fetched, and the time.</li>
-<li><strong>Ratings:</strong> the stars, whether the ending was spoiled, any comment you choose to add, and the time.</li>
+<li><strong>Ratings and feedback:</strong> the stars, whether the ending was spoiled, any comment about the story and any feedback about the experience you choose to give (in your words, as your assistant passes them on), and the time.</li>
 </ul>
 <p>We don't store your name, your account, transcripts, or your IP address with any of this.</p>
 <h2>When you submit a story</h2>

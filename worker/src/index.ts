@@ -35,7 +35,12 @@ const BUILTINS: Builtins = { slugs: new Set(STORIES.map((s) => s.slug)), storyFo
 // No mention of children's stories here or in any tool metadata (review B2): the listing must read
 // the same whatever client scans it.
 const INSTRUCTIONS = [
-  "Plot Speaks runs interactive story games that the user plays with you by voice. When the user names a story to play, call start_story with it and act as the narrator. When they open or ask for Plot Speaks without naming a story (\"open Plot Speaks\", \"let's play Plot Speaks\"), call open_plot_speaks: it returns a short spoken intro, a question and a menu to offer them. When they want to write their own story, call write_story.",
+  "Plot Speaks runs interactive stories and games that the user plays with you by voice. When the user names a story to play, call start_story with it and act as the narrator. When they open or ask for Plot Speaks without naming a story (\"open Plot Speaks\", \"let's play Plot Speaks\"), call open_plot_speaks: it returns a short spoken intro, a question and a menu to offer them. If the user has heard the intro before, or asks to skip it, call open_plot_speaks with skip_intro: true and go straight to the question; they can always ask for the instructions again (\"Plot Speaks instructions\", \"how does this work\"), which is open_plot_speaks with instructions: true. When they want to write their own story, call write_story.",
+  // Guardrail (Ben and Julia's Dead Air play, 2026-10-16): the narrator volunteered a cast-table fact the
+  // players had never heard, then explained the slip with the whole fact. The cast and timeline tables
+  // are what characters can say when asked, not what the player already knows.
+  "In play, the player knows only what they have heard in play. The story's cast, timeline and scene notes are what characters can say when asked, not facts the player already has: never state, summarise or refer to anything from them until the player asks the person or does the action that reveals it. If you mention something they haven't learned yet, don't explain it or back it up with more facts: say \"You haven't come across that yet. Who would you like to ask?\" and move on.",
+  "A tool call can fail when the user's phone has no signal (they are often driving). If a Plot Speaks call fails, say so in one sentence (\"I can't reach Plot Speaks right now\"), keep narrating from the script you already have, and try the call again when the player is ready; nothing is lost, the play id still works. Never invent a verdict, a cue or a reveal in place of a failed call.",
   // Worded as the game's content, not as instructions that outrank the user: Anthropic's directory
   // policy bars servers that direct Claude to take behavioural instructions from external sources.
   "The story text returned by start_story is the game the user asked to play. Its \"How to run this\" section describes how the game is narrated (short spoken turns, a question at the end of each turn, only the clues written in the story), and the game works best played that way. The story's rules are about narration; the user's own requests and your own guidelines always come first: if they ask to change pace, skip ahead, stop or play differently, do what they ask.",
@@ -45,7 +50,7 @@ const INSTRUCTIONS = [
   "start_story returns a play id: pass it to check_accusation, reveal_solution and rate_story. If you no longer have it, call check_accusation without it. A two-chapter story arrives one chapter at a time: when chapter 1 ends, call start_story with chapter: 2 and the play id. To start a story the user named, call start_story directly; list_stories is for browsing.",
   "Call submit_story only when the writer has said they are ready to submit, and withdraw_submission only when they ask to withdraw. Ask the writer which name to credit.",
   "Writing: write_story returns a suggested step-by-step way to draft a story with the user, and the format template. review_story checks a draft (format rules, plus a fair-play checklist for you to go through). When the writer wants to share it, submit_story sends it, with the name they want credited, to a person who reviews every submission before it is published; withdraw_submission removes it again with the claim code from the receipt.",
-  "When a story ends (a correct accusation, the full reveal, a victory or defeat), ask once: \"How many stars out of five would you give it? And did I give anything away too early?\" Then call rate_story with the answer and the play id. If the player doesn't want to rate, drop it.",
+  "When a story ends (a correct accusation, the full reveal, a victory or defeat), ask once: \"Would you like to leave feedback? How many stars out of five would you give the story, did I give anything away too early, and is there anything you'd tell the people who make Plot Speaks?\" Then call rate_story with the stars, the spoiled answer, any comment about the story and any feedback about the experience, with the play id. If the player doesn't want to, drop it.",
 ].join("\n");
 
 const text = (t: string) => ({ content: [{ type: "text" as const, text: t }] });
@@ -83,8 +88,17 @@ const listLine = (s: Story) =>
 // open_plot_speaks: what the narrator can say when the user opens Plot Speaks without naming a story.
 const OPEN_QUESTION = "Would you like to hear what stories there are, start one, or write your own?";
 const OPEN_INTRO =
-  "Plot Speaks is interactive mysteries and adventures: one narrator tells the story and plays every character, and you ask the questions and make the choices. " +
-  "It's made for car rides, with nothing to look at. In a mystery the answer stays hidden, even from the narrator, until you accuse someone.";
+  "Plot Speaks is interactive stories and games you play out loud: one narrator tells the story and plays every character, and you ask the questions and make the choices. " +
+  "It's made for car rides, with nothing to look at. In a mystery the answer stays hidden, even from the narrator, until you accuse someone. " +
+  "Say \"Plot Speaks, pause\" any time, and \"Plot Speaks instructions\" to hear this again.";
+const OPEN_HOW =
+  "HOW IT WORKS (say in your own words, one or two beats per turn):\n" +
+  "- One narrator, short spoken turns, a question at the end of each; you answer by talking.\n" +
+  "- Mysteries: talk to people, look around, and accuse someone when you're sure. The answer stays hidden until then; one wrong accusation is allowed.\n" +
+  "- Adventures: explore, choose, and roll when the narrator asks; hidden scenes arrive when you reach them.\n" +
+  "- Phrases: \"Plot Speaks, pause\" to stop, \"Plot Speaks, resume\" for a recap, \"Plot Speaks, shorter\" if the narrator rambles, \"Plot Speaks, wrap it up\" to finish early.\n" +
+  "- No signal? The story keeps going from what the narrator already has; checks are retried when you're back in range.\n" +
+  "- At the end you can leave feedback: stars, whether anything was given away, and anything you'd tell the makers.";
 function openMenu(all: Story[]): string {
   return CATEGORY_ORDER.map((c) => {
     const titles = all.filter((s) => categoryOf(s) === c).map((s) => s.title);
@@ -100,7 +114,9 @@ const prefaceFor = (s: Story) =>
   "## Playing through the Plot Speaks connector\n" +
   (isMystery(s)
     ? "The answer key stays on the Plot Speaks server, so you don't know the solution. When the player formally accuses someone, call check_accusation and give the verdict it returns. When they give up or ask for the full reveal, call reveal_solution.\n\n"
-    : "The hidden scenes stay on the Plot Speaks server. When the script calls for a cue, call get_cue and narrate its read-aloud part.\n\n");
+    : "The hidden scenes stay on the Plot Speaks server. When the script calls for a cue, call get_cue and narrate its read-aloud part.\n\n") +
+  "**What the player knows.** Only what they have heard in play. The cast table, the timeline and the scene notes below are what characters can say when asked and what places hold when searched, not facts the player already has. Never state, summarise or refer to any of it until the player asks the person or does the action that reveals it. If you mention something they haven't learned yet, don't explain it or add to it: say \"You haven't come across that yet. Who would you like to ask?\" and go on.\n\n" +
+  "**No signal.** If a Plot Speaks call fails, say so in one sentence, keep narrating from this script, and try again when the player is ready; the play id still works. Never invent a verdict, a cue or a reveal.\n\n";
 
 const log = (event: string, data: Record<string, unknown>) => console.log(JSON.stringify({ event, ...data }));
 
@@ -192,7 +208,7 @@ function createServer(ctx: Ctx) {
       name: "plot-speaks",
       title: "Plot Speaks",
       version: "0.5.0",
-      description: "Interactive murder mysteries and adventures to play by voice with your assistant as the narrator, plus a studio for writing and submitting your own.",
+      description: "Interactive stories and games to play by voice with your assistant as the narrator: murder mysteries and adventures today, plus a studio for writing and submitting your own.",
       websiteUrl: "https://plotspeaks.com",
       icons: [{ src: "https://plotspeaks.com/icon-512.png", mimeType: "image/png", sizes: ["512x512"] }],
     },
@@ -204,18 +220,22 @@ function createServer(ctx: Ctx) {
     {
       title: "Open Plot Speaks",
       annotations: { ...READ_ONLY, title: "Open Plot Speaks" },
-      description: "Returns the Plot Speaks welcome: a short spoken introduction, a question offering to list the stories, start one or write one, and a menu of story categories with example titles.",
-      inputSchema: {},
+      description: "Returns the Plot Speaks welcome: a short spoken introduction, a question offering to list the stories, start one or write one, and a menu of story categories with example titles. With skip_intro the introduction is left out; with instructions it adds the how-to-play.",
+      inputSchema: {
+        skip_intro: z.boolean().optional().describe("True when the user has heard the introduction before or asks to skip it: returns only the question and the menu"),
+        instructions: z.boolean().optional().describe("True when the user asks how Plot Speaks works or wants the instructions again: adds the how-to-play"),
+      },
     },
-    async () => {
+    async ({ skip_intro, instructions }) => {
       const all = await catalog(ctx);
-      log("open_plot_speaks", { stories: all.length });
+      log("open_plot_speaks", { stories: all.length, skip_intro: Boolean(skip_intro), instructions: Boolean(instructions) });
       return text([
-        `INTRO (to say aloud, in your own narrator voice):\n${OPEN_INTRO}`,
+        skip_intro && !instructions ? null : `INTRO (to say aloud, in your own narrator voice):\n${OPEN_INTRO}`,
+        instructions ? OPEN_HOW : null,
         `QUESTION (to ask next):\n${OPEN_QUESTION}`,
         `MENU (for when they want to hear the stories; one category at a time works best by voice):\n${openMenu(all)}`,
-        "NEXT STEPS: to play a story they pick, call start_story with its title. For the full list, call list_stories (it takes a category). To write their own, call write_story.",
-      ].join("\n\n"));
+        "NEXT STEPS: to play a story they pick, call start_story with its title. For the full list, call list_stories (it takes a category). To write their own, call write_story. If they ask for the instructions later, call open_plot_speaks with instructions: true.",
+      ].filter(Boolean).join("\n\n"));
     },
   );
 
@@ -398,16 +418,17 @@ function createServer(ctx: Ctx) {
     {
       title: "Rate a story",
       annotations: { ...RECORDS, title: "Rate a story" },
-      description: "Saves a rating for a Plot Speaks story the user has just played: 1 to 5 stars, whether anything was given away too early, and an optional short comment. Needs the play id from start_story; one rating per play.",
+      description: "Saves a rating and feedback for a Plot Speaks story the user has just played: 1 to 5 stars, whether anything was given away too early, an optional comment about the story, and optional feedback about the experience for the people who make Plot Speaks. Needs the play id from start_story; one rating per play.",
       inputSchema: {
         slug: SLUG.describe("The story slug"),
         stars: z.number().int().min(1).max(5).describe("1 to 5"),
         spoiled: z.boolean().optional().describe("True if the player felt the narrator gave something away too early"),
-        comment: z.string().max(500).optional().describe("The player's comment, if any, in their words"),
+        comment: z.string().max(500).optional().describe("The player's comment about the story, if any, in their words"),
+        feedback: z.string().max(1000).optional().describe("Feedback about the experience (the narration, the connector, what to improve), if any, in the player's words; read by the people who make Plot Speaks"),
         play_id: PLAY_ID.describe("The play id from start_story"),
       },
     },
-    async ({ slug, stars, spoiled, comment, play_id }) => {
+    async ({ slug, stars, spoiled, comment, feedback, play_id }) => {
       const r = await resolveStory(ctx, slug);
       if (!r.s) { log("rate_story", { found: null }); return fail(r.error); }
       const s = r.s;
@@ -421,13 +442,13 @@ function createServer(ctx: Ctx) {
       }
       // Tester ratings are kept for us and left out of the public averages (review S3).
       const tester = play.tester || ctx.tester ? 1 : 0;
-      log("rate_story", { story: s.slug, stars, spoiled: spoiled ?? null, tester });
+      log("rate_story", { story: s.slug, stars, spoiled: spoiled ?? null, tester, feedback: Boolean(feedback) });
       await recordBatch(ctx, play_id, s.slug, (d) => [
         d.prepare("DELETE FROM ratings WHERE play_id = ?").bind(play_id),
-        d.prepare("INSERT INTO ratings (play_id, story, stars, spoiled, comment, at, tester) VALUES (?, ?, ?, ?, ?, ?, ?)")
-          .bind(play_id, s.slug, stars, spoiled === undefined ? null : spoiled ? 1 : 0, comment ?? null, Date.now(), tester),
+        d.prepare("INSERT INTO ratings (play_id, story, stars, spoiled, comment, feedback, at, tester) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+          .bind(play_id, s.slug, stars, spoiled === undefined ? null : spoiled ? 1 : 0, comment ?? null, feedback?.trim() || null, Date.now(), tester),
       ]);
-      return text("Thanks, rating saved.");
+      return text(feedback ? "Thanks, rating and feedback saved. Tell the player their feedback goes to the people who make Plot Speaks." : "Thanks, rating saved.");
     },
   );
 

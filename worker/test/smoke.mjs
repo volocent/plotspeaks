@@ -53,7 +53,7 @@ const GPT_UA = 'openai-mcp/1.0.0';
 
 const init = await rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'smoke', version: '1' } });
 const instructions = init.json?.result?.instructions ?? '';
-ok(init.status === 200 && /Plot Speaks runs interactive story games/.test(instructions), 'initialize returns the server instructions');
+ok(init.status === 200 && /Plot Speaks runs interactive stories and games/.test(instructions), 'initialize returns the server instructions');
 ok(!/wrangler/i.test(instructions) && !/\bkids?\b|family/i.test(instructions) && /reveal_solution/.test(instructions) && /check_accusation/.test(instructions),
   'the instructions mention no wrangler and no kids/family, and name check_accusation and reveal_solution');
 
@@ -105,6 +105,12 @@ ok(/car ride/i.test(opened) && /until you accuse/i.test(opened), 'open_plot_spea
 ok(['Murder mysteries:', 'Dark murder mysteries:', 'Family mysteries:', 'Fantasy adventures:'].every((c) => opened.includes(c)) && /The Last Toast/.test(opened),
   'open_plot_speaks menu has the four categories with example titles');
 ok(!/\((correct|wrong)\)|^\s*(Correct|Innocent)\.\s/im.test(opened), 'open_plot_speaks contains no answer-key line');
+const skipped = await call('open_plot_speaks', { skip_intro: true });
+ok(!/^INTRO/m.test(skipped) && skipped.includes('Would you like to hear what stories there are') && /MENU/.test(skipped), 'open_plot_speaks with skip_intro leaves the intro out but keeps the question and menu');
+const howTo = await call('open_plot_speaks', { instructions: true });
+ok(/HOW IT WORKS/.test(howTo) && /Plot Speaks, pause/.test(howTo) && /No signal/.test(howTo) && /feedback/i.test(howTo), 'open_plot_speaks with instructions adds the how-to-play (phrases, no signal, feedback)');
+ok(/haven't come across that yet/.test(instructions) && /can't reach Plot Speaks/.test(instructions) && /leave feedback/i.test(instructions),
+  'the server instructions carry the discovery guardrail, the no-signal rule and the feedback ask');
 const gptOpened = await call('open_plot_speaks', {}, { ua: GPT_UA });
 ok(!/Family mysteries/.test(gptOpened) && /Fantasy adventures/.test(gptOpened), 'open_plot_speaks for ChatGPT leaves the family category out');
 const darkList = await call('list_stories', { genre: 'dark' });
@@ -223,8 +229,8 @@ const ghostRate = await result('rate_story', { slug: 'example-dinner-party', sta
 ok(isErr(ghostRate) && /nothing was saved/i.test(ghostRate?.content?.[0]?.text ?? ''), 'rate_story refuses a play id that does not exist (nothing saved)');
 if (!openServer) {
   // Dev only: production smoke runs leave no rating at all.
-  const rated = await call('rate_story', { slug: 'example-dinner-party', stars: 5, spoiled: false, comment: 'smoke test', play_id: playId });
-  ok(/rating saved/i.test(rated), 'rate_story saves a rating for a real play (dev; stored as a tester rating)');
+  const rated = await call('rate_story', { slug: 'example-dinner-party', stars: 5, spoiled: false, comment: 'smoke test', feedback: 'smoke test feedback', play_id: playId });
+  ok(/rating and feedback saved/i.test(rated), 'rate_story saves a rating for a real play (dev; stored as a tester rating)');
 } else console.log('SKIP  saving a rating (open server: the smoke test leaves no rating)');
 
 // ---------------------------------------------------------------- write_story and review_story

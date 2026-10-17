@@ -35,7 +35,7 @@ export async function adminStats(db: D1Database, env: { ENVIRONMENT?: string }, 
   const sinceDay = new Date(now - (days - 1) * DAY).toISOString().slice(0, 10);
   const all = async (sql: string, ...args: unknown[]) => ((await db.prepare(sql).bind(...args).all<Row>()).results ?? []);
 
-  const [who, stories, clients, daily, accusations, solveRows, ratingsByStory, ratingsWindow, subs, attempts] = await Promise.all([
+  const [who, stories, clients, daily, accusations, solveRows, ratingsByStory, ratingsWindow, ratingTexts, subs, attempts] = await Promise.all([
     all(`SELECT p.tester AS tester, count(*) AS plays,
                 sum(CASE WHEN ${COMPLETED} THEN 1 ELSE 0 END) AS completed,
                 sum(CASE WHEN ${SOLVED} THEN 1 ELSE 0 END) AS solved,
@@ -69,8 +69,15 @@ export async function adminStats(db: D1Database, env: { ENVIRONMENT?: string }, 
     all(`SELECT r.story AS story, count(*) AS n, round(avg(r.stars), 2) AS avg_stars, sum(coalesce(r.spoiled, 0)) AS spoiled
          FROM ratings r LEFT JOIN plays p ON p.id = r.play_id WHERE coalesce(p.tester, 0) = 0 AND coalesce(r.tester, 0) = 0 GROUP BY r.story ORDER BY n DESC`),
     all(`SELECT count(*) AS n, round(avg(r.stars), 2) AS avg_stars, sum(coalesce(r.spoiled, 0)) AS spoiled,
-                sum(CASE WHEN r.comment IS NOT NULL AND r.comment <> '' THEN 1 ELSE 0 END) AS comments
+                sum(CASE WHEN r.comment IS NOT NULL AND r.comment <> '' THEN 1 ELSE 0 END) AS comments,
+                sum(CASE WHEN r.feedback IS NOT NULL AND r.feedback <> '' THEN 1 ELSE 0 END) AS feedback
          FROM ratings r LEFT JOIN plays p ON p.id = r.play_id WHERE coalesce(p.tester, 0) = 0 AND coalesce(r.tester, 0) = 0 AND r.at >= ?`, since),
+    // The newest comments and feedback in the window, in the players' words (cleared at 90 days by
+    // retention), so the owner reads them from the dashboard without opening the database.
+    all(`SELECT r.story AS story, r.stars AS stars, r.spoiled AS spoiled, r.comment AS comment, r.feedback AS feedback, r.at AS at, coalesce(r.tester, p.tester, 0) AS tester
+         FROM ratings r LEFT JOIN plays p ON p.id = r.play_id
+         WHERE r.at >= ? AND ((r.comment IS NOT NULL AND r.comment <> '') OR (r.feedback IS NOT NULL AND r.feedback <> ''))
+         ORDER BY r.at DESC LIMIT 50`, since),
     // Smoke-test rows (dev_marker = 1) are left out.
     all(`SELECT status, count(*) AS n, min(created_at) AS oldest, sum(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) AS in_window
          FROM submissions WHERE dev_marker = 0 GROUP BY status`, since),
@@ -136,8 +143,10 @@ export async function adminStats(db: D1Database, env: { ENVIRONMENT?: string }, 
       solveRatePct: pct(playsSolved, playsAccused),
     },
     ratings: {
-      inWindow: { n: num(ratingsWindow[0]?.n), avgStars: ratingsWindow[0]?.avg_stars ?? null, spoiled: num(ratingsWindow[0]?.spoiled), comments: num(ratingsWindow[0]?.comments) },
+      inWindow: { n: num(ratingsWindow[0]?.n), avgStars: ratingsWindow[0]?.avg_stars ?? null, spoiled: num(ratingsWindow[0]?.spoiled), comments: num(ratingsWindow[0]?.comments), feedback: num(ratingsWindow[0]?.feedback) },
       byStory: ratingsByStory.map((r) => ({ story: r.story, n: num(r.n), avgStars: r.avg_stars, spoiled: num(r.spoiled) })),
+      // In the players' words; tester rows (ours) are marked so they can be skipped.
+      texts: ratingTexts.map((r) => ({ story: r.story, stars: num(r.stars), spoiled: r.spoiled === null ? null : Boolean(r.spoiled), comment: r.comment ?? null, feedback: r.feedback ?? null, at: new Date(num(r.at)).toISOString(), tester: Boolean(num(r.tester)) })),
     },
     submissions: {
       ...subsBy,

@@ -7,7 +7,7 @@
 //                                accusation on an old play can't linger as an orphan
 //   submission_attempts          deleted after 2 days (they only feed the 24-hour submit caps)
 //   submissions, status rejected deleted 90 days after review (or submission, if never reviewed)
-//   ratings                      kept; the free-text comment is cleared after 90 days
+//   ratings                      kept; the free-text comment and feedback are cleared after 90 days
 //   submissions, pending/approved kept (approved stories are the catalog)
 //   daily_counts                 deleted after 400 days (counts only, no personal data; src/usage.ts)
 //   completions                  deleted after 90 days (Gate 2 markers; the count stays in totals)
@@ -27,7 +27,7 @@ export async function runRetention(db: D1Database | undefined, now = Date.now())
     ["orphan_events", db.prepare("DELETE FROM play_events WHERE play_id IS NOT NULL AND play_id NOT IN (SELECT id FROM plays)")],
     ["submission_attempts", db.prepare("DELETE FROM submission_attempts WHERE at < ?").bind(now - ATTEMPT_DAYS * DAY)],
     ["rejected_submissions", db.prepare("DELETE FROM submissions WHERE status = 'rejected' AND coalesce(reviewed_at, created_at) < ?").bind(old)],
-    ["rating_comments", db.prepare("UPDATE ratings SET comment = NULL WHERE at < ? AND comment IS NOT NULL").bind(old)],
+    ["rating_comments", db.prepare("UPDATE ratings SET comment = NULL, feedback = NULL WHERE at < ? AND (comment IS NOT NULL OR feedback IS NOT NULL)").bind(old)],
   ];
   const results = await db.batch(steps.map(([, s]) => s));
   const counts: Record<string, number> = {};
