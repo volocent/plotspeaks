@@ -4,6 +4,7 @@ description: Run "The Toll at Greyfall Bridge", a 35-minute, one-chapter mountai
 license: CC-BY-NC-4.0
 metadata:
   title: The Toll at Greyfall Bridge
+  pitch: "First snow is falling on the mountain village of Highcombe, and a trader must get three wagons over the pass before winter closes it. He hires your party to guard them to Fallowbeck, past the troll who keeps the bridge and charges a toll."
   genre: adventure
   duration_minutes: 35
   chapters: 1

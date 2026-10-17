@@ -4,6 +4,7 @@ description: Run "The Fizzless Volcano", a 20-minute family mystery (a science-f
 license: CC-BY-NC-4.0
 metadata:
   title: The Fizzless Volcano
+  pitch: "On science fair day at Cedar Run Elementary, Maya's prize-winning volcano goes glug instead of whoosh, because someone has swapped her baking soda for flour. Nobody is hurt, and before judging at two you ask around the gym to find out who did it."
   genre: kids
   duration_minutes: 20
   chapters: 1

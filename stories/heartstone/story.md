@@ -4,6 +4,7 @@ description: Run "The Heartstone of Pellmarrow", a 35-minute, one-chapter forest
 license: CC-BY-NC-4.0
 metadata:
   title: The Heartstone of Pellmarrow
+  pitch: "For a hundred years the Heartstone has kept Pellmarrow's apple trees from failing, and three nights ago something carried it off into the Thornwood. The alderwoman sends your party down a path untrodden in living memory, past the thorn gate, to bring it home."
   genre: adventure
   duration_minutes: 35
   chapters: 1

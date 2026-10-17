@@ -4,6 +4,7 @@ description: Run "The Silent Hour", a 60-minute, two-chapter dark murder mystery
 license: CC-BY-NC-4.0
 metadata:
   title: The Silent Hour
+  pitch: "In January 1928 an avalanche cuts off an Alpine tuberculosis sanatorium, and in the small hours its senior physician is found dead. You were a police inspector before you were a patient, and with road and telephone gone, you question the staff and patients."
   genre: murder-mystery
   tone: dark
   duration_minutes: 60

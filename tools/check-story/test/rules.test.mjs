@@ -298,4 +298,8 @@ test('culprit-tell: confronting the culprit in a GM trigger is an error; other m
   assert.deepEqual(f.map((x) => [x.line, x.severity]), [[2, 'ERROR'], [3, 'WARN'], [7, 'ERROR']]);
   assert.deepEqual(checkCulpritTells('## How to run this\n- once the player has found the apron', secrets), []);
   assert.deepEqual(checkCulpritTells(story, ''), []);
+  // The catalogue pitch is public: naming the culprit there is an error; naming anyone else is fine.
+  const pitched = checkCulpritTells('---\nmetadata:\n  pitch: "A cook named Ada Fenn serves a last supper."\n---\n', secrets);
+  assert.deepEqual(pitched.map((x) => [x.line, x.severity, x.rule]), [[3, 'ERROR', 'culprit-tell']]);
+  assert.deepEqual(checkCulpritTells('---\nmetadata:\n  pitch: "Six guests, one toast, and the host is dead before dessert."\n---\n', secrets), []);
 });

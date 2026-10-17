@@ -21,6 +21,7 @@ description: Run "<Title>", a <N>-minute <genre> for <players> players. Use when
 license: CC-BY-NC-4.0            # free stories; paid stories use All-Rights-Reserved + Plot Speaks distribution license
 metadata:
   title: <Title>
+  pitch: "<Two sentences, 25 to 45 words: where and when, what happened, the stakes, what you do. No clue, no secret, never the culprit.>"
   genre: murder-mystery           # murder-mystery | adventure | horror | heist | kids
   duration_minutes: 30
   chapters: 1

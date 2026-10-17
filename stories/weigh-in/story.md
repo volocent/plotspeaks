@@ -4,6 +4,7 @@ description: Run "The Weigh-In", a 50-minute, two-chapter small-town murder myst
 license: CC-BY-NC-4.0
 metadata:
   title: The Weigh-In
+  pitch: "On derby day at frozen Ember Lake, Arvid Lund, weighmaster for thirty-one years, is found dead in his fish house out on the ice. The sheriff is stuck on the highway, so you, the off-duty deputy, search the ice and question the town."
   genre: murder-mystery
   duration_minutes: 50
   chapters: 2

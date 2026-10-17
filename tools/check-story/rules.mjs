@@ -525,6 +525,8 @@ export function checkCulpritTells(storyText, secretsText) {
   const re = new RegExp(`\\b(?:${parts.map(esc).join('|')})\\b`);
   let inGm = false;
   lines.forEach((line, i) => {
+    // The catalogue pitch (metadata.pitch) is public before play begins: the culprit's name in it is a tell.
+    if (/^\s*pitch:/.test(line) && re.test(line)) out.push(err(i + 1, 'culprit-tell', `metadata.pitch names the culprit (${name}); the pitch summarises the situation, never the suspects`));
     if (/^##\s/.test(line)) inGm = /^##\s+How to run this/i.test(line);
     else if (inGm && re.test(line)) {
       // A trigger on confronting the culprit is always a tell; any other mention (a lead, a fixed fact) needs a human look.

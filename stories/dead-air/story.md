@@ -4,6 +4,7 @@ description: Run "Dead Air", a 30-minute late-night radio murder mystery for 1-4
 license: CC-BY-NC-4.0
 metadata:
   title: Dead Air
+  pitch: "On a stormy November night at a small community radio station, host Dorian Vale goes silent on air and is found dead at his desk. Floodwater keeps the police forty minutes away, so you, the building's night guard, question everyone upstairs."
   genre: murder-mystery
   duration_minutes: 30
   chapters: 1

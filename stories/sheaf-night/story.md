@@ -4,6 +4,7 @@ description: Run "Sheaf Night", a 35-minute dark murder mystery at a moorland vi
 license: CC-BY-NC-4.0
 metadata:
   title: Sheaf Night
+  pitch: "On a foggy September night in a moorland village, this year's Crown-bearer is found dead in the threshing barn during a harvest custom no outsider may watch. The constable, cut off in the valley, asks you, the visiting writer, to find out who was where."
   genre: murder-mystery
   tone: dark
   duration_minutes: 35

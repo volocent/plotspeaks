@@ -47,6 +47,9 @@ export function meta(p: PublicStory): Meta {
   };
   const beat1 = /\*\*Read aloud \(cold open, beat 1\):\*\*\s*(.+)/i.exec(p.story);
   const description = field("description");
+  // metadata.pitch (Ben, 2026-10-16): a two-sentence summary of the situation with no clue and no
+  // answer, written per story. Older stories without one fall back to the cold open's first beat.
+  const pitch = field("pitch");
   return {
     slug: p.slug,
     title: field("title") || p.slug,
@@ -60,7 +63,7 @@ export function meta(p: PublicStory): Meta {
     license: field("license"),
     rulesSystem: field("rules_system"),
     author: field("author"),
-    pitch: plain(beat1 ? beat1[1] : description),
+    pitch: pitch || plain(beat1 ? beat1[1] : description),
   };
 }
 
@@ -174,7 +177,10 @@ const CONNECT: { headline: string; short: string; assistants: Assistant[] } = {
           "Give {passenger} to a passenger. It holds the answer key, so they read out the verdict when the narrator asks.",
         ],
         alt: { head: "On Business, Enterprise or Edu", text: "On the web: <strong>Plugins → + → Add custom MCP server</strong>, paste the address and choose no authentication." },
-        notes: ["A ChatGPT app listing is planned, so Free and Plus can connect too. No date yet."],
+        notes: [
+          "A ChatGPT app listing is planned, so Free and Plus can connect too. No date yet.",
+          "The family mysteries aren't offered in ChatGPT (its rules on content for under-13s). Play them in Claude, or by paste.",
+        ],
       },
     },
     {
@@ -258,7 +264,7 @@ const CATEGORIES: Category[] = [
     blurb: "A body, a handful of suspects, and one of them did it. Ask questions, then accuse.",
     match: (m) => isMysteryGenre(m.genre) && m.tone !== "dark" },
   { id: "family", name: "Family mysteries", short: "Family", icon: "star",
-    blurb: "Nobody gets hurt. Something goes missing and the kids crack the case. For ages about 7 to 10.",
+    blurb: "Nobody gets hurt. Something goes missing and the kids crack the case. For ages about 7 to 10. Not offered in ChatGPT (its rules on content for under-13s); play these in Claude, or by paste.",
     match: (m) => m.genre === "kids" },
   { id: "adventure", name: "Fantasy adventures", short: "Fantasy", icon: "compass",
     blurb: "Swords, spells and dice rolls. Make choices as a party and see where the road goes.",
@@ -330,10 +336,27 @@ function chatgptNote(passenger?: string): string {
 function byoaBadge(): string {
   return `<span class="byoa-badge"><span class="byoa-tag">BYOA</span><span class="byoa-name">Bring your own assistant</span></span>`;
 }
-function aiButtons(label = "Connect your assistant"): string {
+// `say` is the phrase that opens Plot Speaks or starts this page's story. Once the visitor has
+// marked an assistant as connected (localStorage, CONNECTED_JS), the Connect buttons give way to
+// one "Open in <assistant>" action: a link that opens a new chat with the phrase typed in (Claude
+// and ChatGPT take a q= parameter), or a copy button where no such link exists (Gemini, others).
+function aiButtons(label = "Connect your assistant", say = OPEN_LINE): string {
+  const q = encodeURIComponent(say);
+  const geminiSay = say === OPEN_LINE ? "@Plot Speaks open." : `@Plot Speaks ${say.replace(/ with Plot Speaks\.?$/i, "").replace(/^Start/, "start")}.`;
   return `<ul class="ai-btns" aria-label="${esc(label)}">
 ${CONNECT.assistants.map((a) => `<li><a class="ai-btn" href="/connect#${a.id}" data-dialog="dlg-${a.id}">${a.logo ? `<span class="ai-btn-logo" aria-hidden="true">${a.logo}</span>` : ""}<span class="ai-btn-name">${esc(a.btn)}</span><span class="ai-btn-act">${icon("plug", 16)}Connect</span></a></li>`).join("\n")}
-</ul>`;
+</ul>
+<div class="byoa-on" hidden>
+<p class="byoa-on-line"><span class="status status-ok">Connected</span><strong data-on-name></strong><button class="linkish" type="button" data-on-change>Change</button></p>
+<p class="byoa-on-act">
+<a class="btn btn-primary btn-big" hidden data-on="claude" href="https://claude.ai/new?q=${q}" rel="noopener">${icon("plug", 20)}Open in Claude</a>
+<a class="btn btn-primary btn-big" hidden data-on="chatgpt" href="https://chatgpt.com/?q=${q}" rel="noopener">${icon("plug", 20)}Open in ChatGPT</a>
+<button class="btn btn-primary btn-big" hidden type="button" data-on="gemini" data-copy-phrase="${esc(geminiSay)}">${icon("copy", 20)}Copy the phrase for Gemini</button>
+<button class="btn btn-primary btn-big" hidden type="button" data-on="other" data-copy-phrase="${esc(say)}">${icon("copy", 20)}Copy the phrase</button>
+<span class="copied" role="status" aria-live="polite"></span>
+</p>
+<p class="byoa-on-say">It opens a new chat with <strong>“${esc(say)}”</strong> ready to send; or just say it in voice mode.</p>
+</div>`;
 }
 // The home page's call to action, in the hero and again at the bottom: badge, buttons, the line.
 function connectPanel(opts: { id: string; heading?: string }): string {
@@ -369,7 +392,7 @@ function connectDialogs(ctx: DialogCtx): string {
     const copy = copyField(url, `${id}-url`, false);
     let inner = `<p class="dlg-lead">${f(a.pop.lead)}</p>`;
     if (a.id === "claude") {
-      inner += `<p class="dlg-cta"><a class="btn btn-primary btn-big" href="${esc(claudeLink(url))}" rel="noopener">${icon("plug", 20)}Connect to Claude</a></p>
+      inner += `<p class="dlg-cta"><a class="btn btn-primary btn-big" href="${esc(claudeLink(url))}" rel="noopener" data-connected="claude">${icon("plug", 20)}Connect to Claude</a></p>
 <p class="dlg-or">or copy the address</p>${copy}${notes(a.pop.notes)}`;
     } else if (a.id === "chatgpt") {
       inner += `<h3 class="dlg-h">${esc(a.pop.stepsHead ?? "")}</h3>${list(a.pop.steps ?? [])}`;
@@ -389,6 +412,7 @@ function connectDialogs(ctx: DialogCtx): string {
 <div class="cdlg-body">
 ${inner}
 ${thenSay(a)}
+<p class="dlg-done"><button class="btn btn-ghost btn-sm" type="button" data-connected="${a.id}">${icon("check", 18)}I've connected ${esc(a.btn)}</button><span>This page and every story page will then show an <strong>Open in ${esc(a.btn)}</strong> button instead. Remembered on this device only.</span></p>
 <p class="dlg-more"><a class="link-arrow" href="/connect#${a.id}">Full details on the Connect page ${icon("arrow", 18)}</a></p>
 </div>
 </div>
@@ -416,6 +440,32 @@ const DIALOG_JS = `(function(){
     });
     d.addEventListener("close",function(){if(d._from){d._from.focus();d._from=null;}});
   });
+})();`;
+// The visitor's connected assistant, remembered in this browser only (localStorage "ps.assistant";
+// a private window or cleared data just shows the Connect buttons again). Set by the Connect to
+// Claude link and the "I've connected" buttons; cleared by Change.
+const CONNECTED_JS = `(function(){
+  var KEY="ps.assistant",NAMES={claude:"Claude",chatgpt:"ChatGPT",gemini:"Gemini",other:"your assistant"};
+  function get(){try{return localStorage.getItem(KEY)||"";}catch(e){return "";}}
+  function set(v){try{if(v)localStorage.setItem(KEY,v);else localStorage.removeItem(KEY);}catch(e){}}
+  function apply(){
+    var id=get();if(id&&!NAMES[id])id="";
+    [].forEach.call(document.querySelectorAll(".ai-btns"),function(u){u.hidden=Boolean(id);});
+    [].forEach.call(document.querySelectorAll(".byoa-on"),function(b){
+      b.hidden=!id;var say=b.nextElementSibling;if(say&&say.classList.contains("saybox"))say.hidden=Boolean(id);if(!id)return;
+      var n=b.querySelector("[data-on-name]");if(n)n.textContent=NAMES[id];
+      [].forEach.call(b.querySelectorAll("[data-on]"),function(el){el.hidden=el.getAttribute("data-on")!==id;});
+    });
+  }
+  document.addEventListener("click",function(e){
+    var t=e.target.closest&&e.target.closest("[data-connected],[data-on-change],[data-copy-phrase]");if(!t)return;
+    if(t.hasAttribute("data-connected")){set(t.getAttribute("data-connected"));apply();var d=t.closest("dialog");if(d&&t.tagName!=="A")d.close();return;}
+    if(t.hasAttribute("data-on-change")){e.preventDefault();set("");apply();return;}
+    var p=t.getAttribute("data-copy-phrase"),s=t.parentNode.querySelector(".copied");
+    function done(ok){if(s){s.textContent=ok?"Copied. Paste it into a new chat, or just say it.":"Copy failed; say it instead: "+p;}}
+    if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(p).then(function(){done(true);},function(){done(false);});}else done(false);
+  });
+  apply();
 })();`;
 
 function phrasesTable(m: Meta | null): string {
@@ -800,6 +850,12 @@ details.script pre{margin:0;padding:0 18px 18px;white-space:pre-wrap;word-break:
 .ai-btn-logo{display:block;width:28px;height:28px}
 .ai-btn-name{font:650 1.2rem/1.12 var(--serif);font-variation-settings:"SOFT" 50,"opsz" 36}
 .ai-btn-act{display:inline-flex;align-items:center;gap:6px;padding:7px 12px 7px 9px;border-radius:999px;background:var(--btn);color:var(--btn-ink);font:750 .84rem/1 var(--sans)}
+.byoa-on{margin:16px 0 14px;padding:16px 18px;border-radius:18px;background:var(--surface);border:1.5px solid var(--line-2);box-shadow:var(--shadow)}
+.byoa-on-line{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:0 0 12px;font-size:1.05rem}
+.byoa-on-act{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin:0}
+.byoa-on-say{margin:12px 0 0;color:var(--ink-2);font-size:.98rem}
+.linkish{appearance:none;background:none;border:0;padding:0;color:var(--accent);text-decoration:underline;cursor:pointer;font:inherit}
+.dlg-done{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;margin:18px 0 6px;color:var(--ink-2);font-size:.95rem}
 .byoa-line{margin:0;color:var(--ink-2);font-size:1.02rem;max-width:36rem}
 .byoa-line strong{color:var(--ink)}
 .section-head .byoa-badge{margin:0 0 16px}
@@ -1002,7 +1058,7 @@ ${s.body}
   var m=document.querySelector("details.menu");
   if(m){document.addEventListener("click",function(e){if(m.open&&!m.contains(e.target))m.open=false;});document.addEventListener("keydown",function(e){if(e.key==="Escape"&&m.open){m.open=false;m.querySelector("summary").focus();}});}
 })();
-${s.body.includes("data-dialog=") ? DIALOG_JS : ""}
+${s.body.includes("data-dialog=") ? DIALOG_JS + "\n" + CONNECTED_JS : ""}
 ${s.script ?? ""}
 </script>
 </body>
@@ -1252,7 +1308,7 @@ ${stars(rating)}
 <p class="eyebrow">${icon("plug", 18)} Connect</p>
 <h2 id="play-h">Play it with your assistant.</h2>
 <p>Connect Plot Speaks once. It loads the story and ${isMystery ? "checks accusations for you, so nobody needs to hold the answer" : "hands over the hidden scenes for you, so nobody needs to hold them"}.</p>
-${aiButtons()}
+${aiButtons("Connect your assistant", `Start ${m.title} with Plot Speaks.`)}
 <p class="saybox"><b>Then say</b>“Start ${esc(m.title)} with Plot Speaks.”</p>
 <p class="connect-alt">${icon("copy", 20)}<span>No connector? <a href="#paste">Paste the story</a> instead, and give a passenger <a href="${passenger}">the passenger page</a>.</span></p>
 </section>

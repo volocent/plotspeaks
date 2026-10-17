@@ -50,7 +50,7 @@ const INSTRUCTIONS = [
   "start_story returns a play id: pass it to check_accusation, reveal_solution and rate_story. If you no longer have it, call check_accusation without it. A two-chapter story arrives one chapter at a time: when chapter 1 ends, call start_story with chapter: 2 and the play id. To start a story the user named, call start_story directly; list_stories is for browsing.",
   "Call submit_story only when the writer has said they are ready to submit, and withdraw_submission only when they ask to withdraw. Ask the writer which name to credit.",
   "Writing: write_story returns a suggested step-by-step way to draft a story with the user, and the format template. review_story checks a draft (format rules, plus a fair-play checklist for you to go through). When the writer wants to share it, submit_story sends it, with the name they want credited, to a person who reviews every submission before it is published; withdraw_submission removes it again with the claim code from the receipt.",
-  "When a story ends (a correct accusation, the full reveal, a victory or defeat), ask once: \"Would you like to leave feedback? How many stars out of five would you give the story, did I give anything away too early, and is there anything you'd tell the people who make Plot Speaks?\" Then call rate_story with the stars, the spoiled answer, any comment about the story and any feedback about the experience, with the play id. If the player doesn't want to, drop it.",
+  "When a story ends (a correct accusation, the full reveal, a victory or defeat), ask once: \"Would you like to leave feedback? How many stars out of five would you give the story, did I give anything away too early, and is there anything you'd tell the people who make Plot Speaks?\" Then call rate_story with the stars, the spoiled answer, any comment about the story and any feedback about the experience, with the play id. If the player doesn't want to, drop it. Either way, end with: \"Thank you for choosing Plot Speaks. Would you like to go back to the main menu, or play this one again?\" Main menu is open_plot_speaks with skip_intro: true; again is start_story for the same story (a new play).",
 ].join("\n");
 
 const text = (t: string) => ({ content: [{ type: "text" as const, text: t }] });
@@ -448,7 +448,8 @@ function createServer(ctx: Ctx) {
         d.prepare("INSERT INTO ratings (play_id, story, stars, spoiled, comment, feedback, at, tester) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
           .bind(play_id, s.slug, stars, spoiled === undefined ? null : spoiled ? 1 : 0, comment ?? null, feedback?.trim() || null, Date.now(), tester),
       ]);
-      return text(feedback ? "Thanks, rating and feedback saved. Tell the player their feedback goes to the people who make Plot Speaks." : "Thanks, rating saved.");
+      const closing = " Then say: \"Thank you for choosing Plot Speaks. Would you like to go back to the main menu, or play this one again?\"";
+      return text((feedback ? "Thanks, rating and feedback saved. Tell the player their feedback goes to the people who make Plot Speaks." : "Thanks, rating saved.") + closing);
     },
   );
 

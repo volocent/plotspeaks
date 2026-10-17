@@ -4,6 +4,7 @@ description: Run "The Orchard Wedding", a 30-minute murder mystery at a cider-ba
 license: CC-BY-NC-4.0
 metadata:
   title: The Orchard Wedding
+  pitch: "At a rainy October wedding in a hillside cider barn, the bride's uncle, Harlan Tamsworth, dies during the reception. The creek has flooded the only lane out, the police are an hour away, and the bride asks you to find out who killed him."
   genre: murder-mystery
   duration_minutes: 30
   chapters: 1

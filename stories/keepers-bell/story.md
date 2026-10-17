@@ -4,6 +4,7 @@ description: Run "The Keeper's Bell", a 60-minute, two-chapter dungeon crawl for
 license: CC-BY-NC-4.0
 metadata:
   title: The Keeper's Bell
+  pitch: "Every midnight a bell rings under the hill above Brackenhold, where no bell has hung for a hundred years, and sheep are going missing. The reeve pays your party to go beneath the chapel ruin, where a goblin was seen running, and stop it."
   genre: adventure
   duration_minutes: 60
   chapters: 2

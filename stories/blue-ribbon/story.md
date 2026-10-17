@@ -4,6 +4,7 @@ description: Run "The Missing Blue Ribbon", a 20-minute family mystery (a theft,
 license: CC-BY-NC-4.0
 metadata:
   title: The Missing Blue Ribbon
+  pitch: "At the Maple Hollow Fair on a sunny Saturday, the prize ribbon for the pie contest vanishes an hour before the judging. Nobody is hurt, and as the junior fair helper you ask around the fairground to find out who took it."
   genre: kids
   duration_minutes: 20
   chapters: 1

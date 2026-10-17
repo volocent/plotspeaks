@@ -4,6 +4,7 @@ description: Run "The Empty Glass Case", a 20-minute family mystery (family myst
 license: CC-BY-NC-4.0
 metadata:
   title: The Empty Glass Case
+  pitch: "At the Willowmere Library's Friday night sleepover, its oldest treasure, a first copy of The Clockwork Fox, vanishes the night before its big day. Nobody is hurt and the doors are locked, so before lights out you ask everyone what they saw."
   genre: kids
   duration_minutes: 20
   chapters: 1
