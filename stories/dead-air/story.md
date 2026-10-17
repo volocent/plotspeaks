@@ -6,6 +6,7 @@ metadata:
   title: Dead Air
   pitch: "On a stormy November night at a small community radio station, host Dorian Vale goes silent on air and is found dead at his desk. Floodwater keeps the police forty minutes away, so you, the building's night guard, question everyone upstairs."
   genre: murder-mystery
+  kind: mystery
   duration_minutes: 30
   chapters: 1
   players: 1-4

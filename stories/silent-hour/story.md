@@ -6,6 +6,7 @@ metadata:
   title: The Silent Hour
   pitch: "In January 1928 an avalanche cuts off an Alpine tuberculosis sanatorium, and in the small hours its senior physician is found dead. You were a police inspector before you were a patient, and with road and telephone gone, you question the staff and patients."
   genre: murder-mystery
+  kind: mystery
   tone: dark
   duration_minutes: 60
   chapters: 2

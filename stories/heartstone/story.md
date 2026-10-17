@@ -6,6 +6,7 @@ metadata:
   title: The Heartstone of Pellmarrow
   pitch: "For a hundred years the Heartstone has kept Pellmarrow's apple trees from failing, and three nights ago something carried it off into the Thornwood. The alderwoman sends your party down a path untrodden in living memory, past the thorn gate, to bring it home."
   genre: adventure
+  kind: adventure
   duration_minutes: 35
   chapters: 1
   players: 1-4

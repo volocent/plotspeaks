@@ -23,12 +23,13 @@
 // All story-derived text is escaped with esc(). The only scripts are small inline ones: the copy
 // buttons, the category filter, the /connect tabs and the passenger page. Every page but the
 // passenger page works without them (it needs script to fetch a line on tap).
+import { kindOf, isFamily } from "../../tools/check-story/rules.mjs";
 
 export type PublicStory = { slug: string; story: string };
 export type RatingSummary = { avg: number; count: number };
 
 type Meta = {
-  slug: string; title: string; description: string; genre: string; tone: string; players: string;
+  slug: string; title: string; description: string; genre: string; tone: string; kind: string; audience: string; players: string;
   minutes: number | null; chapters: number | null; rating: string; license: string;
   rulesSystem: string; author: string; pitch: string;
 };
@@ -56,6 +57,8 @@ export function meta(p: PublicStory): Meta {
     description,
     genre: field("genre"),
     tone: field("tone").toLowerCase(),
+    kind: kindOf({ kind: field("kind"), genre: field("genre") }) as string,
+    audience: isFamily({ audience: field("audience"), genre: field("genre") }) ? "family" : "general",
     players: field("players"),
     minutes: Number(field("duration_minutes")) || null,
     chapters: Number(field("chapters")) || null,
@@ -255,22 +258,48 @@ type IconName = keyof typeof ICON;
 const icon = (name: IconName, size = 24, cls = "ic") =>
   `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${ICON[name]}</svg>`;
 
-const isMysteryGenre = (g: string) => g === "murder-mystery";
+// Cover palettes and the "Classic / Dark / Family" filter inside the Mysteries shelf. A category is
+// the look of a card; the shelf it sits on is its kind (KINDS below).
 const CATEGORIES: Category[] = [
-  { id: "dark", name: "Dark murder mysteries", short: "Dark mysteries", icon: "moon",
+  { id: "dark", name: "Dark murder mysteries", short: "Dark", icon: "moon",
     blurb: "Grim cases for grown-ups, best told after the kids are asleep.",
-    match: (m) => isMysteryGenre(m.genre) && m.tone === "dark" },
-  { id: "mystery", name: "Murder mysteries", short: "Murder mysteries", icon: "glass",
+    match: (m) => m.kind === "mystery" && m.audience !== "family" && m.tone === "dark" },
+  { id: "mystery", name: "Murder mysteries", short: "Classic", icon: "glass",
     blurb: "A body, a handful of suspects, and one of them did it. Ask questions, then accuse.",
-    match: (m) => isMysteryGenre(m.genre) && m.tone !== "dark" },
+    match: (m) => m.kind === "mystery" && m.audience !== "family" && m.tone !== "dark" },
   { id: "family", name: "Family mysteries", short: "Family", icon: "star",
-    blurb: "Nobody gets hurt. Something goes missing and the kids crack the case. For ages about 7 to 10. Not offered in ChatGPT (its rules on content for under-13s); play these in Claude, or by paste.",
-    match: (m) => m.genre === "kids" },
+    blurb: "Nobody gets hurt. Something goes missing and the kids crack the case. For ages about 7 to 10.",
+    match: (m) => m.kind === "mystery" && m.audience === "family" },
   { id: "adventure", name: "Fantasy adventures", short: "Fantasy", icon: "compass",
     blurb: "Swords, spells and dice rolls. Make choices as a party and see where the road goes.",
-    match: (m) => m.genre === "adventure" },
+    match: (m) => m.kind === "adventure" },
+  { id: "branching", name: "Choose your path", short: "Choose your path", icon: "arrow",
+    blurb: "Every choice changes the story, and the story remembers what you did.",
+    match: (m) => m.kind === "branching" },
+  { id: "trivia", name: "Trivia", short: "Trivia", icon: "star",
+    blurb: "Boards of questions by category and difficulty. Keep score, and challenge a ruling you think is wrong.",
+    match: (m) => m.kind === "trivia" },
+  { id: "game", name: "Games", short: "Games", icon: "users",
+    blurb: "Parlour games the narrator runs for the whole car: twenty questions, werewolf and more.",
+    match: (m) => m.kind === "game" },
+  { id: "campaign", name: "Campaigns", short: "Campaigns", icon: "shield",
+    blurb: "A world that remembers you, played over several sessions.",
+    match: (m) => m.kind === "campaign" },
 ];
 const categoryOf = (m: Meta): Category => CATEGORIES.find((c) => c.match(m)) ?? CATEGORIES[1];
+// The shelves, in order. Mysteries gather three categories under one shelf with filter chips.
+type Kind = { id: string; name: string; icon: IconName; blurb: string; cats: string[]; note?: string };
+const KINDS: Kind[] = [
+  { id: "mystery", name: "Mysteries", icon: "glass", cats: ["mystery", "dark", "family"],
+    blurb: "Someone is dead, or something is missing, and one of the people in front of you did it. Ask questions, then accuse.",
+    note: "Family mysteries aren't offered in ChatGPT (its rules on content for under-13s); play them in Claude, or by paste." },
+  { id: "adventure", name: "Adventures", icon: "compass", cats: ["adventure"], blurb: CATEGORIES[3].blurb },
+  { id: "branching", name: "Choose your path", icon: "arrow", cats: ["branching"], blurb: CATEGORIES[4].blurb },
+  { id: "trivia", name: "Trivia", icon: "star", cats: ["trivia"], blurb: CATEGORIES[5].blurb },
+  { id: "game", name: "Games", icon: "users", cats: ["game"], blurb: CATEGORIES[6].blurb },
+  { id: "campaign", name: "Campaigns", icon: "shield", cats: ["campaign"], blurb: CATEGORIES[7].blurb },
+];
+const kindShelf = (m: Meta): Kind => KINDS.find((k) => k.id === m.kind) ?? KINDS[0];
 
 const GENRE: Record<string, string> = { "murder-mystery": "Murder mystery", adventure: "Fantasy adventure", kids: "Family mystery" };
 const genreLabel = (m: Meta) =>
@@ -730,6 +759,25 @@ p{margin:0 0 1em}
 .cover-family{background:radial-gradient(80% 80% at var(--gx,20%) var(--gy,10%),rgba(246,199,154,.95),transparent 65%),linear-gradient(150deg,#3FB8E8,#2381BB)}
 .cover-adventure{background:radial-gradient(80% 80% at var(--gx,80%) var(--gy,15%),rgba(63,184,232,.75),transparent 60%),linear-gradient(160deg,#1E5B5A,#12355B)}
 .ic-wrap.cover-dark,.ic-wrap.cover-mystery,.ic-wrap.cover-family,.ic-wrap.cover-adventure{background-size:cover}
+.cover-branching{background:radial-gradient(80% 80% at var(--gx,25%) var(--gy,15%),rgba(246,199,154,.8),transparent 60%),linear-gradient(155deg,#2381BB,#12355B)}
+.cover-trivia{background:radial-gradient(80% 80% at var(--gx,70%) var(--gy,20%),rgba(239,119,38,.7),transparent 60%),linear-gradient(150deg,#F3C095,#D9894A)}
+.cover-game{background:radial-gradient(80% 80% at var(--gx,30%) var(--gy,20%),rgba(63,184,232,.55),transparent 60%),linear-gradient(155deg,#3E7A5C,#1D3F35)}
+.cover-campaign{background:radial-gradient(80% 80% at var(--gx,75%) var(--gy,15%),rgba(239,119,38,.55),transparent 60%),linear-gradient(160deg,#4B2E5C,#1F1330)}
+/* Shelf header accents, one per kind (plan section 3). */
+.ic-wrap.kind-mystery{background:linear-gradient(155deg,#1A4673,#0E2541)}
+.ic-wrap.kind-adventure{background:linear-gradient(160deg,#EF7726,#C25A12)}
+.ic-wrap.kind-branching{background:linear-gradient(155deg,#3FB8E8,#2381BB)}
+.ic-wrap.kind-trivia{background:linear-gradient(150deg,#E9A770,#C9773A)}
+.ic-wrap.kind-game{background:linear-gradient(155deg,#4F8F6C,#2D5C47)}
+.ic-wrap.kind-campaign{background:linear-gradient(160deg,#6B4280,#3A2249)}
+.subfilters{display:flex;flex-wrap:wrap;gap:8px;margin:-6px 0 18px}
+.ww-input{width:100%;font:inherit;font-size:1.05rem;padding:12px;border-radius:14px;border:1.5px solid var(--line-2);background:var(--surface);color:var(--ink)}
+.ww-card{font-family:var(--display,inherit);font-size:clamp(1.6rem,6vw,2.2rem);padding:22px;border-radius:18px;background:var(--surface-2);border:1.5px solid var(--line-2);margin:12px 0}
+.ww-pick{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0}
+.ww-pick [aria-pressed=true]{background:var(--ink);color:var(--bg)}
+.ww-news{font-size:1.25rem;padding:18px;border-radius:16px;background:var(--surface-2)}
+.chip-sm{min-height:38px;padding:7px 13px;font-size:.88rem}
+.cat-note{margin:6px 0 0;font-size:.92rem;color:var(--ink-2)}
 
 /* facts, stars */
 .facts{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;margin:0;font-size:.86rem;color:var(--ink-2)}
@@ -1150,7 +1198,7 @@ const SAMPLE_JS = `(function(){
 const exampleTitle = (metas: Meta[]) => (metas.find((m) => m.slug === "example-dinner-party") ?? metas[0])?.title ?? "The Last Toast";
 
 function storyCard(m: Meta, r: RatingSummary | undefined): string {
-  return `<li class="card">
+  return `<li class="card" data-cat="${categoryOf(m).id}">
 <div style="position:relative">${cover(m)}${m.minutes ? `<span class="badge">${icon("clock", 13)}${m.minutes} min</span>` : ""}</div>
 <div class="card-body">
 <h4 class="title"><a href="/stories/${encodeURIComponent(m.slug)}">${esc(m.title)}</a></h4>
@@ -1162,6 +1210,8 @@ ${stars(r)}
 </li>`;
 }
 
+// Two filters: the top chips pick a shelf (kind); the chips inside a shelf (Classic, Dark, Family)
+// pick cards within it by data-cat. Without script every shelf and card shows.
 const FILTER_JS = `(function(){
   var chips=[].slice.call(document.querySelectorAll(".chip[data-filter]")),cats=[].slice.call(document.querySelectorAll(".cat"));
   chips.forEach(function(c){c.addEventListener("click",function(e){
@@ -1170,20 +1220,39 @@ const FILTER_JS = `(function(){
     cats.forEach(function(s){s.hidden=f!=="all"&&s.id!=="cat-"+f;});
     var top=document.getElementById("stories-list");if(top&&top.getBoundingClientRect().top<0)top.scrollIntoView({block:"start"});
   });});
+  [].forEach.call(document.querySelectorAll(".subfilters"),function(nav){
+    var sub=[].slice.call(nav.querySelectorAll(".chip[data-sub]")),cards=[].slice.call(nav.parentNode.querySelectorAll(".card[data-cat]"));
+    sub.forEach(function(c){c.addEventListener("click",function(e){
+      e.preventDefault();var f=c.getAttribute("data-sub");
+      sub.forEach(function(x){x.setAttribute("aria-pressed",String(x===c));});
+      cards.forEach(function(k){k.hidden=f!=="all"&&k.getAttribute("data-cat")!==f;});
+    });});
+  });
 })();`;
 
 export function catalogPage(stories: PublicStory[], ratings: Map<string, RatingSummary>, origin = ""): string {
   const metas = stories.map(meta);
   const example = exampleTitle(metas);
   const lead = metas.find((m) => m.slug === "example-dinner-party") ?? metas[0];
-  const groups = CATEGORIES.map((c) => ({ c, items: metas.filter((m) => categoryOf(m) === c).sort((a, b) => sortKey(a.title).localeCompare(sortKey(b.title))) }))
-    .filter((g) => g.items.length);
-  const chips = `<nav class="filters" aria-label="Story categories">
+  // One shelf per kind that has anything in it (an empty kind is not shown). Inside a shelf with
+  // more than one category (Mysteries: Classic, Dark, Family), chips filter the cards.
+  const byTitle = (a: Meta, b: Meta) => sortKey(a.title).localeCompare(sortKey(b.title));
+  const groups = KINDS.map((k) => ({ k, items: metas.filter((m) => kindShelf(m) === k).sort(byTitle) })).filter((g) => g.items.length);
+  const chips = `<nav class="filters" aria-label="Kinds of story">
 <a class="chip" href="#stories-list" data-filter="all" aria-pressed="true">All <span class="n">${metas.length}</span></a>
-${groups.map((g) => `<a class="chip" href="#cat-${g.c.id}" data-filter="${g.c.id}" aria-pressed="false">${icon(g.c.icon as IconName, 16)}${esc(g.c.short)} <span class="n">${g.items.length}</span></a>`).join("\n")}
+${groups.map((g) => `<a class="chip" href="#cat-${g.k.id}" data-filter="${g.k.id}" aria-pressed="false">${icon(g.k.icon, 16)}${esc(g.k.name)} <span class="n">${g.items.length}</span></a>`).join("\n")}
 </nav>`;
-  const sections = groups.map((g) => `<section class="cat" id="cat-${g.c.id}" aria-labelledby="cat-${g.c.id}-h">
-<div class="cat-head"><span class="ic-wrap cover-${g.c.id}">${icon(g.c.icon as IconName, 24)}</span><div><h3 id="cat-${g.c.id}-h">${esc(g.c.name)}</h3><p>${esc(g.c.blurb)}</p></div></div>
+  const subChips = (g: { k: Kind; items: Meta[] }) => {
+    const present = g.k.cats.map((id) => CATEGORIES.find((c) => c.id === id)!).filter((c) => g.items.some((m) => categoryOf(m) === c));
+    if (present.length < 2) return "";
+    return `<nav class="subfilters" aria-label="${esc(g.k.name)} by type">
+<a class="chip chip-sm" href="#cat-${g.k.id}" data-sub="all" aria-pressed="true">All</a>
+${present.map((c) => `<a class="chip chip-sm" href="#cat-${g.k.id}" data-sub="${c.id}" aria-pressed="false">${icon(c.icon as IconName, 15)}${esc(c.short)} <span class="n">${g.items.filter((m) => categoryOf(m) === c).length}</span></a>`).join("\n")}
+</nav>`;
+  };
+  const sections = groups.map((g) => `<section class="cat" id="cat-${g.k.id}" aria-labelledby="cat-${g.k.id}-h">
+<div class="cat-head"><span class="ic-wrap kind-${g.k.id}">${icon(g.k.icon, 24)}</span><div><h3 id="cat-${g.k.id}-h">${esc(g.k.name)}</h3><p>${esc(g.k.blurb)}</p>${g.k.note && g.items.some((m) => m.audience === "family") ? `<p class="cat-note">${esc(g.k.note)}</p>` : ""}</div></div>
+${subChips(g)}
 <ul class="cards">
 ${g.items.map((m) => storyCard(m, ratings.get(m.slug))).join("\n")}
 </ul>
@@ -1282,15 +1351,18 @@ ${connectDialogs({ url: origin + "/mcp", story: example })}`;
 export function storyPage(p: PublicStory, rating: RatingSummary | undefined, origin: string): string {
   const m = meta(p);
   // Family mysteries use genre "kids" but play exactly like mysteries (accusations, verdicts).
-  const isMystery = m.genre === "murder-mystery" || m.genre === "kids";
+  const isMystery = m.kind === "mystery";
+  // Kinds whose content stays on the server (one node, one clue, one turn at a time) can't be pasted;
+  // a rules-only game can, with no passenger.
+  const connectorOnly = m.kind === "branching" || m.kind === "trivia" || m.kind === "campaign";
+  const rulesOnly = m.kind === "game";
   const licenseName = m.license === "CC-BY-NC-4.0" || !m.license ? "CC BY-NC 4.0" : m.license;
   const srd = isSrd(m)
     ? `<p>This work includes material from the System Reference Document 5.2.1 ("SRD 5.2.1") by Wizards of the Coast LLC, available at <a href="https://www.dndbeyond.com/srd">dndbeyond.com/srd</a>. The SRD 5.2.1 is licensed under the <a href="https://creativecommons.org/licenses/by/4.0/legalcode">Creative Commons Attribution 4.0 International License</a>.</p>`
     : "";
-  const cat = categoryOf(m);
   const passenger = `/stories/${encodeURIComponent(m.slug)}/passenger`;
   const body = `<div class="wrap">
-<p class="crumbs"><a href="/#cat-${cat.id}">← ${esc(cat.name)}</a></p>
+<p class="crumbs"><a href="/#cat-${kindShelf(m).id}">← ${esc(kindShelf(m).name)}</a></p>
 <section class="story-hero">
 ${cover(m, { alt: `Cover art for ${m.title}`, eager: true })}
 <div>
@@ -1310,17 +1382,35 @@ ${stars(rating)}
 <p>Connect Plot Speaks once. It loads the story and ${isMystery ? "checks accusations for you, so nobody needs to hold the answer" : "hands over the hidden scenes for you, so nobody needs to hold them"}.</p>
 ${aiButtons("Connect your assistant", `Start ${m.title} with Plot Speaks.`)}
 <p class="saybox"><b>Then say</b>“Start ${esc(m.title)} with Plot Speaks.”</p>
-<p class="connect-alt">${icon("copy", 20)}<span>No connector? <a href="#paste">Paste the story</a> instead, and give a passenger <a href="${passenger}">the passenger page</a>.</span></p>
+${connectorOnly
+    ? `<p class="connect-alt">${icon("plug", 20)}<span>Plays through the connector only: the story stays on the Plot Speaks server and arrives one choice at a time, so it can't be pasted.</span></p>`
+    : rulesOnly ? `<p class="connect-alt">${icon("copy", 20)}<span>No connector? <a href="#paste">Paste the rules</a> into a new chat instead.</span></p>`
+    : `<p class="connect-alt">${icon("copy", 20)}<span>No connector? <a href="#paste">Paste the story</a> instead, and give a passenger <a href="${passenger}">the passenger page</a>.</span></p>`}
 </section>
 
 <div class="block">
 <h2>Phrases</h2>
 ${phrasesTable(m)}
-${isMystery ? `<p class="note" style="margin-top:16px">${icon("key", 20)}<span>The story your assistant reads doesn't contain the answer. When you accuse someone, the narrator asks whoever holds the answer key: the Plot Speaks connector, or a passenger with the <a href="${passenger}">passenger page</a>.</span></p>` : `<p class="note" style="margin-top:16px">${icon("key", 20)}<span>Some scenes are held back as cues, so the big moments stay a surprise. With the connector, the narrator fetches them itself; with the pasted story, a passenger reads them out from the <a href="${passenger}">passenger page</a>.</span></p>`}
+${connectorOnly ? `<p class="note" style="margin-top:16px">${icon("key", 20)}<span>Your assistant never holds the story: after each choice it asks Plot Speaks what happens next, so even the narrator can't tell you what lies behind a door until you open it.</span></p>` : rulesOnly ? "" : isMystery ? `<p class="note" style="margin-top:16px">${icon("key", 20)}<span>The story your assistant reads doesn't contain the answer. When you accuse someone, the narrator asks whoever holds the answer key: the Plot Speaks connector, or a passenger with the <a href="${passenger}">passenger page</a>.</span></p>` : `<p class="note" style="margin-top:16px">${icon("key", 20)}<span>Some scenes are held back as cues, so the big moments stay a surprise. With the connector, the narrator fetches them itself; with the pasted story, a passenger reads them out from the <a href="${passenger}">passenger page</a>.</span></p>`}
 <p class="safety">${icon("shield", 20)}<span>Set everything up while parked. The driver never touches the phone once you're moving.</span></p>
 </div>
 
-<div class="block fallback" id="paste">
+${connectorOnly ? "" : rulesOnly ? `<div class="block fallback" id="paste">
+<h2>${icon("copy", 26)} No connector? Paste the rules.</h2>
+<p>The whole game is in its rules, so it plays the same pasted into any assistant.</p>
+<div class="copyrow">
+<button class="btn btn-primary" id="copy" type="button" data-copy-story>Copy the rules</button>
+<span class="copied" id="copied" role="status" aria-live="polite"></span>
+</div>
+<ol class="steps">
+<li>Tap <strong>Copy the rules</strong>, start a <strong>new chat</strong> and paste them as the first message. In Claude, add: <em>"These are the rules of a game I want to play with you."</em></li>
+<li>Tap the voice button and say <strong>"Plot Speaks, start the story."</strong></li>
+</ol>
+<details class="script">
+<summary>Read the rules</summary>
+<pre id="story-text">${esc(p.story)}</pre>
+</details>
+</div>` : `<div class="block fallback" id="paste">
 <h2>${icon("copy", 26)} No connector? Paste the story.</h2>
 <p>The way to play on ChatGPT Free and Plus, or any assistant without the connector. We've played it start to finish by voice on ChatGPT Free and Claude.</p>
 <div class="passenger-link">${icon("users", 22)}<p><strong>Playing by paste? Give this page to a passenger.</strong> <a href="${passenger}">The passenger page</a> holds the answer key: when the narrator says ${isMystery ? "“Wrangler, check the secrets”, the passenger taps the name the player accused" : "“Wrangler, cue S1”, the passenger taps that cue"} and reads the line aloud.</p></div>
@@ -1343,7 +1433,7 @@ ${isMystery ? `<p class="note" style="margin-top:16px">${icon("key", 20)}<span>T
 <pre id="story-text">${esc(p.story)}</pre>
 </details>
 <p class="muted"><a href="/stories/${encodeURIComponent(m.slug)}/story.md">story.md as plain text</a></p>
-</div>
+</div>`}
 </div>
 
 <aside class="story-side">
@@ -1501,7 +1591,7 @@ const PASSENGER_JS = `(function(){
 
 export function passengerPage(p: PublicStory, origin: string): string {
   const m = meta(p);
-  const isMystery = m.genre === "murder-mystery" || m.genre === "kids";
+  const isMystery = m.kind === "mystery";
   const cues = isMystery ? [] : cueIds(p.story);
   const slug = encodeURIComponent(m.slug);
   const mystery = `<section aria-labelledby="names-h">
@@ -1634,7 +1724,15 @@ export function howPage(stories: PublicStory[], origin: string): string {
 </ol>
 <p class="safety">${icon("shield", 20)}<span>Set it up while parked. The driver never touches the phone once you're moving.</span></p>
 <h2>While you play</h2>
-<p>Talk to the characters, look around, and make choices. In a mystery you gather clues and accuse someone when you're ready. In an adventure you explore, fight and roll dice, and the narrator keeps track.</p>
+<p>Talk to the characters, look around, and make choices. What you do depends on the kind of story:</p>
+<ul>
+<li><strong>Mysteries:</strong> gather clues and accuse someone when you're ready. The answer stays with Plot Speaks until you do.</li>
+<li><strong>Adventures:</strong> explore, fight and roll dice as a party; hidden scenes arrive when you reach them.</li>
+<li><strong>Choose your path:</strong> every choice changes the story, and it remembers what you chose. The narrator only ever has the moment you're in, so it can't tell you what's behind a door.</li>
+<li><strong>Trivia:</strong> pick a category and a value, answer out loud, keep score. Think a ruling is wrong? Challenge it: three different AI models judge your answer, and it counts if two agree.</li>
+<li><strong>Games:</strong> twenty questions, story improv, and Werewolf for a car of four or more, where <a href="/games/werewolf">one phone</a> keeps the secrets.</li>
+<li><strong>Campaigns:</strong> a world that remembers you across sessions. The dice are rolled by Plot Speaks, and you get a three-word code to pick up next time.</li>
+</ul>
 ${phrasesTable(null)}
 <h2>Who holds the answer</h2>
 <p>With the connector, Plot Speaks keeps the answer key and the hidden scenes. Your assistant asks for them only at the right moment, so it can't give the ending away.</p>
@@ -1709,6 +1807,10 @@ export function privacyPage(origin: string): string {
 <ul>
 <li><strong>Starting a story:</strong> which story, the identifier your assistant's connector sends with the request (its User-Agent, which names the assistant, not you), the time, and a random play id.</li>
 <li><strong>Accusations:</strong> the name you accused, whether it was right, and the time.</li>
+<li><strong>Choose-your-path stories:</strong> where you are in the story and the choices you took (the server's own wording of each choice), so the story can remember them and you can resume.</li>
+<li><strong>Trivia:</strong> the clues played, the scores, the names you give for scoring, and your last answer (in your words, so a challenge can be judged). A challenged answer is sent to three AI models on Cloudflare Workers AI to judge; nothing else about you goes with it.</li>
+<li><strong>Campaigns:</strong> the world your game builds (your characters' names and stats, places, people met, quests, one-line notes of what happened) and a hashed three-word resume code. Kept while you keep playing: deleted 90 days after the last session.</li>
+<li><strong>Dice:</strong> rolled on the server and not stored.</li>
 <li><strong>Adventure cues:</strong> which hidden scene was fetched, and the time.</li>
 <li><strong>Ratings and feedback:</strong> the stars, whether the ending was spoiled, any comment about the story and any feedback about the experience you choose to give (in your words, as your assistant passes them on), and the time.</li>
 </ul>
@@ -1724,7 +1826,8 @@ export function privacyPage(origin: string): string {
 <thead><tr><th scope="col">What</th><th scope="col">How long</th></tr></thead>
 <tbody>
 <tr><td>Play logs (stories started, accusations, cues)</td><td>90 days, then deleted automatically.</td></tr>
-<tr><td>Ratings</td><td>The stars and the spoiler answer are kept. Any comment is deleted after 90 days.</td></tr>
+<tr><td>Ratings</td><td>The stars and the spoiler answer are kept. Any comment or feedback is deleted after 90 days.</td></tr>
+<tr><td>Where a story or game stands (choices, scores, campaign worlds)</td><td>Deleted with its play after 90 days; a campaign 90 days after its last session.</td></tr>
 <tr><td>Rate-limit records (the salted IP hash)</td><td>2 days, then deleted.</td></tr>
 <tr><td>Daily tallies (page views, tool calls, errors: numbers only)</td><td>About 13 months, then deleted.</td></tr>
 <tr><td>Rejected submissions</td><td>90 days, then deleted.</td></tr>
@@ -1770,6 +1873,92 @@ export function supportPage(origin: string): string {
 // TERMS. Plain-language terms, written 2026-10-16 because ChatGPT's Plugin Directory requires a
 // terms URL. NOT LEGAL ADVICE: Ben should have a lawyer review this page before relying on it.
 // Keep it in step with privacyPage() and with what submissions.ts actually does (claim codes, review).
+// ============================================================================ WEREWOLF (car edition)
+// The secret half of Werewolf for players in one car (plan 6.1). Nobody can whisper or close their
+// eyes in a car, so this page, on one phone passed round, deals the cards and takes the night's
+// choices one player at a time; then it shows the morning's news for the holder to read aloud, and
+// the narrator runs the talk and the vote. Everything stays in this page (no server, no storage).
+export function werewolfPage(origin: string): string {
+  const body = `<div class="wrap narrow prose ww">
+<header class="page-head">
+<p class="eyebrow">${icon("users", 18)} Werewolf, car edition</p>
+<h1>The phone keeps the secrets.</h1>
+<p class="lead">One phone, passed round. It deals the cards and takes each night's choices in turn; your assistant tells the story and runs the vote. Start Werewolf with Plot Speaks first, then open this page.</p>
+</header>
+<section id="ww-setup">
+<h2>Who's playing?</h2>
+<p>Four to eight players. One name per line, in seat order. The driver can play: they only ever listen and talk, and someone else holds the phone for their turns.</p>
+<textarea id="ww-names" rows="6" class="ww-input" placeholder="Ana&#10;Sam&#10;Jo&#10;Kit"></textarea>
+<p><button class="btn btn-primary" type="button" id="ww-deal">Deal the cards</button> <span class="muted" id="ww-msg" role="status"></span></p>
+</section>
+<section id="ww-turn" hidden>
+<h2 id="ww-turn-h"></h2>
+<p id="ww-turn-p"></p>
+<div id="ww-card" class="ww-card" hidden></div>
+<div id="ww-pick" class="ww-pick"></div>
+<p><button class="btn btn-primary" type="button" id="ww-next">Next</button></p>
+</section>
+<section id="ww-news" hidden>
+<h2>Read this aloud</h2>
+<p class="ww-news" id="ww-news-text"></p>
+<div id="ww-vote" hidden>
+<h3>After the vote</h3>
+<p>Who did the group vote out? (The narrator runs the talk; tap when it's decided.)</p>
+<div id="ww-vote-pick" class="ww-pick"></div>
+</div>
+<p><button class="btn btn-primary" type="button" id="ww-night">Start the night</button></p>
+</section>
+<p class="note">${icon("shield", 20)}<span>Set it up while parked. The driver never holds the phone once you're moving.</span></p>
+</div>`;
+  return page({ title: "Werewolf, car edition · Plot Speaks", description: "The secret half of Werewolf for one car: deal the cards and take the night's choices on one phone, while your assistant narrates.", body, origin, path: "/games/werewolf", script: WEREWOLF_JS });
+}
+const WEREWOLF_JS = `(function(){
+  var $=function(id){return document.getElementById(id);};
+  var S={players:[],roles:{},alive:{},night:0,step:0,order:[],acts:{}};
+  function shuffle(a){for(var i=a.length-1;i>0;i--){var r=new Uint32Array(1);crypto.getRandomValues(r);var j=r[0]%(i+1);var t=a[i];a[i]=a[j];a[j]=t;}return a;}
+  function rolesFor(n){var w=n>=7?2:1;var r=[];for(var i=0;i<w;i++)r.push("Werewolf");r.push("Seer");if(n>=5)r.push("Doctor");while(r.length<n)r.push("Villager");return shuffle(r);}
+  function living(){return S.players.filter(function(p){return S.alive[p];});}
+  function show(id){["ww-setup","ww-turn","ww-news"].forEach(function(s){$(s).hidden=s!==id;});window.scrollTo(0,0);}
+  function pickList(el,names,cb){el.innerHTML="";names.forEach(function(n){var b=document.createElement("button");b.type="button";b.className="btn btn-ghost";b.textContent=n;b.onclick=function(){[].forEach.call(el.children,function(x){x.setAttribute("aria-pressed","false");});b.setAttribute("aria-pressed","true");cb(n);};el.appendChild(b);});}
+  function winner(){var l=living();var w=l.filter(function(p){return S.roles[p]==="Werewolf";}).length;if(!w)return "The village wins: every werewolf is gone.";if(w>=l.length-w)return "The werewolves win: they now match the village.";return "";}
+  // Deal: each player in turn sees their own card, then hides it and passes the phone.
+  $("ww-deal").onclick=function(){
+    var names=$("ww-names").value.split(/\\n/).map(function(s){return s.trim();}).filter(Boolean);
+    var uniq=names.filter(function(n,i){return names.indexOf(n)===i;});
+    if(uniq.length<4||uniq.length>8){$("ww-msg").textContent="Four to eight different names, please.";return;}
+    S.players=uniq;var r=rolesFor(uniq.length);uniq.forEach(function(p,i){S.roles[p]=r[i];S.alive[p]=true;});
+    S.order=uniq.slice();S.step=0;S.mode="deal";turn();
+  };
+  function turn(){
+    var p=S.order[S.step];$("ww-card").hidden=true;$("ww-pick").innerHTML="";
+    if(!p){if(S.mode==="deal"){news("Everyone has their card. Tell the narrator you're ready, and keep your card to yourself.",false);$("ww-night").textContent="Start the first night";}else dawn();return;}
+    show("ww-turn");$("ww-turn-h").textContent="Pass the phone to "+p;
+    $("ww-turn-p").textContent="Only "+p+" looks. Tap Next when it's in your hands.";
+    $("ww-next").textContent="I'm "+p;$("ww-next").onclick=function(){reveal(p);};
+  }
+  function reveal(p){
+    var role=S.roles[p];$("ww-turn-h").textContent=p;$("ww-card").hidden=false;
+    if(S.mode==="deal"){$("ww-card").textContent="You are a "+role+".";$("ww-turn-p").textContent=role==="Werewolf"?"Each night you choose someone to take. "+(S.players.filter(function(x){return S.roles[x]==="Werewolf"&&x!==p;}).length?"Your fellow werewolf: "+S.players.filter(function(x){return S.roles[x]==="Werewolf"&&x!==p;}).join(", ")+".":""):role==="Seer"?"Each night you learn whether one person is a werewolf.":role==="Doctor"?"Each night you protect one person.":"Find the werewolves by talking, and vote them out.";}
+    else{
+      var others=living().filter(function(x){return x!==p;});$("ww-card").textContent="You are a "+role+".";
+      if(role==="Werewolf"){$("ww-turn-p").textContent="Who do you take tonight?";pickList($("ww-pick"),others.filter(function(x){return S.roles[x]!=="Werewolf";}),function(n){S.acts.wolf=S.acts.wolf||{};S.acts.wolf[p]=n;});}
+      else if(role==="Seer"){$("ww-turn-p").textContent="Whose card do you check?";pickList($("ww-pick"),others,function(n){$("ww-turn-p").textContent=n+(S.roles[n]==="Werewolf"?" IS a werewolf.":" is not a werewolf.");});}
+      else if(role==="Doctor"){$("ww-turn-p").textContent="Who do you protect tonight? (You may choose yourself.)";pickList($("ww-pick"),living(),function(n){S.acts.doc=n;});}
+      else{$("ww-turn-p").textContent="Nothing to do tonight. Tap anyone, so nobody can tell from how long you took.";pickList($("ww-pick"),others,function(){});}
+    }
+    $("ww-next").textContent="Hide and pass on";$("ww-next").onclick=function(){S.step++;turn();};
+  }
+  function news(t,vote){show("ww-news");$("ww-news-text").textContent=t;$("ww-vote").hidden=!vote;if(vote)pickList($("ww-vote-pick"),living().concat(["Nobody"]),function(n){if(n!=="Nobody")S.alive[n]=false;var w=winner();$("ww-news-text").textContent=(n==="Nobody"?"The village couldn't agree; nobody is out.":n+" is out. They were a "+S.roles[n]+".")+(w?" "+w:"");$("ww-vote").hidden=true;$("ww-night").hidden=Boolean(w);});}
+  function dawn(){
+    var picks=S.acts.wolf?Object.keys(S.acts.wolf).map(function(k){return S.acts.wolf[k];}):[];
+    var victim=picks.length?picks[0]:null;if(picks.length>1&&picks[0]!==picks[1])victim=picks[Math.floor(Math.random()*picks.length)];
+    var t;if(victim&&victim===S.acts.doc)t="Morning. Someone was attacked in the night, but the doctor saved them. Nobody is out.";
+    else if(victim){S.alive[victim]=false;t="Morning. "+victim+" was taken in the night. They were a "+S.roles[victim]+".";}else t="Morning. A quiet night: nobody is out.";
+    var w=winner();news(t+(w?" "+w:" Now talk it over, then vote."),!w);$("ww-night").hidden=Boolean(w);$("ww-night").textContent="Start the next night";
+  }
+  $("ww-night").onclick=function(){S.night++;S.acts={};S.mode="night";S.order=living();S.step=0;turn();};
+})();`;
+
 export function termsPage(origin: string): string {
   const body = `<div class="wrap narrow prose">
 <header class="page-head">
@@ -1858,6 +2047,7 @@ export async function handleSite(request: Request, stories: PublicStory[], db: D
   if (path === "/privacy") return new Response(privacyPage(origin), { headers: HTML });
   if (path === "/support") return new Response(supportPage(origin), { headers: HTML });
   if (path === "/terms") return new Response(termsPage(origin), { headers: HTML });
+  if (path === "/games/werewolf") return new Response(werewolfPage(origin), { headers: { ...HTML, "x-robots-tag": "noindex" } });
   if (path === "/site.webmanifest") return new Response(MANIFEST, { headers: { "content-type": "application/manifest+json", "cache-control": "public, max-age=3600" } });
   const m = /^\/stories\/([^/]+?)(\/story\.md|\/passenger\/?|\/)?$/.exec(url.pathname);
   if (!m && !path.startsWith("/stories")) return null;

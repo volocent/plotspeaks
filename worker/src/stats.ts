@@ -18,7 +18,7 @@ export function assistantOf(ua: string | null | undefined): string {
     : /perplexity/i.test(s) ? "Perplexity" : "Other";
 }
 
-const COMPLETED = `(EXISTS (SELECT 1 FROM play_events e WHERE e.play_id = p.id AND e.kind IN ('accusation', 'reveal'))
+const COMPLETED = `(EXISTS (SELECT 1 FROM play_events e WHERE e.play_id = p.id AND e.kind IN ('accusation', 'reveal', 'ending'))
                   OR EXISTS (SELECT 1 FROM ratings r WHERE r.play_id = p.id))`;
 const SOLVED = `EXISTS (SELECT 1 FROM play_events e WHERE e.play_id = p.id AND e.verdict = 'correct')`;
 const ACCUSED = `EXISTS (SELECT 1 FROM play_events e WHERE e.play_id = p.id AND e.kind = 'accusation')`;

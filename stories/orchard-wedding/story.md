@@ -6,6 +6,7 @@ metadata:
   title: The Orchard Wedding
   pitch: "At a rainy October wedding in a hillside cider barn, the bride's uncle, Harlan Tamsworth, dies during the reception. The creek has flooded the only lane out, the police are an hour away, and the bride asks you to find out who killed him."
   genre: murder-mystery
+  kind: mystery
   duration_minutes: 30
   chapters: 1
   players: 1-4

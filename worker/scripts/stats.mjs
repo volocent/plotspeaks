@@ -21,7 +21,7 @@ function q(sql) {
 }
 
 // Same definition as src/stats.ts: an accusation, a reveal or a rating completes a play.
-const COMPLETED = `(EXISTS (SELECT 1 FROM play_events e WHERE e.play_id = p.id AND e.kind IN ('accusation', 'reveal'))
+const COMPLETED = `(EXISTS (SELECT 1 FROM play_events e WHERE e.play_id = p.id AND e.kind IN ('accusation', 'reveal', 'ending'))
                   OR EXISTS (SELECT 1 FROM ratings r WHERE r.play_id = p.id))`;
 
 const byGroup = q(`

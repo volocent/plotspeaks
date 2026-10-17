@@ -4,7 +4,16 @@
 // `line` is 1-based within the string passed in. `file` is only set when a check spans files.
 
 export const TONES = ['classic', 'dark', 'cozy'];
-export const GENRES = ['murder-mystery', 'adventure', 'horror', 'heist', 'kids'];
+export const GENRES = ['murder-mystery', 'adventure', 'horror', 'heist', 'kids', 'branching', 'trivia', 'game', 'campaign'];
+// Kinds (docs/PLAN-INTERACTIVE-2026-10-16.md section 2): what the player does. The catalogue and
+// the welcome menu are organised by kind; genre, tone and audience describe what it is like.
+export const KINDS = ['mystery', 'adventure', 'branching', 'trivia', 'game', 'campaign'];
+export const AUDIENCES = ['general', 'family'];
+const GENRE_KIND = { 'murder-mystery': 'mystery', kids: 'mystery', horror: 'mystery', heist: 'mystery', adventure: 'adventure', branching: 'branching', trivia: 'trivia', game: 'game', campaign: 'campaign' };
+/** metadata.kind, or the kind its genre implies. Shared by the lint, the Worker and the site. */
+export const kindOf = (metadata) => (KINDS.includes(metadata?.kind) ? metadata.kind : GENRE_KIND[metadata?.genre] ?? 'mystery');
+/** Family content (audience: family, or the older genre kids): never offered to ChatGPT. */
+export const isFamily = (metadata) => metadata?.audience === 'family' || metadata?.genre === 'kids';
 export const LICENSES = ['CC-BY-NC-4.0', 'CC-BY-4.0', 'All-Rights-Reserved'];
 export const RATINGS = ['G', 'PG', 'PG-13', 'R'];
 export const RULES_SYSTEMS = ['none', 'srd-5.2.1', 'orc'];
@@ -116,6 +125,10 @@ export function checkFrontMatter(text, opts = {}) {
     oneOf('ai_disclosure', AI_DISCLOSURES);
     // Optional: sorts mysteries into a category on the site (dark = grimmer themes, still no gore or method).
     if (metadata.tone !== undefined && !TONES.includes(metadata.tone)) out.push(err(at('metadata.tone'), 'front-matter', `metadata.tone must be one of ${TONES.join('|')}; found "${metadata.tone}"`));
+    if (metadata.kind !== undefined && !KINDS.includes(metadata.kind)) out.push(err(at('metadata.kind'), 'front-matter', `metadata.kind must be one of ${KINDS.join('|')}; found "${metadata.kind}"`));
+    if (metadata.audience !== undefined && !AUDIENCES.includes(metadata.audience)) out.push(err(at('metadata.audience'), 'front-matter', `metadata.audience must be one of ${AUDIENCES.join('|')}; found "${metadata.audience}"`));
+    if (metadata.genre === 'kids' && metadata.audience !== 'family') out.push(err(at('metadata.genre'), 'front-matter', 'genre kids needs audience: family (family content is never offered to ChatGPT)'));
+    if (metadata.audience === 'family' && ['PG-13', 'R'].includes(metadata.rating)) out.push(err(at('metadata.rating'), 'front-matter', `audience family needs rating G or PG; found "${metadata.rating}"`));
     if (metadata.genre === 'adventure' && metadata.rules_system === 'none') out.push(warn(at('metadata.rules_system'), 'front-matter', 'genre adventure with rules_system none: adventures normally use srd-5.2.1 or orc'));
     if (metadata.rules_system === 'srd-5.2.1' && !SRD_ATTRIBUTION.every((re) => re.test(normalize(text)))) {
       out.push(err(at('metadata.rules_system'), 'srd-attribution', 'rules_system srd-5.2.1 requires the attribution text ("System Reference Document 5.2.1" and "Creative Commons Attribution 4.0") in story.md'));
@@ -133,12 +146,15 @@ export function checkSections(text, opts = {}) {
   const lines = linesOf(text);
   const out = [];
   if (headingLine(lines, /^##\s+How to run this\b/i) < 0) out.push(err(1, 'required-sections', 'missing "## How to run this" section'));
-  if (headingLine(lines, /^##\s+Cast\b/i) < 0) {
+  // Mysteries and adventures are scripted in chapters with a cast and endings; the newer kinds
+  // (choose your path, trivia, games, campaigns) need only the GM section, its phrases and the intro.
+  const scripted = !opts.kind || opts.kind === 'mystery' || opts.kind === 'adventure';
+  if (scripted && headingLine(lines, /^##\s+Cast\b/i) < 0) {
     const f = opts.genre === 'adventure' ? warn : err;
     out.push(f(1, 'required-sections', 'missing "## Cast" section' + (opts.genre === 'adventure' ? ' (adventures may use a different heading)' : '')));
   }
-  if (headingLine(lines, /^##\s+Chapter\b/i) < 0) out.push(err(1, 'required-sections', 'missing at least one "## Chapter" section'));
-  if (headingLine(lines, /^##\s+Endings\b/i) < 0) out.push(err(1, 'required-sections', 'missing "## Endings" section'));
+  if (scripted && headingLine(lines, /^##\s+Chapter\b/i) < 0) out.push(err(1, 'required-sections', 'missing at least one "## Chapter" section'));
+  if (scripted && headingLine(lines, /^##\s+Endings\b/i) < 0) out.push(err(1, 'required-sections', 'missing "## Endings" section'));
 
   const gm = headingLine(lines, /^##\s+How to run this\b/i);
   let scope = lines.join('\n');
@@ -149,7 +165,8 @@ export function checkSections(text, opts = {}) {
     scope = lines.slice(gm, end).join('\n');
     base = gm + 1;
   }
-  for (const phrase of ['Plot Speaks, pause the story', 'Plot Speaks, resume', 'Plot Speaks, wrap it up']) {
+  const phrases = scripted || opts.kind === 'branching' ? ['Plot Speaks, pause the story', 'Plot Speaks, resume', 'Plot Speaks, wrap it up'] : ['Plot Speaks, pause the story', 'Plot Speaks, resume'];
+  for (const phrase of phrases) {
     if (!scope.includes(phrase)) out.push(err(base, 'stop-phrase', `GM instructions must contain the phrase "${phrase}"`));
   }
   // The skippable how-to-play intro (Ben, 2026-10-16): offered in the GM instructions, beats in its own section.
@@ -495,11 +512,11 @@ export function checkStoryText(storyText, { slug, denylist = [] } = {}) {
   const meta = fm.ok ? fm.metadata : {};
   return [
     ...checkFrontMatter(storyText, { slug }),
-    ...checkSections(storyText, { genre: meta.genre, chapters: /^\d+$/.test(meta.chapters || '') ? +meta.chapters : undefined }),
-    ...checkChapters(storyText, {
+    ...checkSections(storyText, { genre: meta.genre, kind: kindOf(meta), chapters: /^\d+$/.test(meta.chapters || '') ? +meta.chapters : undefined }),
+    ...(['mystery', 'adventure'].includes(kindOf(meta)) ? checkChapters(storyText, {
       expectedChapters: /^\d+$/.test(meta.chapters || '') ? +meta.chapters : undefined,
       expectedMinutes: /^\d+$/.test(meta.duration_minutes || '') ? +meta.duration_minutes : undefined,
-    }),
+    }) : []),
     ...checkReadAloud(storyText),
     ...checkColdOpen(storyText),
     ...checkAudioCues(storyText),

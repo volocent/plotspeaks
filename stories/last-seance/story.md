@@ -6,6 +6,7 @@ metadata:
   title: The Last Séance
   pitch: "In fog-bound London in 1893, grieving tea importer Ezra Coldwell dies in his chair in the dark at a fashionable medium's séance. His daughter brought you to expose the medium; with the constable an hour off, you question the household and the other sitters."
   genre: murder-mystery
+  kind: mystery
   tone: dark
   duration_minutes: 35
   chapters: 1

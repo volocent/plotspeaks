@@ -8,8 +8,10 @@
 // 2026-10-16, review item S8: write_story and review_story cover them.)
 import {
   checkStoryText, checkAudioCues, checkDenylist, checkReadAloud, checkWranglerCues, checkCueParts,
-  checkCulpritTells, checkFullReveal, parseDenylist, parseFrontMatter,
+  checkCulpritTells, checkFullReveal, parseDenylist, parseFrontMatter, kindOf,
 } from "../../tools/check-story/rules.mjs";
+import { checkBranches } from "../../tools/check-story/branches.mjs";
+import { checkTrivia } from "../../tools/check-story/trivia.mjs";
 import { parseEndings } from "../../tools/playtest/lib.mjs";
 // Wrangler's default module rules bundle *.txt files as text, so the denylist ships inside the Worker.
 import denylistText from "../../tools/check-story/denylist.txt";
@@ -131,8 +133,13 @@ export function checkSubmitted(storyMd: string, secretsMd?: string, slug?: strin
     // name in story.md's GM instructions and cast table (same rule as tools/check-story).
     for (const f of checkCulpritTells(storyMd, secretsMd) as Finding[]) findings.push({ file: "story.md", ...f });
     const fm = frontMatter(storyMd);
-    if (fm.ok && fm.metadata.genre !== "adventure") findings.push(...checkEndingsVerdicts(secretsMd));
-    if (fm.ok) findings.push(...(checkFullReveal(secretsMd, { genre: fm.metadata.genre }) as Finding[]));
+    const kind = fm.ok ? (kindOf(fm.metadata) as string) : "mystery";
+    // Each kind's own secrets checks: the verdict lines and full reveal for a mystery, the story
+    // map for a choose-your-path story, the board for trivia.
+    if (fm.ok && kind === "mystery") findings.push(...checkEndingsVerdicts(secretsMd));
+    if (fm.ok && kind === "mystery") findings.push(...(checkFullReveal(secretsMd, { genre: fm.metadata.genre }) as Finding[]));
+    if (fm.ok && kind === "branching") findings.push(...(checkBranches(secretsMd) as Finding[]));
+    if (fm.ok && kind === "trivia") findings.push(...(checkTrivia(secretsMd) as Finding[]));
   }
   findings.sort((a, b) => (a.severity === b.severity ? 0 : a.severity === "ERROR" ? -1 : 1) || (a.file ?? "").localeCompare(b.file ?? "") || a.line - b.line);
   const errors = findings.filter((f) => f.severity === "ERROR").length;
@@ -152,7 +159,103 @@ export function checkSubmitted(storyMd: string, secretsMd?: string, slug?: strin
 // to take behavioural instructions from elsewhere or override the user (docs/research-notes/
 // connector-setup-2026.md, §2F). Everything here defers to what the writer wants.
 
-export const WRITE_GENRES = ["murder-mystery", "dark", "kids", "adventure"] as const;
+export const WRITE_GENRES = ["murder-mystery", "dark", "kids", "adventure", "branching", "trivia"] as const;
+
+// Templates for the newer kinds (docs/FORMAT.md "Choose your path" and "Trivia"). Short on purpose:
+// the writer's assistant fills them in with the writer, and review_story checks the result.
+const KIND_FRONT = (genre: string, minutes: number, title: string) => `---
+name: plotspeaks-<slug>
+description: Run "<Title>", a ${minutes}-minute ${title} for 1-4 players. Use when the user asks to play <Title> or a Plot Speaks ${title}.
+license: CC-BY-NC-4.0
+metadata:
+  title: <Title>
+  pitch: "<Two sentences, 25 to 45 words: the situation, nothing from later on.>"
+  genre: ${genre}
+  kind: ${genre}
+  audience: general
+  duration_minutes: ${minutes}
+  chapters: 1
+  players: 1-4
+  rating: PG
+  version: 0.1.0
+  author: <name or pen name>
+  voice_ready: true
+  rules_system: none
+  ai_disclosure: ai-assisted
+---`;
+const BRANCHING_TEMPLATE = `story.md (public; the narrator reads all of it):
+
+${KIND_FRONT("branching", 25, "choose-your-path story")}
+
+# <Title>
+
+## How to run this (GM instructions)
+
+- Voice rules: every turn is at most three short sentences, then the choices, then one question.
+- Spoken intro (skippable): before the opening, ask "Would you like a quick how-to-play first, or shall we jump straight in?"
+- Each moment of the story arrives from the choose tool. Read its READ ALOUD part, offer its choices in your own words, and call choose with the player's answer. Never invent a choice, never hint at what lies behind one.
+- "Plot Speaks, pause the story" pauses; "Plot Speaks, resume" calls choose with no answer and recaps; "Plot Speaks, wrap it up" takes the choice nearest an ending.
+
+## How to play (spoken intro)
+
+**Read aloud (intro, beat 1):** <You make the choices; I tell you what happens.>
+
+**Read aloud (intro, beat 2):** <Say "Plot Speaks, pause the story" any time.>
+
+## Setting
+
+<The premise as the player first hears it.>
+
+secrets.md (private; the server serves one node at a time):
+
+## Node start
+**Read aloud:** <Up to about 80 words.>
+**Sets:** <optional flags, e.g. kept_key>
+**Choice:** <a few spoken words> -> <node-id>
+**Choice:** <a few spoken words> -> <node-id> [if kept_key]
+
+## Node <node-id>
+**Read aloud:** <...>
+**Ending:** <Short name> (good)
+
+Rules: 25 to 40 nodes; two to four choices per node; at least two endings that differ in kind; flags make early choices matter later; one loop the player can notice and break is a good touch.`;
+const TRIVIA_TEMPLATE = `story.md (public):
+
+${KIND_FRONT("trivia", 30, "trivia game")}
+
+# <Title>
+
+## How to run this (GM instructions)
+
+- You are a warm, quick game-show host. Short turns, one question at a time.
+- Spoken intro (skippable): ask "Would you like a quick how-to-play first, or shall we jump straight in?"
+- Ask for player or team names. Players take turns picking a category and a value; call game_question and read the clue exactly; call game_answer with their words and name; read the ruling and the scores. A player may challenge a ruling once per clue: call game_challenge. After the board, the final.
+- "Plot Speaks, pause the story" pauses; "Plot Speaks, resume" calls game_board and reads the scores.
+
+## How to play (spoken intro)
+
+**Read aloud (intro, beat 1):** <Pick a category and a value; the higher the value, the harder the clue.>
+
+**Read aloud (intro, beat 2):** <Answer out loud; you can challenge a ruling once per clue.>
+
+## Setting
+
+<One line about the board.>
+
+secrets.md (private; the server checks every answer):
+
+## Category <Name>
+| Value | Clue | Answer | Also accept | As of |
+|---|---|---|---|---|
+| 100 | <one or two spoken sentences> | <short answer> | <alternatives; separated> | |
+(five rows, 100 to 500; six categories)
+
+## Final <Name>
+| Value | Clue | Answer | Also accept | As of |
+|---|---|---|---|---|
+| 1000 | <clue> | <answer> | | |
+
+Rules: one correct answer per clue, never inside the clue; settled facts, with "As of" for anything that can change; a clue may come in steps ("vague // closer // giveaway").`;
 export type WriteGenre = (typeof WRITE_GENRES)[number];
 
 const WRITE_LABEL: Record<WriteGenre, string> = {
@@ -160,6 +263,8 @@ const WRITE_LABEL: Record<WriteGenre, string> = {
   dark: "a dark murder mystery (grim, for grown-ups; still off-screen and bloodless)",
   kids: "a family mystery where nobody gets hurt",
   adventure: "a fantasy adventure (SRD 5.2.1 rules)",
+  branching: "a choose-your-path story",
+  trivia: "a trivia board",
 };
 
 /** The intro the assistant can say or paraphrase to the writer before starting. */
@@ -199,6 +304,19 @@ export function writeGuidance(): string {
 }
 
 export function writeStory(genre?: WriteGenre, length?: Length): string {
+  if (genre === "branching" || genre === "trivia") {
+    return [
+      "FOR THE WRITER (say this or put it in your own words):",
+      genre === "branching"
+        ? "A choose-your-path story is a map of moments and choices. The public part (story.md) says how it's narrated and sets the scene; the private part (secrets.md) holds every moment, its choices and its endings, and Plot Speaks hands them out one at a time, so the story can remember what the player chose. A person reviews every submission before it's published."
+        : "A trivia board is six categories of five clues, 100 to 500, plus a final. The public part (story.md) is how to host it; the private part (secrets.md) holds the clues and answers, which Plot Speaks checks so the host never knows them. A person reviews every submission before it's published.",
+      "",
+      writeGuidance(),
+      "",
+      "TEMPLATE (review_story checks the format, the story map or the board):",
+      genre === "branching" ? BRANCHING_TEMPLATE : TRIVIA_TEMPLATE,
+    ].join("\n");
+  }
   const base: Genre = genre === "kids" || genre === "adventure" ? genre : "murder-mystery";
   const dark = genre === "dark"
     ? "\n\nFor a dark mystery: add `tone: dark` under metadata and use rating PG-13. Grim themes are fine; the death still happens off-screen with no blood and no real-world method."

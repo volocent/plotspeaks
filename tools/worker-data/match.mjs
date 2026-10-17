@@ -57,7 +57,16 @@ export function matchStory(request, stories) {
   if (containing.length === 1 && ww.length >= 1 && want.length >= 4) return { story: containing[0] };
   const scored = stories.map((s) => {
     const have = [...new Set([...words(s.title), ...words(s.slug)])];
-    const per = ww.map((w) => wordScore(w, have));
+    // Each of the story's words answers at most one requested word, exact matches first, so one
+    // word ("lost") can't score for both "last" and "host".
+    const left = [...have];
+    const per = new Array(ww.length).fill(0);
+    ww.forEach((w, i) => { const j = left.indexOf(w); if (j >= 0) { per[i] = 1; left.splice(j, 1); } });
+    ww.forEach((w, i) => {
+      if (per[i]) return;
+      const s = wordScore(w, left);
+      if (s) { per[i] = s; left.splice(left.findIndex((h) => w.length >= 3 && h.length >= 3 && similarity(w, h) === s), 1); }
+    });
     return { s, score: per.reduce((a, b) => a + b, 0), hits: per.filter((x) => x > 0).length };
   }).filter((x) => x.hits > 0).sort((a, b) => b.score - a.score || a.s.title.localeCompare(b.s.title));
   const best = scored[0];

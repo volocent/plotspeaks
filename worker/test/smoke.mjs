@@ -71,7 +71,7 @@ if (openServer) {
 }
 
 // ---------------------------------------------------------------- the tool surface (review S7, S8, B2)
-const EXPECTED_TOOLS = ['open_plot_speaks', 'list_stories', 'start_story', 'check_accusation', 'reveal_solution', 'get_cue', 'rate_story', 'write_story', 'review_story', 'submit_story', 'withdraw_submission'];
+const EXPECTED_TOOLS = ['open_plot_speaks', 'list_stories', 'start_story', 'choose', 'game_board', 'game_question', 'game_answer', 'game_challenge', 'roll', 'world_recall', 'world_update', 'check_accusation', 'reveal_solution', 'get_cue', 'rate_story', 'write_story', 'review_story', 'submit_story', 'withdraw_submission'];
 const toolList = (await rpc('tools/list', {})).json?.result?.tools ?? [];
 const tools = toolList.map((t) => t.name);
 ok(EXPECTED_TOOLS.every((t) => tools.includes(t)) && tools.length === EXPECTED_TOOLS.length, `tools: ${tools.join(', ')}`);
@@ -80,7 +80,7 @@ ok(toolList.every((t) => typeof t.title === 'string' && t.title.length > 0), 'ev
 // Claude's directory form reads the title from annotations.title (2026-10-16 submission).
 ok(toolList.every((t) => typeof t.annotations?.title === 'string' && t.annotations.title.length > 0), 'every tool has annotations.title');
 const ann = (n) => toolList.find((t) => t.name === n)?.annotations ?? {};
-ok(['start_story', 'check_accusation', 'reveal_solution', 'rate_story'].every((n) => ann(n).readOnlyHint === false), 'tools that record a play event are not marked read-only');
+ok(['start_story', 'choose', 'check_accusation', 'reveal_solution', 'rate_story'].every((n) => ann(n).readOnlyHint === false), 'tools that record a play event are not marked read-only');
 ok(['open_plot_speaks', 'list_stories', 'get_cue', 'write_story', 'review_story'].every((n) => ann(n).readOnlyHint === true && ann(n).idempotentHint === true && ann(n).destructiveHint === false),
   'open_plot_speaks, list_stories, get_cue, write_story and review_story are read-only and idempotent');
 ok(ann('reveal_solution').title === 'Full reveal', 'reveal_solution is titled "Full reveal"');
@@ -102,8 +102,8 @@ ok(/example-dinner-party/.test(list) && /keepers-bell/.test(list), 'list_stories
 const opened = await call('open_plot_speaks', {});
 ok(opened.includes('Would you like to hear what stories there are, start one, or write your own?'), 'open_plot_speaks returns the question');
 ok(/car ride/i.test(opened) && /until you accuse/i.test(opened), 'open_plot_speaks has the spoken intro (car rides, answer hidden until you accuse)');
-ok(['Murder mysteries:', 'Dark murder mysteries:', 'Family mysteries:', 'Fantasy adventures:'].every((c) => opened.includes(c)) && /The Last Toast/.test(opened),
-  'open_plot_speaks menu has the four categories with example titles');
+ok(/^- Mysteries \(some dark, some for families\): /m.test(opened) && /^- Adventures: /m.test(opened) && !/^- Mysteries[^:]*: The (Missing Blue Ribbon|Fizzless Volcano|Empty Glass Case)/m.test(opened),
+  'open_plot_speaks menu lists the kinds with example titles (mysteries note dark and family)');
 ok(!/\((correct|wrong)\)|^\s*(Correct|Innocent)\.\s/im.test(opened), 'open_plot_speaks contains no answer-key line');
 const skipped = await call('open_plot_speaks', { skip_intro: true });
 ok(!/^INTRO/m.test(skipped) && skipped.includes('Would you like to hear what stories there are') && /MENU/.test(skipped), 'open_plot_speaks with skip_intro leaves the intro out but keeps the question and menu');
@@ -112,17 +112,18 @@ ok(/HOW IT WORKS/.test(howTo) && /Plot Speaks, pause/.test(howTo) && /No signal/
 ok(/haven't come across that yet/.test(instructions) && /can't reach Plot Speaks/.test(instructions) && /leave feedback/i.test(instructions),
   'the server instructions carry the discovery guardrail, the no-signal rule and the feedback ask');
 const gptOpened = await call('open_plot_speaks', {}, { ua: GPT_UA });
-ok(!/Family mysteries/.test(gptOpened) && /Fantasy adventures/.test(gptOpened), 'open_plot_speaks for ChatGPT leaves the family category out');
+ok(!/famil/i.test(gptOpened) && !/Blue Ribbon|Fizzless|Glass Case/.test(gptOpened) && /^- Adventures: /m.test(gptOpened), 'open_plot_speaks for ChatGPT leaves the family stories out');
 const darkList = await call('list_stories', { genre: 'dark' });
 const mysteryList = await call('list_stories', { genre: 'murder-mystery' });
 const classicList = await call('list_stories', { genre: 'classic' });
-ok(/, dark;/.test(darkList) && !/example-dinner-party/.test(darkList) && !/; kids;/.test(darkList), 'list_stories genre "dark" lists dark mysteries only');
+ok(/, dark;/.test(darkList) && !/example-dinner-party/.test(darkList) && !/for families/.test(darkList), 'list_stories genre "dark" lists dark mysteries only');
 ok(/example-dinner-party/.test(classicList) && !/, dark;/.test(classicList), 'list_stories genre "classic" leaves dark mysteries out');
 ok(/example-dinner-party/.test(mysteryList) && (!/, dark;/.test(list) || /, dark;/.test(mysteryList)), 'list_stories genre "murder-mystery" still lists every murder mystery (backwards compatible)');
-ok(/; kids;/.test(await call('list_stories', { genre: 'kids' })), 'list_stories accepts genre "kids" outside ChatGPT');
-ok(!/; kids;/.test(await call('list_stories', {}, { ua: GPT_UA })), 'list_stories for ChatGPT lists no family story');
+ok(/for families/.test(await call('list_stories', { genre: 'kids' })), 'list_stories accepts genre "kids" outside ChatGPT');
+ok(/Keeper's Bell/.test(await call('list_stories', { kind: 'adventure' })) && !/Last Toast/.test(await call('list_stories', { kind: 'adventure' })), 'list_stories filters by kind');
+ok(!/for families|Blue Ribbon/.test(await call('list_stories', {}, { ua: GPT_UA })), 'list_stories for ChatGPT lists no family story');
 const grouped = await call('list_stories', { group_by_category: true });
-ok(/^Murder mysteries:\n- /m.test(grouped) && /^Fantasy adventures:\n- /m.test(grouped), 'list_stories groups by category');
+ok(/^Mysteries:\n- /m.test(grouped) && /^Adventures:\n- /m.test(grouped), 'list_stories groups by kind');
 
 // ---------------------------------------------------------------- start_story, matching, ChatGPT fail-closed
 const start = await call('start_story', { slug: 'The Last Toast' });
@@ -232,6 +233,104 @@ if (!openServer) {
   const rated = await call('rate_story', { slug: 'example-dinner-party', stars: 5, spoiled: false, comment: 'smoke test', feedback: 'smoke test feedback', play_id: playId });
   ok(/rating and feedback saved/i.test(rated), 'rate_story saves a rating for a real play (dev; stored as a tester rating)');
 } else console.log('SKIP  saving a rating (open server: the smoke test leaves no rating)');
+
+// ---------------------------------------------------------------- preview stories
+// In stories/catalog.json "preview": never listed or on the site, but started by exact name.
+const previews = genStories.filter((s) => s.preview);
+if (previews.length) {
+  const everything = await call('list_stories', {});
+  const home = await (await fetch(`${base}/`)).text();
+  ok(previews.every((p) => !everything.includes(`slug: ${p.slug}`) && !home.includes(`/stories/${p.slug}"`)), `preview stories are not listed or on the home page (${previews.length})`);
+  const byTitle = await call('start_story', { slug: previews[0].title });
+  ok(new RegExp(`narrator for "${previews[0].title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`).test(byTitle), 'a preview story starts by its exact title');
+} else console.log('SKIP  preview checks (no preview story)');
+
+// ---------------------------------------------------------------- choose-your-path (kind: branching)
+// Runs on the first branching story the server lists; skipped while none is published. The leak
+// check uses the locally built graph: no node but the one served may appear in an output.
+const branchList = await call('list_stories', { kind: 'branching' });
+const branchSlug = (/slug: ([a-z0-9-]+)/.exec(branchList) || [])[1] ?? genStories.find((s) => s.preview && s.kind === 'branching')?.slug;
+const branchGraph = genStories.find((s) => s.slug === branchSlug)?.branches;
+if (branchSlug && branchGraph) {
+  const nodeNeedles = (except) => Object.entries(branchGraph.nodes).filter(([id]) => !except.includes(id)).map(([, n]) => n.read_aloud.slice(0, 70)).filter((t) => t.length >= 40);
+  const bStart = await call('start_story', { slug: branchSlug });
+  const bPlay = (/Play id: ([0-9a-f-]{36})/.exec(bStart) || [])[1];
+  ok(Boolean(bPlay) && /## The opening/.test(bStart) && /CHOICES/.test(bStart), `start_story on a branching story returns the opening node and its choices (${branchSlug})`);
+  ok(!nodeNeedles(['start']).some((t) => bStart.includes(t)), 'start_story serves no node but the opening');
+  const firstTo = branchGraph.nodes.start.choices.find((c) => !c.if.length)?.to;
+  const moved = await call('choose', { slug: branchSlug, play_id: bPlay, choice: '1' });
+  ok(/^READ ALOUD/.test(moved) && (!firstTo || !nodeNeedles([firstTo]).some((t) => moved.includes(t))), 'choose "1" returns the next node, and only that node');
+  const resumed = await call('choose', { slug: branchSlug, play_id: bPlay });
+  ok(/WHERE THEY ARE/.test(resumed) && /they chose "/.test(resumed), 'choose with no answer returns where the play is and the path so far');
+  const unclear = await result('choose', { slug: branchSlug, play_id: bPlay, choice: 'zebra quantum pancake' });
+  ok(isErr(unclear) && /didn't clearly match/.test(unclear?.content?.[0]?.text ?? ''), 'an unclear answer is refused with the choices listed, not guessed');
+  const foreign = await result('choose', { slug: branchSlug, play_id: playId, choice: '1' });
+  ok(isErr(foreign) && /couldn't find that play/.test(foreign?.content?.[0]?.text ?? ''), "another story's play id doesn't move this story");
+  const noBranch = await result('choose', { slug: 'example-dinner-party', play_id: playId, choice: '1' });
+  ok(isErr(noBranch) && /isn't a choose-your-path story/.test(noBranch?.content?.[0]?.text ?? ''), 'choose on a mystery says it is not a choose-your-path story');
+} else console.log('SKIP  choose-your-path checks (no branching story is listed yet)');
+
+// ---------------------------------------------------------------- trivia (kind: trivia)
+// Runs on the first trivia board listed. The answers come from the locally built board; no output
+// before a ruling may contain the answer to the open clue. The challenge is not exercised here (it
+// calls three AI models); its refusals are.
+const triviaList = await call('list_stories', { kind: 'trivia' });
+// Prefer a board whose first clue has one step, so scoring and the challenge refusal are exercised too.
+const listedTrivia = [...triviaList.matchAll(/slug: ([a-z0-9-]+)/g)].map((m) => m[1]);
+const triviaCandidates = genStories.filter((s) => s.trivia && (listedTrivia.includes(s.slug) || s.preview));
+const triviaSlug = (triviaCandidates.find((s) => s.trivia.categories.find((c) => !c.final)?.clues[0]?.steps.length === 1) ?? triviaCandidates[0])?.slug;
+const triviaBoard = genStories.find((s) => s.slug === triviaSlug)?.trivia;
+if (triviaSlug && triviaBoard) {
+  const cat = triviaBoard.categories.find((c) => !c.final);
+  const q = cat.clues[0];
+  const tStart = await call('start_story', { slug: triviaSlug });
+  const tPlay = (/Play id: ([0-9a-f-]{36})/.exec(tStart) || [])[1];
+  ok(Boolean(tPlay) && /## The board/.test(tStart) && tStart.includes(cat.name), `start_story on a trivia board returns the board (${triviaSlug})`);
+  const allAnswers = triviaBoard.categories.flatMap((c) => c.clues.map((x) => x.answer)).filter((a) => a.length >= 4);
+  ok(!allAnswers.some((a) => tStart.includes(`Answer: ${a}`) || new RegExp(`\\b${a.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(tStart.split('## The board')[1] ?? '')), 'the board shows no answers');
+  const clue = await call('game_question', { slug: triviaSlug, play_id: tPlay, category: cat.name, value: q.value });
+  ok(/^CLUE/.test(clue) && clue.includes(q.steps[0]) && !(q.answer.length >= 4 && clue.toLowerCase().includes(q.answer.toLowerCase())), 'game_question gives the clue and not its answer');
+  const again = await result('game_question', { slug: triviaSlug, play_id: tPlay, category: 'no such category' });
+  ok(isErr(again) && /no category called/.test(again?.content?.[0]?.text ?? ''), 'an unknown category is refused with the list');
+  const wrong = await call('game_answer', { slug: triviaSlug, play_id: tPlay, answer: 'zebra quantum pancake', player: 'Smoke' });
+  ok(q.steps.length > 1 ? /^NOT YET/.test(wrong) : /^NOT RIGHT/.test(wrong) && wrong.includes(q.answer), 'a wrong answer is ruled wrong (or gets the next step) and the answer is given after the ruling');
+  if (q.steps.length === 1) {
+    const q2 = cat.clues[1];
+    await call('game_question', { slug: triviaSlug, play_id: tPlay, category: cat.name, value: q2.value });
+    const right = await call('game_answer', { slug: triviaSlug, play_id: tPlay, answer: `what is ${q2.answer}`, player: 'Smoke' });
+    ok(/^CORRECT/.test(right) && new RegExp(`Smoke ${q2.value}`).test(right), 'a right answer scores its value for the named player');
+    const noChallenge = await result('game_challenge', { slug: triviaSlug, play_id: tPlay });
+    ok(isErr(noChallenge) && /already ruled correct/.test(noChallenge?.content?.[0]?.text ?? ''), 'a correct ruling cannot be challenged');
+  }
+  const board2 = await call('game_board', { slug: triviaSlug, play_id: tPlay });
+  // A stepped clue stays open after a wrong answer (the next step comes), so only a one-step clue leaves the board.
+  ok(/^SCORES:/.test(board2) && (q.steps.length > 1 || !new RegExp(`- ${cat.name}: ${q.value}\\b`).test(board2)), 'game_board shows the scores and drops a played clue');
+} else console.log('SKIP  trivia checks (no trivia board is listed yet)');
+
+// ---------------------------------------------------------------- dice and campaigns
+const d20 = await call('roll', { dice: '1d20+3', why: 'smoke' });
+const d20n = Number((/= (-?\d+)\./.exec(d20) || [])[1]);
+ok(/^smoke: Rolled \d+ \+ 3 = \d+\./.test(d20) && d20n >= 4 && d20n <= 23, `roll 1d20+3 rolls on the server (${d20n})`);
+ok(isErr(await result('roll', { dice: 'a lot' })) && isErr(await result('roll', { dice: '1d7' })), 'roll refuses a non-roll and a non-standard die');
+const campList = await call('list_stories', { kind: 'campaign' });
+const campSlug = (/slug: ([a-z0-9-]+)/.exec(campList) || [])[1] ?? genStories.find((s) => s.preview && s.kind === 'campaign')?.slug;
+if (campSlug) {
+  const cStart = await call('start_story', { slug: campSlug });
+  const cPlay = (/Play id: ([0-9a-f-]{36})/.exec(cStart) || [])[1];
+  const code = (/RESUME CODE: "([a-z ]+)"/.exec(cStart) || [])[1];
+  ok(Boolean(cPlay) && /^[a-z]+ [a-z]+ [a-z]+$/.test(code ?? ''), `start_story on a campaign gives a play id and a three-word resume code (${campSlug})`);
+  const up = await call('world_update', { slug: campSlug, play_id: cPlay, party: [{ name: 'Smoke', class: 'wizard', level: 1, max_hp: 8, max_slots: { 1: 2 } }], npcs: [{ name: 'Old Bram', status: 'dead' }], location: 'the crossroads', note: 'smoke test' });
+  ok(/Smoke joined \(wizard, level 1, 8 HP\)/.test(up) && /the crossroads/.test(up), 'world_update adds a character and a place');
+  const hit = await call('world_update', { slug: campSlug, play_id: cPlay, party: [{ name: 'Smoke', damage: 3, spend_slot: '1' }, { name: 'Smoke', hp: 50 }], npcs: [{ name: 'Old Bram', status: 'friendly' }] });
+  ok(/5\/8/.test(hit) && /REFUSED/.test(hit) && /dead stay dead/.test(hit) && /above their maximum/.test(hit), 'world_update applies damage and a spell slot, and refuses raising the dead and HP over the maximum');
+  const back = await call('world_recall', { slug: campSlug, resume_code: code });
+  ok(back.includes(cPlay) && /Smoke, wizard 1: 5\/8 HP/.test(back), 'world_recall by resume code returns the same campaign');
+  const carry = await call('start_story', { slug: campSlug, resume_code: code });
+  ok(carry.includes(`Play id: ${cPlay}`) && /Where the campaign stands/.test(carry) && !/RESUME CODE:/.test(carry), 'start_story with the resume code carries on the same campaign, with no new play or code');
+  const rest = await call('world_update', { slug: campSlug, play_id: cPlay, rest: 'long', day: 2 });
+  ok(/8\/8 HP/.test(rest) && /^DAY 2\b/m.test(rest), 'a long rest sent with the day moves one day, not two, and restores HP');
+  ok(isErr(await result('world_recall', { slug: campSlug, resume_code: 'not a code' })), 'a wrong resume code is refused');
+} else console.log('SKIP  campaign checks (no campaign is listed yet)');
 
 // ---------------------------------------------------------------- write_story and review_story
 const broken = [

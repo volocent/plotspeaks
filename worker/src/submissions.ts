@@ -22,7 +22,11 @@ import { checkSubmitted, DENYLIST } from "./studio";
 import { generateCover } from "./covers";
 import { parseEndings, extractCue, parseFullReveal } from "../../tools/playtest/lib.mjs";
 import { connectorStory, connectorNotes } from "../../tools/worker-data/connector.mjs";
-import { parseFrontMatter, checkDenylist } from "../../tools/check-story/rules.mjs";
+import { parseFrontMatter, checkDenylist, kindOf, isFamily } from "../../tools/check-story/rules.mjs";
+import { compileBranches } from "../../tools/check-story/branches.mjs";
+import type { BranchGraph } from "./branching";
+import type { TriviaBoard } from "./games";
+import { compileTrivia } from "../../tools/check-story/trivia.mjs";
 import { adminStats } from "./stats";
 
 export const GUARD_MODEL = "@cf/meta/llama-guard-3-8b";
@@ -41,10 +45,22 @@ export type Ending = { name: string; verdict: string; text: string };
 type Cue = { read_aloud: string; narrator_only: string | null };
 export type FullReveal = { read_aloud: string; afterward: string | null };
 export type PlayStory = {
-  slug: string; title: string; genre: string; tone: string; players: string; duration_minutes: number | null;
+  slug: string; title: string; genre: string; tone: string; kind: string; audience: "general" | "family"; players: string; duration_minutes: number | null;
   story: string; story_connector: string[]; endings: Ending[]; cues: Record<string, Cue>;
   listen_for: string | null; listen_for_raw: string | null; full_reveal: FullReveal | null;
+  branches: BranchGraph | null;
+  trivia?: TriviaBoard | null;
+  picks?: string[];
+  // In stories/catalog.json "preview": served when named exactly, never listed (Ben's voice check).
+  preview?: boolean;
 };
+/** kind and audience from a story's front matter (the same rules as the lint and the build). */
+export function kindFields(story: string, genre: string): { kind: string; audience: "general" | "family" } {
+  const fm = (/^---\r?\n([\s\S]*?)\r?\n---/.exec(story) || [, ""])[1];
+  const f = (k: string) => ((new RegExp(`^\\s*${k}:\\s*["']?([A-Za-z-]+)`, "m").exec(fm) || [, ""])[1]).toLowerCase();
+  const md = { kind: f("kind"), audience: f("audience"), genre };
+  return { kind: kindOf(md) as string, audience: isFamily(md) ? "family" : "general" };
+}
 /** metadata.tone from a story's front matter (classic | dark | cozy), lower-cased; "" when absent. */
 export function toneOf(story: string): string {
   const fm = (/^---\r?\n([\s\S]*?)\r?\n---/.exec(story) || [, ""])[1];
@@ -413,10 +429,15 @@ async function approvedRows(db: D1Database | undefined): Promise<Row[]> {
 }
 
 export async function loadApprovedStories(db: D1Database | undefined): Promise<PlayStory[]> {
-  return (await approvedRows(db)).map((r) => ({
-    slug: r.slug, title: r.title, genre: r.genre ?? "", tone: toneOf(r.story_md), players: r.players ?? "", duration_minutes: r.duration_minutes,
-    story: r.story_md, story_connector: (connectorStory(r.story_md) as { parts: string[] }).parts, ...playData(r.secrets_md ?? ""),
-  }));
+  return (await approvedRows(db)).map((r) => {
+    const kf = kindFields(r.story_md, r.genre ?? "");
+    return {
+      slug: r.slug, title: r.title, genre: r.genre ?? "", tone: toneOf(r.story_md), ...kf, players: r.players ?? "", duration_minutes: r.duration_minutes,
+      story: r.story_md, story_connector: (connectorStory(r.story_md) as { parts: string[] }).parts, ...playData(r.secrets_md ?? ""),
+      branches: kf.kind === "branching" ? (compileBranches(r.secrets_md ?? "") as BranchGraph | null) : null,
+      trivia: kf.kind === "trivia" ? (compileTrivia(r.secrets_md ?? "") as TriviaBoard | null) : null,
+    };
+  });
 }
 
 export async function listApprovedSubmissions(db: D1Database | undefined): Promise<{ slug: string; story: string }[]> {

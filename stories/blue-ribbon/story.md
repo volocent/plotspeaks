@@ -6,6 +6,8 @@ metadata:
   title: The Missing Blue Ribbon
   pitch: "At the Maple Hollow Fair on a sunny Saturday, the prize ribbon for the pie contest vanishes an hour before the judging. Nobody is hurt, and as the junior fair helper you ask around the fairground to find out who took it."
   genre: kids
+  kind: mystery
+  audience: family
   duration_minutes: 20
   chapters: 1
   players: 1-4

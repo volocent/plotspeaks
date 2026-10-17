@@ -6,6 +6,7 @@ metadata:
   title: The Weigh-In
   pitch: "On derby day at frozen Ember Lake, Arvid Lund, weighmaster for thirty-one years, is found dead in his fish house out on the ice. The sheriff is stuck on the highway, so you, the off-duty deputy, search the ice and question the town."
   genre: murder-mystery
+  kind: mystery
   duration_minutes: 50
   chapters: 2
   players: 1-4

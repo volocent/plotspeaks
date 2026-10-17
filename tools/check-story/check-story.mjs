@@ -5,7 +5,9 @@ import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { checkStoryText, checkAudioCues, checkDenylist, checkWranglerCues, checkCueParts, checkReadAloud, checkCulpritTells, checkFullReveal, parseFrontMatter, parseDenylist } from './rules.mjs';
+import { checkBranches } from './branches.mjs';
+import { checkTrivia } from './trivia.mjs';
+import { checkStoryText, kindOf, checkAudioCues, checkDenylist, checkWranglerCues, checkCueParts, checkReadAloud, checkCulpritTells, checkFullReveal, parseFrontMatter, parseDenylist } from './rules.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '..', '..');
@@ -42,7 +44,9 @@ export function checkStoryDir(dir, denylist) {
     const secretsPath = join(dir, 'secrets.md');
     const secrets = existsSync(secretsPath) ? readFileSync(secretsPath, 'utf8') : '';
     for (const f of checkStoryText(story, { slug, denylist })) findings.push({ file: 'story.md', ...f });
-    findings.push(...checkSecretsFile(dir));
+    // A game the narrator runs from its rules alone (twenty questions, story improv) may have no secrets.md.
+    const fm0 = parseFrontMatter(story);
+    if (secrets || !(fm0.ok && ['game', 'campaign'].includes(kindOf(fm0.metadata)))) findings.push(...checkSecretsFile(dir));
     if (secrets) {
       for (const f of [...checkAudioCues(secrets), ...checkDenylist(secrets, denylist), ...checkReadAloud(secrets)]) findings.push({ file: 'secrets.md', ...f });
     }
@@ -50,7 +54,9 @@ export function checkStoryDir(dir, denylist) {
     for (const f of checkCueParts(secrets)) findings.push({ ...f });
     for (const f of checkCulpritTells(story, secrets)) findings.push({ file: 'story.md', ...f });
     const fm = parseFrontMatter(story);
-    if (secrets && fm.ok) findings.push(...checkFullReveal(secrets, { genre: fm.metadata.genre }));
+    if (secrets && fm.ok && kindOf(fm.metadata) === 'mystery') findings.push(...checkFullReveal(secrets, { genre: fm.metadata.genre }));
+    if (fm.ok && kindOf(fm.metadata) === 'branching') findings.push(...checkBranches(secrets));
+    if (fm.ok && kindOf(fm.metadata) === 'trivia') findings.push(...checkTrivia(secrets));
   }
   const errors = findings.filter((f) => f.severity === 'ERROR').length;
   const warnings = findings.filter((f) => f.severity === 'WARN').length;

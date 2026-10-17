@@ -6,6 +6,8 @@ metadata:
   title: The Empty Glass Case
   pitch: "At the Willowmere Library's Friday night sleepover, its oldest treasure, a first copy of The Clockwork Fox, vanishes the night before its big day. Nobody is hurt and the doors are locked, so before lights out you ask everyone what they saw."
   genre: kids
+  kind: mystery
+  audience: family
   duration_minutes: 20
   chapters: 1
   players: 1-4

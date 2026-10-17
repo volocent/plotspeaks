@@ -6,6 +6,7 @@ metadata:
   title: The Keeper's Bell
   pitch: "Every midnight a bell rings under the hill above Brackenhold, where no bell has hung for a hundred years, and sheep are going missing. The reeve pays your party to go beneath the chapel ruin, where a goblin was seen running, and stop it."
   genre: adventure
+  kind: adventure
   duration_minutes: 60
   chapters: 2
   players: 1-4

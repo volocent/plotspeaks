@@ -142,3 +142,54 @@ Every mystery's wrong-accusation ending offers "one more accusation, or the full
 - [ ] Simulated play (`tools/playtest`, see `docs/TESTING.md`): no leak, median narrator turn ≤ about 50 words, a `curious` run reaches an accusation
 - [ ] Front matter complete; `rating` and `ai_disclosure` set
 - [ ] No protected names or settings (franchise characters, Clue's cast, SRD-excluded creatures such as beholders or Strahd)
+
+## Choose your path (kind: branching)
+
+A story told as a graph of choices. The server hands the narrator one node at a time and remembers the path and the flags for each play, so the narrator can never read ahead and the story can answer a choice made twenty minutes earlier. Connector play only: a branching story cannot be pasted.
+
+**Front matter:** `genre: branching`, `kind: branching`, `chapters: 1`, `rules_system: none`; `audience: family` for family stories (G or PG; never offered to ChatGPT).
+
+**story.md** (public, the narrator reads all of it):
+- `## How to run this (GM instructions)`: the voice rules, the skippable intro, the three phrases (pause, resume, wrap it up), and: "Each node arrives from the choose tool. Read its READ ALOUD part, then offer its choices in your own words, briefly, in the story's voice, and call choose with the player's answer. Never invent a choice the node doesn't offer, never describe what lies behind one, and never mention nodes, flags or the tool. If the player asks for something no choice covers, say what the character can't do here, and offer the choices again." "Plot Speaks, resume" calls choose with no choice (it returns where they are and the path so far). "Wrap it up" offers the choice nearest an ending.
+- `## How to play (spoken intro)`: two or three beats.
+- `## Setting`: the premise as the player first hears it; nothing from later nodes.
+
+**secrets.md** (server only): `## Node <id>` sections, the first one `start`.
+- `**Read aloud:**` up to about 80 words (one spoken turn), and may run over paragraphs.
+- `**Narrator notes:**` optional; never read aloud.
+- `**Sets:** flag_a, flag_b` flags switched on when the player arrives (they never switch off).
+- `**Choice:** few spoken words -> node-id`, two to four per node, optionally `[if flag]` or `[unless flag]` (a choice is offered only then).
+- `**Ending:** Short name (good|bad|strange|bittersweet)` on a node with no choices.
+- `**Answer:** word; other word -> node-id` a puzzle answer (escape rooms, riddles): never listed to the player, taken when they say one of the words (the same tolerant matching as trivia). A node with answers still needs at least one spoken choice, such as a hint or giving up.
+
+The lint (`branches`) checks every target exists, every node is reachable from `start` with the flags as set, no reachable state leaves the player without a choice, at least two endings can be reached, and every tested flag is set somewhere.
+
+**Style (the Bandersnatch idea as a style, not a copy):** choices with consequences that surface later (a flag set early opens or closes a choice near the end); at least one loop the player can notice and break; one choice that is about the player rather than the character; endings that differ in kind, not just in tone. 25 to 40 nodes for 20 to 30 minutes.
+
+## Games the narrator runs (kind: game)
+
+A parlour game whose rules the narrator holds in full: twenty questions, story improv, would-you-rather. `genre: game`, `kind: game`, `chapters: 1`. story.md has `## How to run this (GM instructions)` with the rules as numbered steps, the voice rules, the skippable intro, the phrases "Plot Speaks, pause the story" and "Plot Speaks, resume", how a round starts, ends and is scored, and what the narrator says at the end (the feedback ask, then main menu or play again). `## How to play (spoken intro)` in two or three beats. No secrets.md is needed unless the game has hidden content (then it holds that content, and the narrator gets it through a tool, never in story.md).
+
+## Trivia (kind: trivia)
+
+A board the narrator hosts. The server holds every clue and answer; the narrator gets one clue at a time and never the answer before the ruling. Connector play only.
+
+**Front matter:** `genre: trivia`, `kind: trivia`, `chapters: 1`, `rules_system: none`, `rating` and `audience` as usual (`audience: family` boards are never offered to ChatGPT).
+
+**story.md:** `## How to run this (GM instructions)`: the host's rules (players or teams take turns picking a category and a value; read the clue exactly; game_answer rules; a player may challenge a ruling once per clue with game_challenge; the final comes when the board is clear), the voice rules, the skippable intro, the phrases "Plot Speaks, pause the story" and "Plot Speaks, resume"; `## How to play (spoken intro)`; `## Setting` (one line: what the board is about).
+
+**secrets.md:** one `## Category <name>` per category with a table `| Value | Clue | Answer | Also accept | As of |`, five clues valued 100 to 500, and one `## Final <name>` with a single clue valued 1000. "Also accept" lists other answers that count, separated by `;`. "As of" dates a fact that can change. A clue written in steps (`step one // step two // step three`) reveals one step per wrong answer and is worth less each step: guess the plot, where in the world.
+
+**Answers are checked on the server:** exact after dropping "what is", articles and punctuation; a spelling slip on words of five letters or more; a surname for a two-word name; anything in "Also accept". Numbers are exact. A disputed ruling goes to three different AI models (Workers AI); it flips only when at least two agree.
+
+**Before a board is published:** three independent agents answer every clue blind; a clue stays only if all three match the key; then a blind player agent plays the whole board, and its hit rate per row sets the difficulty labels.
+
+## Campaigns (kind: campaign)
+
+A D&D-style campaign (SRD 5.2.1 only, with the CC BY 4.0 attribution) played over several sessions. The narrator improvises from a world seed; the server keeps the books. `genre: campaign`, `kind: campaign`, `rules_system: srd-5.2.1`, `chapters: 1`, `duration_minutes` per session (30 to 45).
+
+**story.md** (the narrator reads all of it): `## How to run this (GM instructions)` (the voice rules; the skippable intro; the phrases "Plot Speaks, pause the story" and "Plot Speaks, resume"; how to make characters at levels 1 to 5 and record them with world_update; roll every check, attack and save with roll and say the result as rolled; record damage, healing, spells, items, gold, rests, places, people and quests with world_update the moment they happen; obey what world_update refuses; end each session at a rest with a recap and the resume code); `## How to play (spoken intro)`; `## Setting`; `## World seed` (the region in prose, three factions with what each wants, three hooks, a handful of named places and people, what is true behind each hook); `## Rules digest` (checks, advantage, combat turn, death saves, rests, conditions, spell slots by level for levels 1 to 5, in plain words, from the SRD 5.2.1).
+
+**secrets.md:** optional; truths the narrator must not reveal early go here only if a tool serves them (none does yet), so for now the world seed lives in story.md.
+
+**What the server enforces:** HP between 0 and the maximum; levels up one at a time, 1 to 5; spell slots spent and refilled only by a long rest; items removed only if carried; time never runs backwards; the dead stay dead. Dice are rolled on the server. Resume: a three-word code given at the start.

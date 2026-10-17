@@ -6,6 +6,7 @@ metadata:
   title: Last Call at the Blue Lantern
   pitch: "Port Calder, 1947: rain hammers the waterfront, and after closing a jazz club owner is found dead in his office. He hired you that afternoon because he feared for his life; with the police an hour off, you question everyone in the club."
   genre: murder-mystery
+  kind: mystery
   tone: dark
   duration_minutes: 35
   chapters: 1

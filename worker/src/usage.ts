@@ -9,7 +9,7 @@
 // for that isolate instead of logging an error on every request.
 
 export const TOOL_NAMES = new Set([
-  "open_plot_speaks", "list_stories", "start_story", "check_accusation", "reveal_solution", "get_cue", "rate_story",
+  "open_plot_speaks", "list_stories", "start_story", "choose", "game_board", "game_question", "game_answer", "game_challenge", "roll", "world_recall", "world_update", "check_accusation", "reveal_solution", "get_cue", "rate_story",
   "write_story", "review_story", "submit_story", "withdraw_submission",
 ]);
 

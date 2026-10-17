@@ -22,7 +22,8 @@ export async function runRetention(db: D1Database | undefined, now = Date.now())
   const old = now - KEEP_DAYS * DAY;
   const steps: [string, D1PreparedStatement][] = [
     ["play_events", db.prepare("DELETE FROM play_events WHERE at < ?").bind(old)],
-    ["plays", db.prepare("DELETE FROM plays WHERE started_at < ?").bind(old)],
+    // A campaign played within 90 days keeps its play, however long ago it started.
+    ["plays", db.prepare("DELETE FROM plays WHERE started_at < ? AND id NOT IN (SELECT play_id FROM play_state WHERE kind = 'campaign' AND updated_at >= ?)").bind(old, old)],
     // Passenger-page events have no play (play_id NULL) and are kept by age alone.
     ["orphan_events", db.prepare("DELETE FROM play_events WHERE play_id IS NOT NULL AND play_id NOT IN (SELECT id FROM plays)")],
     ["submission_attempts", db.prepare("DELETE FROM submission_attempts WHERE at < ?").bind(now - ATTEMPT_DAYS * DAY)],
@@ -37,6 +38,13 @@ export async function runRetention(db: D1Database | undefined, now = Date.now())
   try {
     const cutoff = new Date(now - COUNT_DAYS * DAY).toISOString().slice(0, 10);
     counts.daily_counts = (await db.prepare("DELETE FROM daily_counts WHERE day < ?").bind(cutoff).run()).meta?.changes ?? 0;
+  } catch { /* table not there yet */ }
+  // Play state (migration 0008): where a choose-your-path play is; goes with its play.
+  try {
+    counts.play_state = (await db.prepare("DELETE FROM play_state WHERE updated_at < ? OR play_id NOT IN (SELECT id FROM plays)").bind(old).run()).meta?.changes ?? 0;
+  } catch { /* table not there yet */ }
+  try {
+    counts.campaign_codes = (await db.prepare("DELETE FROM campaign_codes WHERE play_id NOT IN (SELECT id FROM plays)").run()).meta?.changes ?? 0;
   } catch { /* table not there yet */ }
   // Gate 2 completion markers (migration 0006): only needed while their play row exists, so they
   // go at 90 days too; the count itself lives on in totals.

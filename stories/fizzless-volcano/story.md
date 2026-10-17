@@ -6,6 +6,8 @@ metadata:
   title: The Fizzless Volcano
   pitch: "On science fair day at Cedar Run Elementary, Maya's prize-winning volcano goes glug instead of whoosh, because someone has swapped her baking soda for flour. Nobody is hurt, and before judging at two you ask around the gym to find out who did it."
   genre: kids
+  kind: mystery
+  audience: family
   duration_minutes: 20
   chapters: 1
   players: 1-4

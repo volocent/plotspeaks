@@ -6,6 +6,7 @@ metadata:
   title: The Last Toast
   pitch: "On a snowy January night at Harrow House, retired judge Marguerite Okafor is found dead in her study during her own retirement dinner. The roads are iced, the sheriff is forty minutes away, and you question everyone in the house."
   genre: murder-mystery
+  kind: mystery
   duration_minutes: 30
   chapters: 1
   players: 1-4

@@ -22,12 +22,15 @@ import { runRetention } from "./retention";
 import { countPage, countMcp, bump } from "./usage";
 import { assistantOf } from "./stats";
 import { matchStory, matchEnding, sortedNames } from "../../tools/worker-data/match.mjs";
+import { initialState, renderNode, matchChoice, advance, loadState, saveStateStatement, offered as branchOffered, type BranchState } from "./branching";
+import { newTrivia, renderBoard, askQuestion, answerQuestion, challenge, loadTrivia, saveTrivia, type Step } from "./games";
+import { newWorld, applyChanges, recall, roll as rollDice, newCode, codeHash, loadWorld, saveWorld, type World, type WorldChanges } from "./world";
 
 type Story = PlayStory;
-const STORIES = stories as Story[];
+const STORIES = stories as unknown as Story[]; // generated JSON: its inferred type is a union per story
 // The catalog site gets the slug and the public story.md text ONLY: never endings or cues.
 const toPublic = (s: Story): PublicStory => ({ slug: s.slug, story: s.story });
-const PUBLIC_STORIES: PublicStory[] = STORIES.map(toPublic);
+const PUBLIC_STORIES: PublicStory[] = STORIES.filter((s) => !s.preview).map(toPublic);
 const BUILTINS: Builtins = { slugs: new Set(STORIES.map((s) => s.slug)), storyFor: (slug) => STORIES.find((s) => s.slug === slug)?.story ?? null };
 
 // These rules travel with the server itself, not only inside the story text: on 2026-10-15
@@ -47,6 +50,8 @@ const INSTRUCTIONS = [
   "You do not know the solution. Never guess it. When the player formally accuses someone (the script says to ask for their reason first), call check_accusation with the story slug, the accused person's name and the play id, and give the verdict it returns (its line starts with Correct. or Innocent.). If it says the name could be more than one person, ask the player which they mean. Call check_accusation only for a formal accusation.",
   "After a correct accusation, or when the player asks for the full reveal or gives up, call reveal_solution with the play id (add gave_up: true when they gave up without accusing anyone). Read its READ ALOUD part; read its WHAT BECAME OF THEM part only if the player wants to hear what became of everyone.",
   "When the script calls for a cue, call get_cue with that cue id and narrate only its read-aloud part. Each cue also has narrator notes, to help run the scene; when they say to call a follow-up cue (for example S3b) after something happens, call get_cue for it yourself at that moment.",
+  "In a choose-your-path story, start_story returns the opening; after each decision the player makes, call choose with the play id and their answer, and narrate what it returns. You never see what lies behind a choice, so don't guess or hint at it.",
+  "In a trivia game, you are the host: start_story returns the board; call game_question for the category and value a player picks and read the clue exactly; call game_answer with what they said; if they dispute a ruling, call game_challenge. You never have the answers, so never give or hint at one before game_answer rules.",
   "start_story returns a play id: pass it to check_accusation, reveal_solution and rate_story. If you no longer have it, call check_accusation without it. A two-chapter story arrives one chapter at a time: when chapter 1 ends, call start_story with chapter: 2 and the play id. To start a story the user named, call start_story directly; list_stories is for browsing.",
   "Call submit_story only when the writer has said they are ready to submit, and withdraw_submission only when they ask to withdraw. Ask the writer which name to credit.",
   "Writing: write_story returns a suggested step-by-step way to draft a story with the user, and the format template. review_story checks a draft (format rules, plus a fair-play checklist for you to go through). When the writer wants to share it, submit_story sends it, with the name they want credited, to a person who reviews every submission before it is published; withdraw_submission removes it again with the claim code from the receipt.",
@@ -57,24 +62,27 @@ const text = (t: string) => ({ content: [{ type: "text" as const, text: t }] });
 // Not-found and invalid results are marked as errors (review S16), with the actionable text kept.
 const fail = (t: string) => ({ content: [{ type: "text" as const, text: t }], isError: true });
 
-// Categories, the same four the catalog site shows (site.ts CATEGORIES): murder mysteries split by
-// metadata.tone (dark vs everything else), family mysteries (genre kids) and fantasy adventures.
+// Kinds (docs/PLAN-INTERACTIVE-2026-10-16.md section 2): what the player does, the top level of the
+// catalogue, the welcome menu and the site's shelves. Inside the mystery kind, the older categories
+// (classic, dark, family) still filter list_stories. kind and audience are read at build time.
+const KIND_ORDER = ["mystery", "adventure", "branching", "trivia", "game", "campaign"] as const;
+type KindId = (typeof KIND_ORDER)[number];
+const KIND_NAMES: Record<KindId, string> = { mystery: "Mysteries", adventure: "Adventures", branching: "Choose your path", trivia: "Trivia", game: "Games", campaign: "Campaigns" };
+const kindOfStory = (s: Story): KindId => ((KIND_ORDER as readonly string[]).includes(s.kind) ? s.kind as KindId : "mystery");
+const isFamilyStory = (s: Story) => s.audience === "family" || s.genre === "kids";
 type CategoryId = "mystery" | "dark" | "kids" | "adventure";
-const CATEGORY_NAMES: Record<CategoryId, string> = { mystery: "Murder mysteries", dark: "Dark murder mysteries", kids: "Family mysteries", adventure: "Fantasy adventures" };
-const CATEGORY_ORDER: CategoryId[] = ["mystery", "dark", "kids", "adventure"];
 // metadata.tone is read once, at build time (build.mjs) or when an approved submission is loaded.
 function categoryOf(s: Story): CategoryId | null {
-  if (s.genre === "murder-mystery") return s.tone === "dark" ? "dark" : "mystery";
-  if (s.genre === "kids") return "kids";
-  if (s.genre === "adventure") return "adventure";
+  if (kindOfStory(s) === "mystery") return isFamilyStory(s) ? "kids" : s.tone === "dark" ? "dark" : "mystery";
+  if (kindOfStory(s) === "adventure") return "adventure";
   return null;
 }
-const isMystery = (s: Story) => s.endings.length > 0 || s.genre === "murder-mystery" || s.genre === "kids";
+const isMystery = (s: Story) => s.endings.length > 0 || kindOfStory(s) === "mystery";
 // list_stories genre filter. "murder-mystery" keeps its old meaning (every murder mystery, dark ones
 // included); "classic" and "dark" split it. "kids" exists only outside ChatGPT (OpenAI's plugin rules).
 const LIST_GENRES = ["murder-mystery", "classic", "dark", "kids", "adventure"] as const;
 const LIST_GENRES_GPT = ["murder-mystery", "classic", "dark", "adventure"] as const;
-const WRITE_GENRES_GPT = ["murder-mystery", "dark", "adventure"] as const;
+const WRITE_GENRES_GPT = ["murder-mystery", "dark", "adventure", "branching", "trivia"] as const;
 function matchesGenre(s: Story, genre?: (typeof LIST_GENRES)[number]): boolean {
   if (!genre) return true;
   const c = categoryOf(s);
@@ -83,7 +91,7 @@ function matchesGenre(s: Story, genre?: (typeof LIST_GENRES)[number]): boolean {
   return c === genre;
 }
 const listLine = (s: Story) =>
-  `${s.title} (slug: ${s.slug}; ${s.genre}${categoryOf(s) === "dark" ? ", dark" : ""}; ${s.players} players; about ${s.duration_minutes} minutes)`;
+  `${s.title} (slug: ${s.slug}; ${KIND_NAMES[kindOfStory(s)].toLowerCase()}${categoryOf(s) === "dark" ? ", dark" : ""}${isFamilyStory(s) ? ", for families" : ""}; ${s.players} players; about ${s.duration_minutes} minutes)`;
 
 // open_plot_speaks: what the narrator can say when the user opens Plot Speaks without naming a story.
 const OPEN_QUESTION = "Would you like to hear what stories there are, start one, or write your own?";
@@ -99,12 +107,16 @@ const OPEN_HOW =
   "- Phrases: \"Plot Speaks, pause\" to stop, \"Plot Speaks, resume\" for a recap, \"Plot Speaks, shorter\" if the narrator rambles, \"Plot Speaks, wrap it up\" to finish early.\n" +
   "- No signal? The story keeps going from what the narrator already has; checks are retried when you're back in range.\n" +
   "- At the end you can leave feedback: stars, whether anything was given away, and anything you'd tell the makers.";
+// One line per kind that has anything in it; a mystery line says when some are dark or for families.
 function openMenu(all: Story[]): string {
-  return CATEGORY_ORDER.map((c) => {
-    const titles = all.filter((s) => categoryOf(s) === c).map((s) => s.title);
-    if (!titles.length) return null;
+  return KIND_ORDER.map((k) => {
+    // Family titles go last, so the examples read aloud are the general ones.
+    const inK = all.filter((s) => kindOfStory(s) === k).sort((a, b) => Number(isFamilyStory(a)) - Number(isFamilyStory(b)));
+    if (!inK.length) return null;
+    const titles = inK.map((s) => s.title);
     const more = titles.length > 3 ? `, and ${titles.length - 3} more` : "";
-    return `- ${CATEGORY_NAMES[c]}: ${titles.slice(0, 3).join(", ")}${more}`;
+    const notes = [inK.some((s) => categoryOf(s) === "dark") ? "some dark" : "", inK.some(isFamilyStory) ? "some for families" : ""].filter(Boolean);
+    return `- ${KIND_NAMES[k]}${notes.length ? ` (${notes.join(", ")})` : ""}: ${titles.slice(0, 3).join(", ")}${more}`;
   }).filter(Boolean).join("\n");
 }
 
@@ -112,8 +124,13 @@ function openMenu(all: Story[]): string {
 // build time (tools/worker-data/connector.mjs), so nothing here depends on rewriting it.
 const prefaceFor = (s: Story) =>
   "## Playing through the Plot Speaks connector\n" +
-  (isMystery(s)
+  (s.branches
+    ? "This is a choose-your-path story. The story itself stays on the Plot Speaks server and arrives one moment at a time: the opening is below, and after each choice the player makes, call choose with the play id and their answer to get what happens next. You don't know what lies behind any choice, so never guess or hint at it. \"Plot Speaks, resume\" is choose with no answer: it returns where they are.\n\n"
+    : isMystery(s)
     ? "The answer key stays on the Plot Speaks server, so you don't know the solution. When the player formally accuses someone, call check_accusation and give the verdict it returns. When they give up or ask for the full reveal, call reveal_solution.\n\n"
+    : kindOfStory(s) === "game" ? "The rules below are the whole game; you run it as written.\n\n"
+    : kindOfStory(s) === "campaign" ? "This is a campaign: you improvise from the world seed below, and Plot Speaks keeps the books. Roll every check, attack and save with roll and say the result as rolled. Record what happens with world_update the moment it happens, and obey what it refuses. In a later session the players give their resume code: call start_story with it as resume_code.\n\n"
+    : kindOfStory(s) === "trivia" ? "This is a trivia game: you host it, and Plot Speaks holds every clue and answer.\n\n"
     : "The hidden scenes stay on the Plot Speaks server. When the script calls for a cue, call get_cue and narrate its read-aloud part.\n\n") +
   "**What the player knows.** Only what they have heard in play. The cast table, the timeline and the scene notes below are what characters can say when asked and what places hold when searched, not facts the player already has. Never state, summarise or refer to any of it until the player asks the person or does the action that reveals it. If you mention something they haven't learned yet, don't explain it or add to it: say \"You haven't come across that yet. Who would you like to ask?\" and go on.\n\n" +
   "**No signal.** If a Plot Speaks call fails, say so in one sentence, keep narrating from this script, and try again when the player is ready; the play id still works. Never invent a verdict, a cue or a reveal.\n\n";
@@ -135,10 +152,14 @@ async function allStories(ctx: Ctx): Promise<Story[]> {
 }
 // OpenAI's plugin rules bar anything that targets children under 13, so the family stories are
 // not offered to ChatGPT (Ben, 2026-10-16, option B). They stay on the site and in other assistants.
-const visibleTo = (ctx: Ctx, all: Story[]) => (ctx.chatgpt ? all.filter((s) => s.genre !== "kids") : all);
+const visibleTo = (ctx: Ctx, all: Story[]) => (ctx.chatgpt ? all.filter((s) => !isFamilyStory(s)) : all);
 async function catalog(ctx: Ctx): Promise<Story[]> {
-  return visibleTo(ctx, await allStories(ctx));
+  return visibleTo(ctx, (await allStories(ctx)).filter((s) => !s.preview));
 }
+// A preview story matches only its exact slug or title (with or without a leading "the").
+const exactName = (s: string) => s.toLowerCase().replace(/[^a-z0-9 -]+/g, "").replace(/^the /, "").trim();
+const previewMatch = (all: Story[], asked: string) =>
+  all.find((s) => s.preview && (s.slug === asked.trim().toLowerCase() || exactName(s.title) === exactName(asked)));
 const titleList = (list: Story[]) => [...list].sort((a, b) => a.title.localeCompare(b.title)).map((x) => `${x.title} (${x.slug})`).join(", ");
 
 // Resolves a spoken title or slug to a story, failing closed (review B2/S2). For ChatGPT the match
@@ -147,8 +168,9 @@ const titleList = (list: Story[]) => [...list].sort((a, b) => a.title.localeComp
 async function resolveStory(ctx: Ctx, slug: string): Promise<{ s: Story; error?: undefined } | { s?: undefined; error: string }> {
   const all = await allStories(ctx);
   const visible = visibleTo(ctx, all);
-  const m = matchStory(slug, all) as { story: Story | null; candidates?: Story[] };
-  if (m.story && ctx.chatgpt && m.story.genre === "kids") {
+  const preview = previewMatch(all, slug);
+  const m = (preview ? { story: preview } : matchStory(slug, all.filter((s) => !s.preview))) as { story: Story | null; candidates?: Story[] };
+  if (m.story && ctx.chatgpt && isFamilyStory(m.story)) {
     return { error: `That story isn't available in ChatGPT. Stories you can play here include: ${titleList(visible)}.` };
   }
   if (m.story) return { s: m.story };
@@ -234,7 +256,7 @@ function createServer(ctx: Ctx) {
         instructions ? OPEN_HOW : null,
         `QUESTION (to ask next):\n${OPEN_QUESTION}`,
         `MENU (for when they want to hear the stories; one category at a time works best by voice):\n${openMenu(all)}`,
-        "NEXT STEPS: to play a story they pick, call start_story with its title. For the full list, call list_stories (it takes a category). To write their own, call write_story. If they ask for the instructions later, call open_plot_speaks with instructions: true.",
+        "NEXT STEPS: to play a story they pick, call start_story with its title. For the full list, call list_stories (it takes a kind). To write their own, call write_story. If they ask for the instructions later, call open_plot_speaks with instructions: true.",
       ].filter(Boolean).join("\n\n"));
     },
   );
@@ -244,25 +266,24 @@ function createServer(ctx: Ctx) {
     {
       title: "List stories",
       annotations: { ...READ_ONLY, title: "List stories" },
-      description: "Lists the Plot Speaks stories that can be played by voice, with length and number of players, optionally for one category: murder mysteries (classic or dark) or fantasy adventures.",
+      description: "Lists the Plot Speaks stories and games that can be played by voice, with length and number of players, optionally for one kind (mysteries, adventures, choose-your-path stories, trivia, games, campaigns) or, within mysteries, classic or dark.",
       // Optional inputs rather than none: one client called the input-less version before loading it.
       inputSchema: {
+        kind: z.enum(KIND_ORDER).optional().describe("Only list this kind: mystery, adventure, branching (choose your path), trivia, game or campaign"),
         genre: (gpt ? z.enum(LIST_GENRES_GPT) : z.enum(LIST_GENRES)).optional().describe(
-          "Only list this category: murder-mystery (all murder mysteries), classic (murder mysteries that aren't dark), dark (dark murder mysteries) or adventure"),
-        group_by_category: z.boolean().optional().describe("True to group the list under category headings"),
+          "Within mysteries and adventures: murder-mystery (all murder mysteries), classic (murder mysteries that aren't dark), dark (dark murder mysteries) or adventure"),
+        group_by_category: z.boolean().optional().describe("True to group the list under kind headings"),
       },
     },
-    async ({ genre, group_by_category }) => {
-      log("list_stories", { genre: genre ?? null, grouped: Boolean(group_by_category) });
-      const shown = (await catalog(ctx)).filter((s) => matchesGenre(s, genre));
-      if (!group_by_category) return text(shown.map(listLine).join("\n") || "No stories in that category yet.");
-      const groups = CATEGORY_ORDER.map((c) => {
-        const inC = shown.filter((s) => categoryOf(s) === c);
-        return inC.length ? `${CATEGORY_NAMES[c]}:\n${inC.map((s) => `- ${listLine(s)}`).join("\n")}` : null;
+    async ({ kind, genre, group_by_category }) => {
+      log("list_stories", { kind: kind ?? null, genre: genre ?? null, grouped: Boolean(group_by_category) });
+      const shown = (await catalog(ctx)).filter((s) => (!kind || kindOfStory(s) === kind) && matchesGenre(s, genre));
+      if (!group_by_category) return text(shown.map(listLine).join("\n") || "Nothing of that kind yet.");
+      const groups = KIND_ORDER.map((k) => {
+        const inK = shown.filter((s) => kindOfStory(s) === k);
+        return inK.length ? `${KIND_NAMES[k]}:\n${inK.map((s) => `- ${listLine(s)}`).join("\n")}` : null;
       }).filter(Boolean);
-      const other = shown.filter((s) => !categoryOf(s));
-      if (other.length) groups.push(`Other:\n${other.map((s) => `- ${listLine(s)}`).join("\n")}`);
-      return text(groups.join("\n\n") || "No stories in that category yet.");
+      return text(groups.join("\n\n") || "Nothing of that kind yet.");
     },
   );
 
@@ -278,13 +299,23 @@ function createServer(ctx: Ctx) {
         slug: SLUG.describe("The story's slug or title, e.g. example-dinner-party or The Last Toast"),
         chapter: z.number().int().min(1).max(9).optional().describe("For a two-chapter story: 2 to get chapter 2 (default 1)"),
         play_id: PLAY_ID.optional().describe("With chapter 2: the play id from chapter 1, to keep the same play"),
+        resume_code: z.string().max(80).optional().describe("For a campaign: the three-word code from an earlier session, to carry on where it left off"),
       },
     },
-    async ({ slug, chapter, play_id }) => {
+    async ({ slug, chapter, play_id, resume_code }) => {
       const r = await resolveStory(ctx, slug);
-      log("start_story", { found: r.s?.slug ?? null, chapter: chapter ?? 1 });
+      log("start_story", { found: r.s?.slug ?? null, chapter: chapter ?? 1, resume: Boolean(resume_code) });
       if (!r.s) return fail(r.error);
       const s = r.s;
+      // Carrying on a campaign: the same play, its world, and the script; no new play or code.
+      if (resume_code && kindOfStory(s) === "campaign") {
+        const c = await campaignPlay(s.slug, undefined, resume_code);
+        if ("error" in c) return fail(c.error);
+        return text(
+          `You are the narrator for "${s.title}", carrying on a campaign. Story slug: ${s.slug}. Play id: ${c.playId} (pass it to world_update, world_recall and rate_story). The resume code stays "${resume_code.trim().toLowerCase()}".\n\n` +
+          `${prefaceFor(s)}${(s.story_connector?.[0]) ?? s.story}\n\n## Where the campaign stands\n${recall(c.w)}\n\nGive the players a short spoken recap of the story so far, then ask what they do.`,
+        );
+      }
       const n = chapter ?? 1;
       const parts = s.story_connector?.length ? s.story_connector : [s.story];
       if (n > parts.length) return fail(`"${s.title}" has ${parts.length === 1 ? "one chapter" : `${parts.length} chapters`}; call start_story without chapter to play it.`);
@@ -301,10 +332,281 @@ function createServer(ctx: Ctx) {
         await record(ctx, "INSERT INTO plays (id, story, client, tester, started_at) VALUES (?, ?, ?, ?, ?)", playId, s.slug, ctx.client, ctx.tester ? 1 : 0, Date.now());
       }
       const more = n < parts.length ? `, and to start_story with chapter: ${n + 1} for the next chapter` : "";
+      // A choose-your-path story starts its state here and hands out the opening node only.
+      let opening = "";
+      if (kindOfStory(s) === "campaign") {
+        // A new campaign: an empty world and a spoken resume code for the next session.
+        const code = newCode();
+        const w = { ...newWorld(), code: undefined };
+        if (ctx.db) {
+          try { await ctx.db.batch([saveWorld(ctx.db, playId, w), ctx.db.prepare("INSERT INTO campaign_codes (code_hash, play_id, created_at) VALUES (?, ?, ?)").bind(await codeHash(code), playId, Date.now())]); }
+          catch (e) { log("db_error", { message: String(e).slice(0, 200) }); }
+        }
+        opening = `\n\n## This campaign\nRESUME CODE: "${code}". Tell the players now, and again at the end of every session: next time, in a new chat, they say "Continue my Plot Speaks campaign ${s.title}, code ${code}" and you call start_story with resume_code.\n\n${recall(w)}`;
+      } else if (s.trivia) {
+        const st = newTrivia();
+        if (ctx.db) {
+          try { await saveTrivia(ctx.db, playId, st).run(); } catch (e) { log("db_error", { message: String(e).slice(0, 200) }); }
+        }
+        opening = `\n\n## The board\n${renderBoard(s.trivia, st)}`;
+      } else if (s.picks?.length) {
+        // One hidden pick per play, for the mode where the narrator thinks of something.
+        const pick = s.picks[Math.floor(Math.random() * s.picks.length)];
+        opening = `\n\n## Your secret pick (only for the mode where you think of something and the players guess)\nYour pick is: ${pick}. Never say it, hint at it beyond the rules, or put it in writing until the round ends. If they play the other mode, ignore it.`;
+      }
+      if (s.branches) {
+        const st = initialState(s.branches);
+        if (ctx.db) {
+          try { await saveStateStatement(ctx.db, playId, st).run(); } catch (e) { log("db_error", { message: String(e).slice(0, 200) }); }
+        }
+        opening = `\n\n## The opening\n${renderNode(s.branches, st, { title: s.title })}`;
+      }
+      const passTo = kindOfStory(s) === "campaign" ? "world_update, world_recall and rate_story" : s.branches ? `choose and rate_story` : s.trivia ? "game_board, game_question, game_answer, game_challenge and rate_story" : kindOfStory(s) === "game" ? "rate_story" : `check_accusation, reveal_solution and rate_story${more}`;
       return text(
         `You are the narrator for "${s.title}". The user chose to play this through Plot Speaks; the script below is the game they asked for, and their own requests come first. ` +
-        `Story slug: ${s.slug}. Play id: ${playId} (pass it to check_accusation, reveal_solution and rate_story${more}).\n\n${prefaceFor(s)}${parts[n - 1]}`,
+        `Story slug: ${s.slug}. Play id: ${playId} (pass it to ${passTo}).\n\n${prefaceFor(s)}${parts[n - 1]}${opening}`,
       );
+    },
+  );
+
+  server.registerTool(
+    "choose",
+    {
+      title: "Make a choice",
+      // Not read-only: it moves the play on and records where it is.
+      annotations: { ...RECORDS, title: "Make a choice" },
+      description: "Moves a Plot Speaks choose-your-path story on by the player's choice and returns what happens next: the scene to narrate and the choices that follow, or the ending. With no choice it returns where the play is now and the path so far (for resuming).",
+      inputSchema: {
+        slug: SLUG.describe("The story slug"),
+        play_id: PLAY_ID.describe("The play id from start_story"),
+        choice: z.string().max(200).optional().describe("The player's answer: the choice's number, or their words for it"),
+      },
+    },
+    async ({ slug, play_id, choice }) => {
+      const r = await resolveStory(ctx, slug);
+      if (!r.s) { log("choose", { found: null }); return fail(r.error); }
+      const s = r.s;
+      if (!s.branches) return fail(`${s.title} isn't a choose-your-path story; play it from the script start_story gave you.`);
+      let st: BranchState | null = null;
+      let ownPlay = false;
+      try {
+        const play = ctx.db ? await ctx.db.prepare("SELECT story FROM plays WHERE id = ?").bind(play_id).first<{ story: string }>() : null;
+        ownPlay = play?.story === s.slug;
+        if (ownPlay) st = await loadState(ctx.db, play_id);
+      } catch (e) { log("db_error", { message: String(e).slice(0, 200) }); }
+      if (!ownPlay) { log("choose", { story: s.slug, outcome: "no_play" }); return fail(`I couldn't find that play of ${s.title}. Call start_story to begin it; it returns a play id.`); }
+      if (!st) st = initialState(s.branches);
+      if (!choice || !choice.trim()) {
+        log("choose", { story: s.slug, outcome: "resume", node: st.node });
+        return text(renderNode(s.branches, st, { resume: true, title: s.title }));
+      }
+      if (st.ended) return text(renderNode(s.branches, st, { title: s.title }));
+      const node = s.branches.nodes[st.node];
+      const open = node ? branchOffered(node, st.flags) : [];
+      const picked = matchChoice(open, choice);
+      if (!picked) {
+        log("choose", { story: s.slug, outcome: "unclear", node: st.node });
+        const shown = open.filter((c) => !c.answer);
+        const puzzle = open.some((c) => c.answer) ? " If it was a try at the puzzle, it isn't the answer: say so without hinting, and let them try again or pick a choice." : "";
+        return fail(`That didn't clearly match one of the choices.${puzzle} The choices are:\n${shown.map((c, i) => `${i + 1}. ${c.text}`).join("\n")}`);
+      }
+      const next = advance(s.branches, st, picked);
+      const ending = next.ended ? s.branches.nodes[next.node]?.ending?.name ?? "The end" : null;
+      log("choose", { story: s.slug, outcome: ending ? "ending" : "moved", node: next.node, steps: next.path.length });
+      const db = ctx.db;
+      if (db) {
+        if (ending) {
+          // An ending completes the play (Gate 2), like an accusation in a mystery.
+          await recordBatch(ctx, play_id, s.slug, (d) => [
+            saveStateStatement(d, play_id, next),
+            d.prepare(`INSERT INTO play_events (play_id, story, kind, detail, at) VALUES (${PLAY_OF}, ?, 'ending', ?, ?)`).bind(play_id, s.slug, s.slug, ending.slice(0, 80), Date.now()),
+          ]);
+        } else {
+          try { await saveStateStatement(db, play_id, next).run(); } catch (e) { log("db_error", { message: String(e).slice(0, 200) }); }
+        }
+      }
+      return text(renderNode(s.branches, next, { title: s.title }));
+    },
+  );
+
+  // ------------------------------------------------------------ trivia (kind: trivia)
+  // One helper runs every trivia step: find the story and its play, load the state, apply the step,
+  // save the state and log the event, all for this story's own play only.
+  const triviaStep = async (slug: string, play_id: string, tool: string, run: (b: NonNullable<Story["trivia"]>, st: ReturnType<typeof newTrivia>) => Step | Promise<Step>) => {
+    const r = await resolveStory(ctx, slug);
+    if (!r.s) { log(tool, { found: null }); return fail(r.error); }
+    const s = r.s;
+    if (!s.trivia) return fail(`${s.title} isn't a trivia game.`);
+    let st: ReturnType<typeof newTrivia> | null = null;
+    let ownPlay = false;
+    try {
+      const play = ctx.db ? await ctx.db.prepare("SELECT story FROM plays WHERE id = ?").bind(play_id).first<{ story: string }>() : null;
+      ownPlay = play?.story === s.slug;
+      if (ownPlay) st = await loadTrivia(ctx.db, play_id);
+    } catch (e) { log("db_error", { message: String(e).slice(0, 200) }); }
+    if (!ownPlay) return fail(`I couldn't find that game of ${s.title}. Call start_story to begin it; it returns a play id.`);
+    const out = await run(s.trivia, st ?? newTrivia());
+    log(tool, { story: s.slug, error: Boolean(out.error), event: out.event?.verdict ?? null });
+    if (out.error) return fail(out.text);
+    if (ctx.db) {
+      const over = out.state.asked.length >= s.trivia.categories.reduce((n, c) => n + c.clues.length, 0);
+      await recordBatch(ctx, over ? play_id : null, s.slug, (d) => [
+        saveTrivia(d, play_id, out.state),
+        ...(out.event ? [d.prepare(`INSERT INTO play_events (play_id, story, kind, detail, verdict, at) VALUES (${PLAY_OF}, ?, ?, ?, ?, ?)`).bind(play_id, s.slug, s.slug, out.event.kind, out.event.detail.slice(0, 120), out.event.verdict ?? null, Date.now())] : []),
+        ...(over ? [d.prepare(`INSERT INTO play_events (play_id, story, kind, detail, at) VALUES (${PLAY_OF}, ?, 'ending', 'board cleared', ?)`).bind(play_id, s.slug, s.slug, Date.now())] : []),
+      ]);
+    }
+    return text(out.text);
+  };
+
+  server.registerTool(
+    "game_board",
+    {
+      title: "Trivia board",
+      annotations: { ...READ_ONLY, title: "Trivia board" },
+      description: "Returns a Plot Speaks trivia game's scores and the categories and values still on the board.",
+      inputSchema: { slug: SLUG.describe("The game's slug"), play_id: PLAY_ID.describe("The play id from start_story") },
+    },
+    async ({ slug, play_id }) => triviaStep(slug, play_id, "game_board", (b, st) => ({ text: renderBoard(b, st), state: st })),
+  );
+  server.registerTool(
+    "game_question",
+    {
+      title: "Trivia clue",
+      annotations: { ...RECORDS, title: "Trivia clue" },
+      description: "Opens one clue on a Plot Speaks trivia board and returns its text (not the answer). Category \"final\" opens the final once the board is clear.",
+      inputSchema: {
+        slug: SLUG.describe("The game's slug"),
+        play_id: PLAY_ID.describe("The play id from start_story"),
+        category: z.string().min(1).max(80).describe("The category the player picked, or \"final\""),
+        value: z.number().int().min(1).max(10000).optional().describe("The value the player picked, e.g. 300"),
+      },
+    },
+    async ({ slug, play_id, category, value }) => triviaStep(slug, play_id, "game_question", (b, st) => askQuestion(b, st, category, value)),
+  );
+  server.registerTool(
+    "game_answer",
+    {
+      title: "Trivia answer",
+      annotations: { ...RECORDS, title: "Trivia answer" },
+      description: "Checks a player's answer to the open trivia clue, scores it and returns the ruling with the answer, or the next step of a stepped clue.",
+      inputSchema: {
+        slug: SLUG.describe("The game's slug"),
+        play_id: PLAY_ID.describe("The play id from start_story"),
+        answer: z.string().min(1).max(200).describe("What the player said, in their words"),
+        player: z.string().max(40).optional().describe("The answering player's name, for the scores"),
+      },
+    },
+    async ({ slug, play_id, answer, player }) => triviaStep(slug, play_id, "game_answer", (b, st) => answerQuestion(b, st, answer, player)),
+  );
+  server.registerTool(
+    "game_challenge",
+    {
+      title: "Challenge a ruling",
+      annotations: { ...RECORDS, title: "Challenge a ruling" },
+      description: "Challenges the last trivia ruling: three different AI models judge the player's answer against the clue, and the ruling flips only if at least two agree it should count. Once per clue.",
+      inputSchema: { slug: SLUG.describe("The game's slug"), play_id: PLAY_ID.describe("The play id from start_story") },
+    },
+    async ({ slug, play_id }) => triviaStep(slug, play_id, "game_challenge", (b, st) => challenge(ctx.env.AI as never, b, st)),
+  );
+
+  // ------------------------------------------------------------ campaigns (kind: campaign)
+  const campaignPlay = async (slug: string, play_id?: string, resume_code?: string): Promise<{ s: Story; playId: string; w: World } | { error: string }> => {
+    const r = await resolveStory(ctx, slug);
+    if (!r.s) return { error: r.error };
+    if (kindOfStory(r.s) !== "campaign") return { error: `${r.s.title} isn't a campaign.` };
+    const db = ctx.db;
+    if (!db) return { error: "Campaigns aren't available on this server right now." };
+    let id = play_id ?? "";
+    try {
+      if (!id && resume_code) id = (await db.prepare("SELECT play_id FROM campaign_codes WHERE code_hash = ?").bind(await codeHash(resume_code)).first<{ play_id: string }>())?.play_id ?? "";
+      const play = id ? await db.prepare("SELECT story FROM plays WHERE id = ?").bind(id).first<{ story: string }>() : null;
+      if (play?.story !== r.s.slug) return { error: resume_code ? `No ${r.s.title} campaign has the code "${resume_code.slice(0, 60)}". Ask the players to say it again, word by word.` : `I couldn't find that ${r.s.title} campaign. Ask for its resume code, or start a new one with start_story.` };
+      const w = await loadWorld(db, id);
+      if (!w) return { error: "That campaign's world couldn't be loaded." };
+      return { s: r.s, playId: id, w };
+    } catch (e) {
+      log("db_error", { message: String(e).slice(0, 200) });
+      return { error: "Campaigns aren't available right now; keep playing and record changes when Plot Speaks is back." };
+    }
+  };
+
+  server.registerTool(
+    "roll",
+    {
+      title: "Roll dice",
+      annotations: { ...READ_ONLY, idempotentHint: false, title: "Roll dice" },
+      description: "Rolls dice for a Plot Speaks campaign or adventure on the server: \"1d20+5\", \"2d6\", \"adv 1d20+3\" (advantage), \"dis 1d20\" (disadvantage), \"4d6 drop lowest\". Returns each die and the total.",
+      inputSchema: {
+        dice: z.string().min(2).max(40).describe("The roll, e.g. 1d20+5"),
+        why: z.string().max(80).optional().describe("What the roll is for, e.g. Mira's stealth check"),
+      },
+    },
+    async ({ dice, why }) => {
+      const r = rollDice(dice);
+      log("roll", { ok: !("error" in r) });
+      if ("error" in r) return fail(r.error);
+      return text(`${why ? `${String(why).slice(0, 80)}: ` : ""}${r.text} Say the result aloud as rolled; never change it.`);
+    },
+  );
+  server.registerTool(
+    "world_recall",
+    {
+      title: "Recall the campaign",
+      annotations: { ...READ_ONLY, title: "Recall the campaign" },
+      description: "Returns a Plot Speaks campaign's state (day, place, party with hit points, spell slots and gear, people met, quests, the story so far) by play id, or by the three-word resume code the players were given.",
+      inputSchema: {
+        slug: SLUG.describe("The campaign's slug"),
+        play_id: PLAY_ID.optional().describe("The play id, when you have it"),
+        resume_code: z.string().max(80).optional().describe("The three-word resume code the players say"),
+      },
+    },
+    async ({ slug, play_id, resume_code }) => {
+      const c = await campaignPlay(slug, play_id, resume_code);
+      log("world_recall", { found: !("error" in c), by_code: Boolean(resume_code) });
+      if ("error" in c) return fail(c.error);
+      return text(`Campaign play id: ${c.playId} (pass it to world_update).\n\n${recall(c.w)}\n\nGive the players a short spoken recap of the story so far, then ask what they do.`);
+    },
+  );
+  const partySchema = z.object({
+    name: z.string().min(1).max(40), class: z.string().max(30).optional(), level: z.number().int().min(1).max(5).optional(),
+    hp: z.number().int().min(0).max(500).optional(), max_hp: z.number().int().min(1).max(200).optional(),
+    damage: z.number().int().min(0).max(500).optional(), heal: z.number().int().min(0).max(500).optional(),
+    max_slots: z.record(z.string(), z.number().int().min(0).max(4)).optional(), spend_slot: z.string().regex(/^[1-5]$/).optional(),
+    conditions: z.array(z.string().max(30)).max(8).optional(), add_items: z.array(z.string().max(60)).max(10).optional(),
+    remove_items: z.array(z.string().max(60)).max(10).optional(), gold: z.number().int().min(-1000000).max(1000000).optional(), remove: z.boolean().optional(),
+  });
+  server.registerTool(
+    "world_update",
+    {
+      title: "Update the campaign",
+      annotations: { ...RECORDS, title: "Update the campaign" },
+      description: "Records what happened in a Plot Speaks campaign: new characters, damage and healing, spells cast, items gained or lost, gold, rests, where the party is, the day, people met (the dead stay dead), quests, and a one-line note for the story so far. Refuses changes the rules don't allow and says why.",
+      inputSchema: {
+        slug: SLUG.describe("The campaign's slug"),
+        play_id: PLAY_ID.describe("The campaign play id"),
+        party: z.array(partySchema).max(6).optional().describe("Changes to party members, by name (a new name adds a character)"),
+        location: z.string().max(120).optional().describe("Where the party is now"),
+        day: z.number().int().min(1).optional().describe("The campaign day, if it moved on"),
+        rest: z.enum(["short", "long"]).optional().describe("A short or long rest"),
+        npcs: z.array(z.object({ name: z.string().min(1).max(50), status: z.string().max(30).optional(), note: z.string().max(160).optional() })).max(10).optional().describe("People met or changed (status e.g. friendly, hostile, dead)"),
+        quests: z.array(z.object({ name: z.string().min(1).max(60), status: z.enum(["open", "done", "failed"]).optional(), note: z.string().max(160).optional() })).max(10).optional(),
+        note: z.string().max(240).optional().describe("One line for the story so far"),
+      },
+    },
+    async ({ slug, play_id, ...changes }) => {
+      const c = await campaignPlay(slug, play_id);
+      if ("error" in c) { log("world_update", { found: false }); return fail(c.error); }
+      const { world, refused, done } = applyChanges(c.w, changes as WorldChanges);
+      log("world_update", { story: c.s.slug, refused: refused.length, done: done.length });
+      if (ctx.db) {
+        try { await saveWorld(ctx.db, c.playId, world).run(); } catch (e) { log("db_error", { message: String(e).slice(0, 200) }); return fail("The change couldn't be saved; try again in a moment."); }
+      }
+      return text([
+        done.length ? `RECORDED:\n${done.map((d) => `- ${d}`).join("\n")}` : "Nothing changed.",
+        refused.length ? `REFUSED (the rules don't allow it; narrate it differently):\n${refused.map((d) => `- ${d}`).join("\n")}` : "",
+        recall(world),
+      ].filter(Boolean).join("\n\n"));
     },
   );
 
@@ -461,7 +763,7 @@ function createServer(ctx: Ctx) {
       annotations: { ...READ_ONLY, title: "Write a story" },
       description: "Returns material for writing a Plot Speaks story: a short introduction to how a story is built (a public story.md and a private answer key, secrets.md, reviewed by a person before anything is published), a suggested way to draft and review it together, and the format template.",
       inputSchema: {
-        genre: (gpt ? z.enum(WRITE_GENRES_GPT) : z.enum(WRITE_GENRES)).optional().describe("murder-mystery (default), dark (a dark murder mystery) or adventure"),
+        genre: (gpt ? z.enum(WRITE_GENRES_GPT) : z.enum(WRITE_GENRES)).optional().describe("murder-mystery (default), dark (a dark murder mystery), adventure, branching (a choose-your-path story) or trivia (a trivia board)"),
         length: z.enum(LENGTHS).optional().describe("20 or 30 (minutes, one chapter; default 30), or 2-chapter"),
       },
     },
@@ -613,7 +915,7 @@ async function handlePassengerApi(request: Request, env: Env): Promise<Response 
   if (!m) return url.pathname.startsWith("/api/") ? apiJson({ error: "not_found" }, 404) : null;
   if (request.method !== "GET" && request.method !== "HEAD") return apiJson({ error: "method_not_allowed" }, 405);
   const [, slug, what, cueId] = m;
-  const s = STORIES.find((x) => x.slug === slug) ?? (await loadApprovedStories(env.DB)).find((x) => x.slug === slug && !BUILTINS.slugs.has(x.slug));
+  const s = STORIES.find((x) => x.slug === slug && !x.preview) ?? (await loadApprovedStories(env.DB)).find((x) => x.slug === slug && !BUILTINS.slugs.has(x.slug));
   if (!s) return apiJson({ error: "unknown_story" }, 404);
   const db = request.method === "GET" ? env.DB : undefined;
   const recordEvent = async (sql: string, ...args: unknown[]) => {

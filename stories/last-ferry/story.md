@@ -6,6 +6,7 @@ metadata:
   title: The Last Ferry
   pitch: "On the last car ferry of a foggy November night, a quiet passenger is found dead in the lounge halfway across the estuary. The captain will not turn back, so you question everyone aboard before the boat docks and the police meet it."
   genre: murder-mystery
+  kind: mystery
   duration_minutes: 30
   chapters: 1
   players: 1-4
