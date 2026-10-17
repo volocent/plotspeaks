@@ -71,7 +71,7 @@ if (openServer) {
 }
 
 // ---------------------------------------------------------------- the tool surface (review S7, S8, B2)
-const EXPECTED_TOOLS = ['open_plot_speaks', 'list_stories', 'my_history', 'start_story', 'choose', 'game_board', 'game_question', 'game_answer', 'game_challenge', 'roll', 'world_recall', 'world_update', 'check_accusation', 'reveal_solution', 'get_cue', 'rate_story', 'write_story', 'review_story', 'submit_story', 'withdraw_submission'];
+const EXPECTED_TOOLS = ['open_plot_speaks', 'list_stories', 'claim_plays', 'my_history', 'start_story', 'choose', 'game_board', 'game_question', 'game_answer', 'game_challenge', 'roll', 'world_recall', 'world_update', 'check_accusation', 'reveal_solution', 'get_cue', 'rate_story', 'write_story', 'review_story', 'submit_story', 'withdraw_submission'];
 const toolList = (await rpc('tools/list', {})).json?.result?.tools ?? [];
 const tools = toolList.map((t) => t.name);
 ok(EXPECTED_TOOLS.every((t) => tools.includes(t)) && tools.length === EXPECTED_TOOLS.length, `tools: ${tools.join(', ')}`);
@@ -406,6 +406,10 @@ if (testingStories.length) {
   const gamesTab = await get('/games');
   ok(/Being tested/.test(gamesTab.body) && /testing-note/.test(gamesTab.body), 'the Games tab marks pieces being tested and asks for feedback');
 }
+// Memory tools on the open connector (no account): they say how to get one, and claim nothing.
+ok(/isn't signed in/.test(await call('my_history', {})), 'my_history without an account explains how to get one');
+const claimOpen = await result('claim_plays', { play_ids: [playId] });
+ok(isErr(claimOpen) && /isn't signed in/.test(claimOpen?.content?.[0]?.text ?? ''), 'claim_plays without an account claims nothing');
 // Accounts: optional; the open connector's host serves no OAuth metadata, the account host does.
 const acctPage = await get('/account');
 ok(acctPage.status === 200 && /Sign in|Accounts are coming|Hi/.test(acctPage.body), `GET /account answers (${acctPage.status})`);

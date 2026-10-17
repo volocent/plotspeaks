@@ -13,7 +13,7 @@
   "vars": { "ENVIRONMENT": "dev", "ACCOUNT_HOST": "account-dev.plotspeaks.com" },
   // Optional accounts: OAuth grants for the account connector (src/account.ts).
   "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "ed1b61a6ca714580932f38f7f1c87e81" }],
-  "routes": [{ "pattern": "account-dev.plotspeaks.com", "custom_domain": true }],
+  "routes": [{ "pattern": "account-dev.plotspeaks.com", "custom_domain": true }, { "pattern": "dev.plotspeaks.com", "custom_domain": true }],
   "d1_databases": [
     { "binding": "DB", "database_name": "plotspeaks-dev", "database_id": "3c93a1ce-a864-405f-be55-01bd5ad3d565", "migrations_dir": "migrations" }
   ],
@@ -34,7 +34,7 @@
       "vars": { "ENVIRONMENT": "dev", "ACCOUNT_HOST": "account-dev.plotspeaks.com" },
       "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "ed1b61a6ca714580932f38f7f1c87e81" }],
       // The account connector on dev, on its own host so dev mirrors prod.
-      "routes": [{ "pattern": "account-dev.plotspeaks.com", "custom_domain": true }],
+      "routes": [{ "pattern": "account-dev.plotspeaks.com", "custom_domain": true }, { "pattern": "dev.plotspeaks.com", "custom_domain": true }],
       "ai": { "binding": "AI" },
       "assets": { "directory": "public", "binding": "ASSETS", "run_worker_first": ["/audio/*"] },
       "triggers": { "crons": ["23 3 * * *"] },

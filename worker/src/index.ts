@@ -27,7 +27,7 @@ import { newTrivia, dealtBoard, clueId, renderBoard, askQuestion, answerQuestion
 import { newWorld, applyChanges, recall, roll as rollDice, newCode, codeHash, loadWorld, saveWorld, type World, type WorldChanges } from "./world";
 import OAuthProvider from "@cloudflare/workers-oauth-provider";
 import { accountSite, type AccountEnv } from "./account";
-import { currentUser, startSignIn, finishSignIn, signOut, deleteAccount, signInConfigured, noteStart, noteOutcome, historyOf, playedSlugs, type AuthEnv } from "./auth";
+import { currentUser, startSignIn, finishSignIn, signOut, deleteAccount, signInConfigured, noteStart, noteOutcome, historyOf, playedSlugs, claimPlays, type AuthEnv } from "./auth";
 
 type Story = PlayStory;
 const STORIES = stories as unknown as Story[]; // generated JSON: its inferred type is a union per story
@@ -55,6 +55,7 @@ const INSTRUCTIONS = [
   "After a correct accusation, or when the player asks for the full reveal or gives up, call reveal_solution with the play id (add gave_up: true when they gave up without accusing anyone). Read its READ ALOUD part; read its WHAT BECAME OF THEM part only if the player wants to hear what became of everyone.",
   "When the script calls for a cue, call get_cue with that cue id and narrate only its read-aloud part. Each cue also has narrator notes, to help run the scene; when they say to call a follow-up cue (for example S3b) after something happens, call get_cue for it yourself at that moment.",
   "In a choose-your-path story, start_story returns the opening; after each decision the player makes, call choose with the play id and their answer, and narrate what it returns. You never see what lies behind a choice, so don't guess or hint at it.",
+  "If the player has just switched to the Plot Speaks connector with an account and this conversation has play ids from before, offer once to add those plays to their account, and if they agree call claim_plays with the ids. A campaign started without an account moves onto it when they resume it with its code.",
   "In a trivia game, you are the host: start_story returns the board; call game_question for the category and value a player picks and read the clue exactly; call game_answer with what they said; if they dispute a ruling, call game_challenge. You never have the answers, so never give or hint at one before game_answer rules.",
   "start_story returns a play id: pass it to check_accusation, reveal_solution and rate_story. If you no longer have it, call check_accusation without it. A two-chapter story arrives one chapter at a time: when chapter 1 ends, call start_story with chapter: 2 and the play id. To start a story the user named, call start_story directly; list_stories is for browsing.",
   "Call submit_story only when the writer has said they are ready to submit, and withdraw_submission only when they ask to withdraw. Ask the writer which name to credit.",
@@ -315,6 +316,37 @@ function createServer(ctx: Ctx) {
         return inK.length ? `${KIND_NAMES[k]}:\n${inK.map((s) => `- ${listLine(s)}`).join("\n")}` : null;
       }).filter(Boolean);
       return text((groups.join("\n\n") || "Nothing of that kind yet.") + note);
+    },
+  );
+
+  server.registerTool(
+    "claim_plays",
+    {
+      title: "Add earlier plays to my account",
+      annotations: { ...RECORDS, title: "Add earlier plays to my account" },
+      description: "For a player who has just signed in: adds plays they made earlier without an account (the play ids from this conversation) to their Plot Speaks history, with how each ended, and marks trivia questions they heard. Plays already on another account are left alone.",
+      inputSchema: { play_ids: z.array(PLAY_ID).min(1).max(50).describe("Play ids from earlier in this conversation (start_story returned them)") },
+    },
+    async ({ play_ids }) => {
+      if (!ctx.userId) return fail(`This player isn't signed in. To keep these plays, they add the connector with an account (${ACCOUNT_NOTE}), sign in, and ask again in this same conversation.`);
+      const all = await allStories(ctx);
+      const bySlug = new Map(all.map((s) => [s.slug, s]));
+      const r = await claimPlays(ctx.db, ctx.userId, play_ids, (slug) => { const s = bySlug.get(slug); return s ? { title: s.title, kind: kindOfStory(s) } : null; });
+      // Trivia: the clues already played in those games count as heard.
+      for (const id of play_ids) {
+        try {
+          const play = ctx.db ? await ctx.db.prepare("SELECT story FROM plays WHERE id = ? AND user_id = ?").bind(id, ctx.userId).first<{ story: string }>() : null;
+          const s = play ? bySlug.get(play.story) : undefined;
+          if (!s?.trivia) continue;
+          const st = await loadTrivia(ctx.db, id);
+          if (st?.asked.length) await rememberClues(ctx, s.slug, dealtBoard(s.trivia, st), st.asked);
+        } catch { /* best effort */ }
+      }
+      log("claim_plays", { asked: play_ids.length, claimed: r.claimed.length, skipped: r.skipped });
+      const titles = [...new Set(r.claimed.map((slug) => bySlug.get(slug)?.title ?? slug))];
+      return text(r.claimed.length
+        ? `Added to their account: ${titles.join(", ")}.${r.skipped ? ` ${r.skipped} couldn't be added (not found, or already on another account).` : ""} Their history and "not played yet" now include them.`
+        : "None of those plays could be added (not found, or already on another account).");
     },
   );
 
@@ -585,6 +617,9 @@ function createServer(ctx: Ctx) {
       if (play?.story !== r.s.slug) return { error: resume_code ? `No ${r.s.title} campaign has the code "${resume_code.slice(0, 60)}". Ask the players to say it again, word by word.` : `I couldn't find that ${r.s.title} campaign. Ask for its resume code, or start a new one with start_story.` };
       const w = await loadWorld(db, id);
       if (!w) return { error: "That campaign's world couldn't be loaded." };
+      // A campaign started without an account and resumed with its code by a signed-in player moves
+      // onto their account, so next time it resumes with no code at all.
+      if (resume_code && ctx.userId) await claimPlays(db, ctx.userId, [id], () => ({ title: r.s!.title, kind: "campaign" }));
       return { s: r.s, playId: id, w };
     } catch (e) {
       log("db_error", { message: String(e).slice(0, 200) });
@@ -1086,11 +1121,9 @@ async function withAccountLink(request: Request, env: Env, res: Response): Promi
   const link = signInConfigured(env) ? `<a class="acct" href="/account">${label}</a>` : "";
   const headers = new Headers(res.headers);
   if (user) headers.set("cache-control", "private, no-store");
-  // The Connect page offers the account connector only once sign-in is switched on.
-  const accountUrl = env.ACCOUNT_HOST ? `https://${env.ACCOUNT_HOST}/mcp` : "";
-  const connectNote = signInConfigured(env) && accountUrl
-    ? `<div class="note">${"<strong>Want it to remember what you've played?</strong>"} Use the connector with an account instead: <a class="btn btn-ghost btn-sm" href="https://claude.ai/customize/connectors?modal=add-custom-connector&amp;connectorName=${encodeURIComponent("Plot Speaks")}&amp;connectorUrl=${encodeURIComponent(accountUrl)}" rel="noopener">Connect with my account</a> or add <code>${esc(accountUrl)}</code>. Claude asks you to sign in with Google once. Then you can ask for "a mystery I haven't played", trivia skips questions you've heard, and campaigns pick up without a code. <a href="/account">More about accounts</a></div>`
-    : "";
+  // The Connect page's account note: the Claude button itself now adds the account connector, so a
+  // short pointer to what signing in keeps is enough.
+  const connectNote = signInConfigured(env) ? `<p class="muted">Signing in keeps your saved progress: what you've played, trivia you've heard, and your campaigns. <a href="/account">About accounts</a></p>` : "";
   return new Response(body.replace("<!--ACCOUNT-->", link).replace("<!--ACCOUNT-CONNECT-->", connectNote), { status: res.status, headers });
 }
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");

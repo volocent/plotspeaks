@@ -144,6 +144,39 @@ export async function noteOutcome(db: D1Database | undefined, userId: string | n
   if (!db || !userId || !playId) return;
   try { await db.prepare("UPDATE user_history SET outcome = ?, finished_at = ? WHERE user_id = ? AND play_id = ?").bind(outcome.slice(0, 80), Date.now(), userId, playId).run(); } catch { /* as above */ }
 }
+/**
+ * Moves anonymous plays onto a signed-in person's account (Ben, 2026-10-17): the plays from the chat
+ * they were in before signing in, or a campaign resumed with its code. A play already on someone's
+ * account is left alone. Rebuilds each play's outcome from its events, and marks a trivia game's
+ * played clues as heard. Returns what was claimed.
+ */
+export async function claimPlays(db: D1Database | undefined, userId: string, playIds: string[], titleOf: (slug: string) => { title: string; kind: string } | null): Promise<{ claimed: string[]; skipped: number }> {
+  if (!db) return { claimed: [], skipped: playIds.length };
+  const claimed: string[] = [];
+  let skipped = 0;
+  for (const id of [...new Set(playIds)].slice(0, 50)) {
+    try {
+      const play = await db.prepare("SELECT id, story, started_at, user_id FROM plays WHERE id = ?").bind(id).first<{ id: string; story: string; started_at: number; user_id: string | null }>();
+      if (!play || (play.user_id && play.user_id !== userId)) { skipped++; continue; }
+      const t = titleOf(play.story);
+      if (!t) { skipped++; continue; }
+      const ev = await db.prepare("SELECT kind, detail, verdict FROM play_events WHERE play_id = ? ORDER BY at DESC").bind(id).all<{ kind: string; detail: string | null; verdict: string | null }>();
+      const events = ev.results ?? [];
+      const solved = events.find((e) => e.kind === "accusation" && e.verdict === "correct");
+      const ending = events.find((e) => e.kind === "ending");
+      const reveal = events.find((e) => e.kind === "reveal");
+      const accused = events.find((e) => e.kind === "accusation");
+      const outcome = solved ? `solved (${solved.detail})` : ending ? `ending: ${ending.detail}` : reveal?.detail === "gave_up" ? "gave up" : accused ? `accused ${accused.detail}` : null;
+      await db.batch([
+        db.prepare("UPDATE plays SET user_id = ? WHERE id = ? AND (user_id IS NULL OR user_id = ?)").bind(userId, id, userId),
+        db.prepare("INSERT OR IGNORE INTO user_history (user_id, play_id, story, title, kind, started_at, outcome) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(userId, id, play.story, t.title.slice(0, 120), t.kind, play.started_at, outcome),
+      ]);
+      claimed.push(play.story);
+    } catch { skipped++; }
+  }
+  return { claimed, skipped };
+}
+
 export async function historyOf(db: D1Database | undefined, userId: string, limit = 50): Promise<HistoryRow[]> {
   if (!db) return [];
   try {

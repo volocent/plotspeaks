@@ -105,14 +105,14 @@ type Assistant = {
 type Other = { id: string; name: string; status: string; line: string; how?: string; popup: boolean };
 const OTHERS: Other[] = [
   { id: "lechat", name: "Vibe (formerly Le Chat)", status: "Free plan works", popup: true,
-    line: "Free plan works, and it needs no sign-in. We haven't tested voice play yet.",
-    how: "In Vibe on the web (chat.mistral.ai), open <strong>Connectors → + Add Connector → Custom MCP Connector</strong>. Name it <strong>PlotSpeaks</strong> (no spaces), paste <code>{url}</code> and tap <strong>Connect</strong>." },
+    line: "Free plan works. We haven't tested voice play yet.",
+    how: "In Vibe on the web (chat.mistral.ai), open <strong>Connectors → + Add Connector → Custom MCP Connector</strong>. Name it <strong>PlotSpeaks</strong> (no spaces), paste <code>{plainurl}</code> and tap <strong>Connect</strong>." },
   { id: "perplexity", name: "Perplexity", status: "Paid plans · untested", popup: true,
     line: "Paid plans can add it by its address. We haven't played a story through it yet.",
-    how: "<strong>Plugins → Add custom → Connector → Add MCP connector → Remote</strong>. Name it Plot Speaks, paste <code>{url}</code>, leave authentication as <strong>None</strong>, tick the box and tap <strong>Add</strong>." },
+    how: "<strong>Plugins → Add custom → Connector → Add MCP connector → Remote</strong>. Name it Plot Speaks, paste <code>{plainurl}</code>, leave authentication as <strong>None</strong>, tick the box and tap <strong>Add</strong>." },
   { id: "grok", name: "Grok", status: "Untested", popup: true,
     line: "It can add a custom connector by address, but which plans and devices support it isn't documented. Untested.",
-    how: "Go to <strong>grok.com/connectors → New Connector → Custom</strong> and paste <code>{url}</code>." },
+    how: "Go to <strong>grok.com/connectors → New Connector → Custom</strong> and paste <code>{plainurl}</code>." },
   // Meta AI: the Meta AI app and meta.ai don't support connectors (directories-and-logos-2026.md §2.4, 2026-10-16).
   { id: "metaai", name: "Meta AI", status: "No connectors yet", popup: true,
     line: "Meta AI can't add connectors yet. Pasting a story may work, but we haven't tested it." },
@@ -134,8 +134,8 @@ const CONNECT: { headline: string; short: string; assistants: Assistant[] } = {
       plan: "Works on every Claude plan, including Free. Free accounts can add one custom connector, and Plot Speaks will use it. On a Team or Enterprise account, your admin adds it first.",
       button: { href: "{claude}", label: "Connect to Claude" },
       steps: [
-        "Tap <strong>Connect to Claude</strong>. It opens claude.ai in your browser. Sign in if asked.",
-        "Check the name says <strong>Plot Speaks</strong>, choose <strong>No sign-in</strong> if asked, and tap <strong>Add</strong>.",
+        "Tap <strong>Connect to Claude</strong>. It opens claude.ai in your browser. Sign in to Claude if asked.",
+        "Check the name says <strong>Plot Speaks</strong> and tap <strong>Add</strong>. A Plot Speaks window opens: <strong>sign in with Google</strong> and tap <strong>Allow</strong>. That's what keeps your saved progress in stories and games.",
         "Open the Claude app, start a new chat, tap <strong>+ → Connectors</strong> and make sure Plot Speaks is on.",
         "Tap the voice button and say <strong>“Open Plot Speaks.”</strong> for a quick intro and a choice of stories, or name one: <strong>“Start {story} with Plot Speaks.”</strong> Allow Plot Speaks when Claude asks, or choose <em>Always allow</em> so it doesn't ask mid-drive.",
       ],
@@ -146,10 +146,12 @@ const CONNECT: { headline: string; short: string; assistants: Assistant[] } = {
         "Voice works: in our test, Claude's voice mode loaded the story and checked an accusation through the connector.",
         "Say “Open Plot Speaks” or the story's name. A vague “play something” can send Claude on a detour.",
         "Doing it by hand: <strong>Customize → Connectors → + Add → Add custom connector</strong>, name it Plot Speaks and paste <code>{url}</code>.",
+        "Rather not sign in? <a href=\"{claudeplain}\" rel=\"noopener\">Connect without an account</a> (or paste <code>{plainurl}</code>). Every story and game still plays, but nothing is saved between chats.",
       ],
       pop: {
-        lead: "One tap, no sign-in. Check the name says <strong>Plot Speaks</strong>, choose <strong class='nw'>No sign-in</strong> if asked, and tap <strong>Add</strong>.",
+        lead: "One tap. Check the name says <strong>Plot Speaks</strong>, tap <strong>Add</strong>, then <strong>sign in with Google</strong> and tap <strong>Allow</strong>. Signing in keeps your saved progress in stories and games.",
         notes: [
+          "Rather not sign in? <a href=\"{claudeplain}\" rel=\"noopener\">Connect without an account</a>. Everything plays, but nothing is saved between chats.",
           "<strong>On a phone</strong>, open the link in your browser. Once it's added, Plot Speaks appears in the Claude app and works in voice mode.",
           "In a new chat, tap <strong>+ → Connectors</strong> and make sure Plot Speaks is on.",
           "<strong>Free plan:</strong> one custom connector is included, and Plot Speaks can be it. On Team or Enterprise, your admin adds it first.",
@@ -168,7 +170,7 @@ const CONNECT: { headline: string; short: string; assistants: Assistant[] } = {
       say: "Plot Speaks, start the story.",
       notes: [
         "Without the connector, the answer key isn't in the chat. A passenger can hold it: every story page links a <strong>passenger page</strong> that shows the line to read aloud when the narrator asks.",
-        "On a Business, Enterprise or Edu plan, add it on the web: <strong>Plugins → + → Add custom MCP server</strong>, paste <code>{url}</code> and choose no authentication.",
+        "On a Business, Enterprise or Edu plan, add it on the web: <strong>Plugins → + → Add custom MCP server</strong>, paste <code>{plainurl}</code> and choose no authentication.",
         "A ChatGPT app listing is planned, so Free and Plus can connect too. Until then, paste.",
       ],
       pop: {
@@ -192,7 +194,7 @@ const CONNECT: { headline: string; short: string; assistants: Assistant[] } = {
       plan: "Gemini can add custom apps for people in the US who are 18 or older, on a personal Google account with Keep Activity turned on. Not on work or school accounts.",
       steps: [
         "In your phone's browser, go to <strong>gemini.google.com → Menu → Settings → Connected Apps</strong> (it may sit under Personal Intelligence).",
-        "Choose <strong>Add a custom app</strong>, paste <code>{url}</code>, tap <strong>Next</strong> and follow the prompts.",
+        "Choose <strong>Add a custom app</strong>, paste <code>{plainurl}</code>, tap <strong>Next</strong> and follow the prompts.",
         "It then works in the Gemini app too. Type <strong>@Plot Speaks open</strong> for the intro, or <strong>@Plot Speaks</strong> and the story's name.",
       ],
       open: "@Plot Speaks open.",
@@ -221,8 +223,20 @@ const CONNECT: { headline: string; short: string; assistants: Assistant[] } = {
     },
   ],
 };
+// The connector with an account (Ben, 2026-10-17: signing in is the preferred way, so progress is
+// saved). It lives on its own host: account.plotspeaks.com on prod, account-dev on dev.
+export function accountUrlFor(mcpUrl: string): string {
+  try {
+    const u = new URL(mcpUrl);
+    if (u.hostname === "plotspeaks.com" || u.hostname === "www.plotspeaks.com") u.hostname = "account.plotspeaks.com";
+    else if (u.hostname === "dev.plotspeaks.com" || u.hostname.endsWith(".workers.dev")) u.hostname = "account-dev.plotspeaks.com";
+    return u.toString();
+  } catch { return mcpUrl; }
+}
+// {url}/{claude}: the account connector (preferred). {plainurl}/{claudeplain}: the one without an account.
 const fill = (s: string, url: string, story: string, extra: Record<string, string> = {}) =>
-  s.replace(/\{url\}/g, esc(url)).replace(/\{claude\}/g, esc(claudeLink(url))).replace(/\{story\}/g, esc(story))
+  s.replace(/\{url\}/g, esc(accountUrlFor(url))).replace(/\{claude\}/g, esc(claudeLink(accountUrlFor(url))))
+    .replace(/\{plainurl\}/g, esc(url)).replace(/\{claudeplain\}/g, esc(claudeLink(url))).replace(/\{story\}/g, esc(story))
     .replace(/\{(pick|passenger)\}/g, (all, k) => extra[k] ?? all);
 
 // ============================================================================ CATEGORIES
@@ -394,7 +408,7 @@ function connectPanel(opts: { id: string; heading?: string }): string {
 ${byoaBadge()}
 ${opts.heading ? `<h2 class="byoa-h" id="${opts.id}-h">${esc(opts.heading)}</h2>` : `<h2 class="byoa-h byoa-h-sm" id="${opts.id}-h">Connect your assistant once.</h2>`}
 ${aiButtons()}
-<p class="byoa-line">Then just say <strong>“${esc(OPEN_LINE)}”</strong> No new app, no account with us, no subscription. Plot Speaks brings the story and keeps the answer key.</p>
+<p class="byoa-line">Then just say <strong>“${esc(OPEN_LINE)}”</strong> No new app, no subscription. Sign in with Google when you connect, and Plot Speaks keeps your saved progress in stories and games.</p>
 </section>`;
 }
 
@@ -419,10 +433,10 @@ function connectDialogs(ctx: DialogCtx): string {
   const notes = (items: string[]) => items.length ? `<ul class="dlg-notes">${items.map((n) => `<li>${f(n)}</li>`).join("")}</ul>` : "";
   return CONNECT.assistants.map((a) => {
     const id = `dlg-${a.id}`;
-    const copy = copyField(url, `${id}-url`, false);
+    const copy = copyField(a.id === "claude" ? accountUrlFor(url) : url, `${id}-url`, false);
     let inner = `<p class="dlg-lead">${f(a.pop.lead)}</p>`;
     if (a.id === "claude") {
-      inner += `<p class="dlg-cta"><a class="btn btn-primary btn-big" href="${esc(claudeLink(url))}" rel="noopener" data-connected="claude">${icon("plug", 20)}Connect to Claude</a></p>
+      inner += `<p class="dlg-cta"><a class="btn btn-primary btn-big" href="${esc(claudeLink(accountUrlFor(url)))}" rel="noopener" data-connected="claude">${icon("plug", 20)}Connect to Claude</a></p>
 <p class="dlg-or">or copy the address</p>${copy}${notes(a.pop.notes)}`;
     } else if (a.id === "chatgpt") {
       inner += `<h3 class="dlg-h">${esc(a.pop.stepsHead ?? "")}</h3>${list(a.pop.steps ?? [])}`;
@@ -1721,7 +1735,7 @@ ${panels}
 </div>`;
   return page({
     title: "Connect Plot Speaks to your assistant",
-    description: "Add the Plot Speaks connector once, with no sign-in, then say \"Open Plot Speaks\" or name a story. Steps for Claude, ChatGPT, Gemini and more.",
+    description: "Add the Plot Speaks connector once and sign in with Google to keep your progress, then say \"Open Plot Speaks\" or name a story. Steps for Claude, ChatGPT, Gemini and more.",
     body, origin, path: "/connect", script: TABS_JS,
   });
 }
@@ -1733,7 +1747,7 @@ function aboutSections(example: string): string {
 <div class="wrap">
 <div class="section-head"><p class="eyebrow">${icon("book", 18)} How it works</p><h2 id="how-h">Three steps, then just talk.</h2></div>
 <ol class="steps3">
-<li><h3>Connect once</h3><p>Tap Connect on your assistant and follow the short steps. No sign-in, and Claude's Free plan has room for it. Do it once, parked.</p></li>
+<li><h3>Connect once</h3><p>Tap Connect on your assistant, follow the short steps, and sign in with Google so your progress is saved. Claude's Free plan has room for it. Do it once, parked.</p></li>
 <li><h3>Open Plot Speaks</h3><p>Say “Open Plot Speaks” for a quick intro, then browse, start or write a story. Or name one: “Start ${esc(example)} with Plot Speaks.”</p></li>
 <li><h3>Play by talking</h3><p>Question suspects, search rooms, roll for initiative. Turns are short, and each one ends with a question for you.</p></li>
 </ol>
@@ -1746,7 +1760,7 @@ function aboutSections(example: string): string {
 <p class="lead">Plot Speaks isn't another app. It's a library of stories that Claude, ChatGPT, Gemini and others can play with you. Your assistant is the narrator; Plot Speaks brings the story and keeps the answer key.</p></div>
 <div class="byo-grid">
 <div class="pill-card"><span class="ic-wrap">${icon("app")}</span><div><h3>No new app</h3><p>Play in the assistant app already on your phone, in the car.</p></div></div>
-<div class="pill-card"><span class="ic-wrap">${icon("user")}</span><div><h3>No account with us</h3><p>No sign-up, no email, no password. The connector has no sign-in.</p></div></div>
+<div class="pill-card"><span class="ic-wrap">${icon("user")}</span><div><h3>Your progress, saved</h3><p>Sign in with Google once and Plot Speaks remembers what you've played, the trivia you've heard and your campaigns. No new password.</p></div></div>
 <div class="pill-card"><span class="ic-wrap">${icon("card")}</span><div><h3>No subscription</h3><p>The stories are free. Your assistant runs on the plan you already have.</p></div></div>
 </div>
 <ul class="ways" aria-label="How each assistant plays">
@@ -1852,7 +1866,7 @@ export function writePage(origin: string): string {
 </ol>
 <div class="byo-grid" style="margin:28px 0 8px">
 <div class="pill-card"><span class="ic-wrap">${icon("user")}</span><div><h3>Your name, your choice</h3><p>You choose the name you're credited as. A pen name is fine.</p></div></div>
-<div class="pill-card"><span class="ic-wrap">${icon("key")}</span><div><h3>A claim code</h3><p>You get a code to withdraw or update your story later. No account needed.</p></div></div>
+<div class="pill-card"><span class="ic-wrap">${icon("key")}</span><div><h3>A claim code</h3><p>You get a code to withdraw or update your story later, whether or not you're signed in.</p></div></div>
 <div class="pill-card"><span class="ic-wrap">${icon("shield")}</span><div><h3>A person reviews it</h3><p>Someone at Plot Speaks reads every submission before it's published.</p></div></div>
 </div>
 <h2>Under the hood</h2>
@@ -1877,7 +1891,7 @@ export function privacyPage(origin: string): string {
 <header class="page-head">
 <p class="eyebrow">${icon("shield", 18)} Privacy</p>
 <h1>What Plot Speaks keeps, and what it doesn't.</h1>
-<p class="lead">Plot Speaks is run by Volocent Labs LLC. There are no accounts and no ads. Here is everything we store.</p>
+<p class="lead">Plot Speaks is run by Volocent Labs LLC. Accounts are optional (sign in with Google to keep your progress), and there are no ads. Here is everything we store.</p>
 <p class="muted">Last updated 16 October 2026.</p>
 </header>
 <h2>Your conversation</h2>
@@ -1899,7 +1913,7 @@ export function privacyPage(origin: string): string {
 <h2>When you submit a story</h2>
 <p>If you use <code>submit_story</code>, we store the story, its answer key, the name you chose to be credited as (a pen name is fine), the results of our automated content checks, a generated cover image, and the contact details you choose to give (optional, seen only by the reviewer). You get a claim code to withdraw or update it later. Through Claude, ChatGPT or another assistant, your IP address never reaches us (the request comes from the assistant's company), so a site-wide daily limit applies instead. Only when a story is submitted to the server directly, not through an assistant, do we keep a salted hash of the connecting IP address, never the address itself, to limit submissions to a few a day. A person reviews every submission. If it's approved, the story is published under CC BY-NC 4.0 with your credit name; your contact details never are.</p>
 <h2>This website</h2>
-<p>No sign-in, no ads, no analytics scripts and no tracking cookies. The pages load fonts from Google Fonts, so your browser contacts Google's servers for them. Plot Speaks is hosted on Cloudflare, which processes every request and keeps short-lived operational logs.</p>
+<p>No ads, no analytics scripts and no tracking cookies. The only cookie is the sign-in cookie, set when you sign in, which keeps you signed in on this site. Signing in goes through Google: Google tells us your account id, email and name, and nothing else. The pages load fonts from Google Fonts, so your browser contacts Google's servers for them. Plot Speaks is hosted on Cloudflare, which processes every request and keeps short-lived operational logs.</p>
 <p>To see how the site and the connector are used, the server keeps daily tallies: how many times each page was viewed, and how many tool calls and errors there were. A tally is only a number per day; nothing about you, your browser or your address is stored with it.</p>
 <h2>How long we keep it</h2>
 <p>Deletion is automatic:</p>
@@ -1921,7 +1935,7 @@ export function privacyPage(origin: string): string {
 <p>Email <a href="mailto:${CONTACT}">${CONTACT}</a>. For something that isn't personal you can also open an issue on <a href="${ISSUES}">GitHub</a>; issues are public, so leave personal details out of those.</p>
 <p style="margin:36px 0 64px"><a class="link-arrow" href="/support">Support ${icon("arrow", 18)}</a></p>
 </div>`;
-  return page({ title: "Privacy · Plot Speaks", description: "What Plot Speaks stores: anonymous plays, verdicts and ratings. No accounts, no ads, no transcripts.", body, origin, path: "/privacy" });
+  return page({ title: "Privacy · Plot Speaks", description: "What Plot Speaks stores: plays, verdicts and ratings, and for signed-in players their history. No ads, no transcripts.", body, origin, path: "/privacy" });
 }
 
 export function supportPage(origin: string): string {
@@ -1961,7 +1975,7 @@ const WHY_SIGN_IN = `<ul class="why">
 <li><strong>No repeats.</strong> Ask for "a murder mystery I haven't played" and your assistant knows which ones you have. Trivia boards deal you questions you haven't heard yet.</li>
 <li><strong>Campaigns that wait for you.</strong> Pick up your D&amp;D-style campaign in any new chat, with no code to remember.</li>
 <li><strong>Your history.</strong> Every story and game you've played, and how it ended, here on this page.</li>
-<li><strong>Still optional.</strong> Everything works without an account, as it always has. Signing in only adds the memory.</li>
+<li><strong>Recommended, not required.</strong> Signing in is the way to keep your saved progress. You can still play without an account, but nothing is remembered between chats.</li>
 </ul>`;
 export function accountPage(v: AccountView, origin: string): string {
   const when = (t: number) => new Date(t).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
