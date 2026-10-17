@@ -235,12 +235,16 @@ if (!openServer) {
 } else console.log('SKIP  saving a rating (open server: the smoke test leaves no rating)');
 
 // ---------------------------------------------------------------- preview stories
-// In stories/catalog.json "preview": never listed or on the site, but started by exact name.
+// In stories/catalog.json "preview": never listed by the assistant tools; on the site's Stories and
+// Games tabs only marked "In testing"; started by exact name.
 const previews = genStories.filter((s) => s.preview);
 if (previews.length) {
   const everything = await call('list_stories', {});
-  const home = await (await fetch(`${base}/`)).text();
-  ok(previews.every((p) => !everything.includes(`slug: ${p.slug}`) && !home.includes(`/stories/${p.slug}"`)), `preview stories are not listed or on the home page (${previews.length})`);
+  const menu = await call('open_plot_speaks', {});
+  ok(previews.every((p) => !everything.includes(`slug: ${p.slug}`) && !menu.includes(p.title)), `preview stories are not in list_stories or the welcome menu (${previews.length})`);
+  const tabs = (await (await fetch(`${base}/`)).text()) + (await (await fetch(`${base}/games`)).text());
+  const testingCards = (tabs.match(/class="card card-testing"/g) || []).length;
+  ok(testingCards === previews.length && /In testing/.test(tabs), `the Stories and Games tabs show every preview piece marked "In testing" (${testingCards})`);
   const byTitle = await call('start_story', { slug: previews[0].title });
   ok(new RegExp(`narrator for "${previews[0].title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`).test(byTitle), 'a preview story starts by its exact title');
 } else console.log('SKIP  preview checks (no preview story)');
@@ -419,7 +423,7 @@ const needles = [...endingNeedles, ...cueTexts.filter((t) => t && t.trim().lengt
 // Routes allowed to carry secret text, one answer at a time (the passenger page's JSON API, checked
 // separately below). They are never part of the scan.
 const SECRET_ROUTES_ALLOWED = [/^\/api\/stories\//];
-const pages = ['/', '/connect', '/how-it-works', '/write', '/privacy', '/support', '/terms', '/robots.txt', '/sitemap.xml',
+const pages = ['/', '/games', '/preview', '/games/werewolf', '/connect', '/how-it-works', '/write', '/privacy', '/support', '/terms', '/robots.txt', '/sitemap.xml',
   ...slugs.flatMap((s) => [`/stories/${encodeURIComponent(s)}`, `/stories/${encodeURIComponent(s)}/story.md`, `/stories/${encodeURIComponent(s)}/passenger`]), '/stories/no-such-story']
   .filter((p) => !SECRET_ROUTES_ALLOWED.some((re) => re.test(p)));
 const keyLineRe = /\((correct|wrong)\)|^\s*(Correct|Innocent)\.\s/im;

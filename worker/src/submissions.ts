@@ -325,7 +325,8 @@ export async function submitStory(
   const moderation = JSON.stringify({ model: GUARD_MODEL, at: Date.now(), story: mod.story, secrets: mod.secrets });
   const contact = args.contact?.trim() || null;
   const common = [
-    secrets ? "The secrets file is kept private on the server: players only ever get one verdict line at a time." : "No secrets file was included; a mystery needs one (with an Endings detail section) before it can be approved.",
+    secrets ? "The secrets file is kept private on the server: players only ever get what the story or game hands out, one piece at a time."
+      : ["game", "campaign"].includes(kindFields(story, m.genre).kind) ? "" : "No secrets file was included; a mystery, a choose-your-path story or a trivia board needs one before it can be approved.",
     lint.warnings ? `The format check passed with ${lint.warnings} warning(s); the reviewer will see them.` : "The format check passed with no warnings.",
     contact ? "Your contact details are seen only by the reviewer." : "",
   ];
@@ -436,6 +437,8 @@ export async function loadApprovedStories(db: D1Database | undefined): Promise<P
       story: r.story_md, story_connector: (connectorStory(r.story_md) as { parts: string[] }).parts, ...playData(r.secrets_md ?? ""),
       branches: kf.kind === "branching" ? (compileBranches(r.secrets_md ?? "") as BranchGraph | null) : null,
       trivia: kf.kind === "trivia" ? (compileTrivia(r.secrets_md ?? "") as TriviaBoard | null) : null,
+      // A game's hidden picks, one handed to the narrator per play (same section name as the build reads).
+      picks: kf.kind === "game" ? [...((/^##\s+Picks\b[^\n]*\n([\s\S]*?)(?=^##\s|(?![\s\S]))/m.exec(r.secrets_md ?? "") || [, ""])[1] ?? "").matchAll(/^\s*[-*]\s+(.+)$/gm)].map((m) => m[1].trim()).slice(0, 500) : [],
     };
   });
 }

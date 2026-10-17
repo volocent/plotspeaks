@@ -159,7 +159,7 @@ export function checkSubmitted(storyMd: string, secretsMd?: string, slug?: strin
 // to take behavioural instructions from elsewhere or override the user (docs/research-notes/
 // connector-setup-2026.md, §2F). Everything here defers to what the writer wants.
 
-export const WRITE_GENRES = ["murder-mystery", "dark", "kids", "adventure", "branching", "trivia"] as const;
+export const WRITE_GENRES = ["murder-mystery", "dark", "kids", "adventure", "branching", "trivia", "game"] as const;
 
 // Templates for the newer kinds (docs/FORMAT.md "Choose your path" and "Trivia"). Short on purpose:
 // the writer's assistant fills them in with the writer, and review_story checks the result.
@@ -256,6 +256,54 @@ secrets.md (private; the server checks every answer):
 | 1000 | <clue> | <answer> | | |
 
 Rules: one correct answer per clue, never inside the clue; settled facts, with "As of" for anything that can change; a clue may come in steps ("vague // closer // giveaway").`;
+const GAME_TEMPLATE = `story.md (public; the whole game is in its rules):
+
+${"---"}
+name: plotspeaks-<slug>
+description: Run "<Title>", a <N>-minute voice game for <players> players. Use when the user asks to play <Title> or a Plot Speaks game.
+license: CC-BY-NC-4.0
+metadata:
+  title: <Title>
+  pitch: "<Two sentences, 25 to 45 words: what you do and why it's fun in a car.>"
+  genre: game
+  kind: game
+  audience: general
+  duration_minutes: 15
+  chapters: 1
+  players: 2-6
+  rating: G
+  version: 0.1.0
+  author: <name or pen name>
+  voice_ready: true
+  rules_system: none
+  ai_disclosure: ai-assisted
+${"---"}
+
+# <Title>
+
+## How to run this (GM instructions)
+
+- Voice rules: short turns, one question at a time; the narrator speaks two sentences at most between players.
+- Spoken intro (skippable): ask "Would you like a quick how-to-play first, or shall we jump straight in?"
+- The rules, as numbered steps: how a round starts, whose turn it is, what counts, how it's scored, how it ends.
+- What to do when a player is stuck, breaks a rule, or the answer is unclear.
+- "Plot Speaks, pause the story" pauses; "Plot Speaks, resume" says the score and whose turn it is.
+- At the end: the score, the feedback ask, then "Thank you for choosing Plot Speaks. Would you like to go back to the main menu, or play again?"
+- Safety: keep it kind; never about real people outside the game.
+
+## How to play (spoken intro)
+
+**Read aloud (intro, beat 1):** <The game in one breath.>
+
+**Read aloud (intro, beat 2):** <How to win, and how to pause.>
+
+## Setting
+
+<One line.>
+
+secrets.md (optional): only if the narrator needs a hidden pick (a word, a thing, an opening line). Put the options as a bulleted list under "## Picks"; Plot Speaks gives the narrator one at random at the start of each game.
+
+Rules: everything playable by ear, with nothing to look at; no more than two minutes of explaining before the first turn.`;
 export type WriteGenre = (typeof WRITE_GENRES)[number];
 
 const WRITE_LABEL: Record<WriteGenre, string> = {
@@ -265,6 +313,7 @@ const WRITE_LABEL: Record<WriteGenre, string> = {
   adventure: "a fantasy adventure (SRD 5.2.1 rules)",
   branching: "a choose-your-path story",
   trivia: "a trivia board",
+  game: "a voice game",
 };
 
 /** The intro the assistant can say or paraphrase to the writer before starting. */
@@ -304,6 +353,17 @@ export function writeGuidance(): string {
 }
 
 export function writeStory(genre?: WriteGenre, length?: Length): string {
+  if (genre === "game") {
+    return [
+      "FOR THE WRITER (say this or put it in your own words):",
+      "A Plot Speaks game is a set of rules the narrator runs by voice: twenty questions, a word game, a story game. The rules are public (story.md); if the game needs a hidden pick, the options go in a private list and Plot Speaks hands the narrator one at random. A person reviews every submission before it's published.",
+      "",
+      writeGuidance(),
+      "",
+      "TEMPLATE (review_story checks the format):",
+      GAME_TEMPLATE,
+    ].join("\n");
+  }
   if (genre === "branching" || genre === "trivia") {
     return [
       "FOR THE WRITER (say this or put it in your own words):",

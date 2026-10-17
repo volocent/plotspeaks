@@ -391,7 +391,7 @@ ${CONNECT.assistants.map((a) => `<li><a class="ai-btn" href="/connect#${a.id}" d
 function connectPanel(opts: { id: string; heading?: string }): string {
   return `<section class="byoa" aria-labelledby="${opts.id}-h">
 ${byoaBadge()}
-${opts.heading ? `<h2 class="byoa-h" id="${opts.id}-h">${esc(opts.heading)}</h2>` : `<h2 class="byoa-h byoa-h-sm" id="${opts.id}-h">Pick your assistant and connect it once.</h2>`}
+${opts.heading ? `<h2 class="byoa-h" id="${opts.id}-h">${esc(opts.heading)}</h2>` : `<h2 class="byoa-h byoa-h-sm" id="${opts.id}-h">Connect your assistant once.</h2>`}
 ${aiButtons()}
 <p class="byoa-line">Then just say <strong>“${esc(OPEN_LINE)}”</strong> No new app, no account with us, no subscription. Plot Speaks brings the story and keeps the answer key.</p>
 </section>`;
@@ -579,7 +579,13 @@ p{margin:0 0 1em}
 .menu-panel{position:absolute;right:0;top:52px;min-width:220px;background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow-lg);padding:8px;display:grid}
 .menu-panel a{padding:12px 14px;border-radius:10px;text-decoration:none;font-weight:600}
 .menu-panel a:hover,.menu-panel a[aria-current=page]{background:var(--accent-soft);color:var(--ink)}
-@media (min-width:860px){.nav{display:flex}.menu{display:none}.top .btn-connect{display:inline-flex}}
+/* Page tabs under the header on phones and tablets: four equal tabs, the current one underlined. */
+.pagetabs{border-top:1px solid var(--line)}
+.pagetabs .wrap{display:flex;gap:0;min-height:0}
+.pagetabs a{flex:1 1 auto;min-width:0;text-align:center;text-decoration:none;font-weight:650;font-size:clamp(.74rem,3.1vw,.92rem);letter-spacing:-.01em;padding:13px 2px 11px;color:var(--ink-2);border-bottom:3px solid transparent;white-space:nowrap}
+.pagetabs a[aria-current=page]{color:var(--ink);border-bottom-color:var(--accent)}
+.pagetabs a:hover{color:var(--ink)}
+@media (min-width:860px){.nav{display:flex}.pagetabs{display:none}.top .btn-connect{display:inline-flex}:root{--head-h:64px}}
 
 /* buttons */
 .btn{appearance:none;border:0;display:inline-flex;align-items:center;justify-content:center;gap:9px;font:700 1rem/1 var(--sans);padding:14px 22px;min-height:50px;border-radius:999px;cursor:pointer;text-decoration:none;transition:transform .15s ease,background-color .15s ease,box-shadow .15s ease}
@@ -608,7 +614,8 @@ p{margin:0 0 1em}
 .hero-grid{display:grid;gap:36px;align-items:center}
 .hero-grid>*{min-width:0}
 @media (min-width:960px){.hero{padding:72px 0 88px}.hero-grid{grid-template-columns:1.1fr .9fr;gap:56px}.waves{right:-60px;top:-160px;width:760px;height:760px;opacity:.9}}
-.hero h1{margin:0 0 18px;max-width:12ch}
+.hero h1{margin:0 0 18px;white-space:nowrap;font-size:min(4.4rem,calc((100vw - 32px) / 13.2))}
+@media (min-width:900px){.hero h1{font-size:min(4.4rem,calc((50vw - 64px) / 13.2))}}
 .hero h1 em{font-style:italic;font-weight:560;color:var(--accent)}
 .hero .lead{margin-bottom:28px}
 .hero-actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:6px}
@@ -714,7 +721,7 @@ p{margin:0 0 1em}
 .passenger .ic{color:var(--orange);margin-top:2px}
 
 /* catalog */
-.filters{position:sticky;top:64px;z-index:10;margin:0 -16px 28px;padding:12px 16px;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);display:flex;gap:8px;overflow-x:auto;scrollbar-width:none}
+.filters{position:sticky;top:var(--head-h,117px);z-index:10;margin:0 -16px 28px;padding:12px 16px;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);display:flex;gap:8px;overflow-x:auto;scrollbar-width:none}
 .filters::-webkit-scrollbar{display:none}
 @media (min-width:720px){.filters{margin:0 -32px 32px;padding:12px 32px;flex-wrap:wrap}}
 .chip{flex:none;display:inline-flex;align-items:center;gap:7px;padding:9px 15px;border-radius:999px;border:1.5px solid var(--line-2);background:var(--surface);text-decoration:none;font-weight:650;font-size:.92rem;color:var(--ink);min-height:42px}
@@ -746,6 +753,8 @@ p{margin:0 0 1em}
 .card .pitch{margin:0 0 10px;color:var(--ink-2);font-size:.95rem;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 @media (max-width:639px){.card .pitch{-webkit-line-clamp:2;font-size:.9rem}}
 .badge{position:absolute;left:10px;bottom:10px;z-index:2;display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:999px;background:rgba(10,26,46,.78);color:#fff;font:700 .78rem/1 var(--sans);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.badge.badge-testing{left:auto;right:10px;bottom:auto;top:10px;background:var(--orange,#EF7726);color:#fff}
+.saybox-sm{margin:12px 0 0;padding:10px 12px;font-size:.98rem}
 @media (max-width:639px){.badge{left:6px;bottom:6px;padding:4px 7px;font-size:.7rem}.badge .ic{display:none}}
 
 /* cover */
@@ -883,8 +892,9 @@ details.script pre{margin:0;padding:0 18px 18px;white-space:pre-wrap;word-break:
 .byoa-badge{display:inline-flex;align-items:center;gap:10px;padding:4px 16px 4px 4px;border-radius:999px;background:var(--surface);box-shadow:inset 0 0 0 1.5px var(--line-2),var(--shadow);font:700 .95rem/1 var(--sans);color:var(--ink)}
 .byoa-tag{display:inline-block;padding:8px 12px 7px;border-radius:999px;background:var(--ink);color:var(--bg);font:800 .82rem/1 var(--sans);letter-spacing:.16em;position:relative}
 .byoa-tag::after{content:"";position:absolute;right:-2px;top:-2px;width:10px;height:10px;border-radius:50%;background:var(--orange);box-shadow:0 0 0 2px var(--surface)}
-.byoa-h{font-size:clamp(1.4rem,4.4vw,1.8rem);color:#FFFDF9;margin:16px 0 0;max-width:24ch}
-.byoa-h-sm{font-size:clamp(1.25rem,3.8vw,1.5rem)}
+.byoa-h{font-size:clamp(1.4rem,4.4vw,1.8rem);color:#FFFDF9;margin:16px 0 0;max-width:24ch;text-wrap:balance}
+.byoa-h-sm{white-space:nowrap;max-width:none;font-size:min(1.6rem,calc((100vw - 96px) / 15))}
+@media (min-width:900px){.byoa-h-sm{font-size:1.6rem}}
 .byoa .ai-btn{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.2);color:#FFFDF9;box-shadow:none}
 .byoa .ai-btn:hover{background:rgba(255,255,255,.14);border-color:var(--peach);color:#FFFDF9}
 .byoa .ai-btn:focus-visible{outline-color:var(--sky)}
@@ -1026,12 +1036,15 @@ dialog.cdlg::backdrop{background:rgba(6,14,26,.6);-webkit-backdrop-filter:blur(3
 
 // ============================================================================ PAGE SHELL
 type Shell = { title: string; description: string; body: string; origin: string; path: string; script?: string };
-const NAV: [string, string][] = [["/#stories", "Stories"], ["/connect", "Connect"], ["/how-it-works", "How it works"], ["/write", "Write"]];
+// The four pages, shown as tabs under the header on every page (Ben, 2026-10-17: separate pages
+// with tabs, not one long home page).
+const NAV: [string, string][] = [["/", "Stories"], ["/games", "Games"], ["/connect", "Connect"], ["/how-it-works", "How it works"], ["/write", "Write"]];
 
 const FONTS = "https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT@0,9..144,400..700,0..100;1,9..144,400..700,0..100&family=Plus+Jakarta+Sans:wght@400..800&display=swap";
 
 function page(s: Shell): string {
-  const cur = (href: string) => (href === s.path ? ` aria-current="page"` : "");
+  // A story page belongs to the Stories tab.
+  const cur = (href: string) => (href === s.path || (href === "/" && s.path.startsWith("/stories/")) ? ` aria-current="page"` : "");
   const links = NAV.map(([href, label]) => `<a href="${href}"${cur(href)}>${label}</a>`).join("");
   const url = s.origin + s.path;
   return `<!doctype html>
@@ -1039,6 +1052,7 @@ function page(s: Shell): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<script>/* A refresh starts at the top (or the #anchor): restoring the old position landed at the bottom on phones once covers and the connected panel changed the page's height. */try{if("scrollRestoration" in history)history.scrollRestoration="manual";addEventListener("load",function(){if(!location.hash)scrollTo(0,0);});}catch(e){}</script>
 <title>${esc(s.title)}</title>
 <meta name="description" content="${esc(s.description)}">
 <link rel="canonical" href="${esc(url)}">
@@ -1069,8 +1083,9 @@ function page(s: Shell): string {
 <a class="brand" href="/" aria-label="Plot Speaks home"><img src="/mark-96.jpg" alt="" width="38" height="38"><span class="wordmark">Plot <span>Speaks</span></span></a>
 <nav class="nav" aria-label="Main">${links}</nav>
 <a class="btn btn-primary btn-sm btn-connect" href="/connect">${icon("plug", 18)}Connect</a>
-<details class="menu"><summary aria-label="Menu">${icon("menu", 22)}</summary><nav class="menu-panel" aria-label="Main">${links}</nav></details>
-</div></header>
+</div>
+<nav class="pagetabs" aria-label="Pages"><div class="wrap">${links}</div></nav>
+</header>
 <main id="main">
 ${s.body}
 </main>
@@ -1197,15 +1212,18 @@ const SAMPLE_JS = `(function(){
 
 const exampleTitle = (metas: Meta[]) => (metas.find((m) => m.slug === "example-dinner-party") ?? metas[0])?.title ?? "The Last Toast";
 
-function storyCard(m: Meta, r: RatingSummary | undefined): string {
-  return `<li class="card" data-cat="${categoryOf(m).id}">
-<div style="position:relative">${cover(m)}${m.minutes ? `<span class="badge">${icon("clock", 13)}${m.minutes} min</span>` : ""}</div>
+// testing: in the catalog's preview list. Marked, and the card says the exact phrase that starts it.
+function storyCard(m: Meta, r: RatingSummary | undefined, testing = false): string {
+  return `<li class="card${testing ? " card-testing" : ""}" data-cat="${categoryOf(m).id}">
+<div style="position:relative">${cover(m)}${m.minutes ? `<span class="badge">${icon("clock", 13)}${m.minutes} min</span>` : ""}${testing ? `<span class="badge badge-testing">In testing</span>` : ""}</div>
 <div class="card-body">
 <h4 class="title"><a href="/stories/${encodeURIComponent(m.slug)}">${esc(m.title)}</a></h4>
 <p class="by">Written by ${esc(authorOf(m))}</p>
 <p class="pitch">${esc(m.pitch)}</p>
 ${facts(m)}
 ${stars(r)}
+${testing ? `<p class="saybox saybox-sm"><b>Say</b>“Start ${esc(m.title)} with Plot Speaks.”</p>` : ""}
+${m.slug === "werewolf" ? `<p class="muted">Four or more players, with <a href="/games/werewolf">the phone page</a>.</p>` : ""}
 </div>
 </li>`;
 }
@@ -1230,15 +1248,23 @@ const FILTER_JS = `(function(){
   });
 })();`;
 
-export function catalogPage(stories: PublicStory[], ratings: Map<string, RatingSummary>, origin = ""): string {
-  const metas = stories.map(meta);
-  const example = exampleTitle(metas);
-  const lead = metas.find((m) => m.slug === "example-dinner-party") ?? metas[0];
-  // One shelf per kind that has anything in it (an empty kind is not shown). Inside a shelf with
-  // more than one category (Mysteries: Classic, Dark, Family), chips filter the cards.
-  const byTitle = (a: Meta, b: Meta) => sortKey(a.title).localeCompare(sortKey(b.title));
-  const groups = KINDS.map((k) => ({ k, items: metas.filter((m) => kindShelf(m) === k).sort(byTitle) })).filter((g) => g.items.length);
-  const chips = `<nav class="filters" aria-label="Kinds of story">
+// The two catalogue tabs (Ben, 2026-10-17): Stories and Games.
+const STORY_KINDS = ["mystery", "adventure", "branching"];
+const GAME_KINDS = ["trivia", "game", "campaign"];
+
+export function catalogPage(stories: PublicStory[], ratings: Map<string, RatingSummary>, origin = "", previews: PublicStory[] = [], tab: "stories" | "games" = "stories"): string {
+  const listedMetas = stories.map(meta);
+  const example = exampleTitle(listedMetas);
+  const lead = listedMetas.find((m) => m.slug === "example-dinner-party") ?? listedMetas[0];
+  // One shelf per kind on this tab that has anything in it (an empty kind is not shown): the listed
+  // pieces first, then those still in testing, marked, with the phrase that starts them (they start
+  // only by exact name). Inside a shelf with more than one category, chips filter the cards.
+  const kinds = tab === "games" ? GAME_KINDS : STORY_KINDS;
+  const testing = new Set(previews.map((p) => p.slug));
+  const metas = [...listedMetas, ...previews.map(meta)].filter((m) => kinds.includes(kindShelf(m).id));
+  const byTitle = (a: Meta, b: Meta) => Number(testing.has(a.slug)) - Number(testing.has(b.slug)) || sortKey(a.title).localeCompare(sortKey(b.title));
+  const groups = KINDS.filter((k) => kinds.includes(k.id)).map((k) => ({ k, items: metas.filter((m) => kindShelf(m) === k).sort(byTitle) })).filter((g) => g.items.length);
+  const chips = groups.length < 2 ? "" : `<nav class="filters" aria-label="${tab === "games" ? "Kinds of game" : "Kinds of story"}">
 <a class="chip" href="#stories-list" data-filter="all" aria-pressed="true">All <span class="n">${metas.length}</span></a>
 ${groups.map((g) => `<a class="chip" href="#cat-${g.k.id}" data-filter="${g.k.id}" aria-pressed="false">${icon(g.k.icon, 16)}${esc(g.k.name)} <span class="n">${g.items.length}</span></a>`).join("\n")}
 </nav>`;
@@ -1254,9 +1280,25 @@ ${present.map((c) => `<a class="chip chip-sm" href="#cat-${g.k.id}" data-sub="${
 <div class="cat-head"><span class="ic-wrap kind-${g.k.id}">${icon(g.k.icon, 24)}</span><div><h3 id="cat-${g.k.id}-h">${esc(g.k.name)}</h3><p>${esc(g.k.blurb)}</p>${g.k.note && g.items.some((m) => m.audience === "family") ? `<p class="cat-note">${esc(g.k.note)}</p>` : ""}</div></div>
 ${subChips(g)}
 <ul class="cards">
-${g.items.map((m) => storyCard(m, ratings.get(m.slug))).join("\n")}
+${g.items.map((m) => storyCard(m, ratings.get(m.slug), testing.has(m.slug))).join("\n")}
 </ul>
 </section>`).join("\n");
+
+  if (tab === "games") {
+    const gamesBody = `<div class="wrap">
+<header class="page-head">
+<p class="eyebrow">${icon("star", 18)} Games</p>
+<h1>Games the whole car can play.</h1>
+<p class="lead">Your assistant hosts: trivia boards with scores and challenges, twenty questions, story games, Werewolf on one shared phone, and campaigns that pick up where you left off.</p>
+</header>
+${chips}
+<div id="stories-list">
+${sections}
+</div>
+</div>
+${connectDialogs({ url: origin + "/mcp", story: example })}`;
+    return page({ title: "Games · Plot Speaks", description: "Trivia, twenty questions, story games, Werewolf for a car, and D&D-style campaigns, played by voice with your own assistant.", body: gamesBody, origin, path: "/games", script: FILTER_JS });
+  }
 
   const body = `<section class="hero">
 ${WAVES}
@@ -1264,66 +1306,11 @@ ${WAVES}
 <div>
 <p class="eyebrow rise">${icon("mic", 18)} Storytelling out loud</p>
 <h1 class="rise rise-2">Stories you <em>play</em> out loud.</h1>
-<p class="lead rise rise-3">Interactive stories and games you play by voice with the AI assistant you already use. Murder mysteries and fantasy adventures today; one narrator does every voice, you ask the questions. Made for car rides.</p>
+<p class="lead rise rise-3">Interactive stories and games you play by voice with the AI assistant you already use: mysteries, adventures and stories where you choose the path, plus trivia and party games. One narrator does every voice; you ask the questions. Made for car rides.</p>
 <div class="rise rise-3">${connectPanel({ id: "start" })}</div>
 </div>
 ${lead ? sampleCard(lead) : ""}
 </div>
-</section>
-
-<section class="section alt" aria-labelledby="how-h">
-<div class="wrap">
-<div class="section-head"><p class="eyebrow">${icon("book", 18)} How it works</p><h2 id="how-h">Three steps, then just talk.</h2></div>
-<ol class="steps3">
-<li><h3>Connect once</h3><p>Tap Connect on your assistant and follow the short steps. No sign-in, and Claude's Free plan has room for it. Do it once, parked.</p></li>
-<li><h3>Open Plot Speaks</h3><p>Say “Open Plot Speaks” for a quick intro, then browse, start or write a story. Or name one: “Start ${esc(example)} with Plot Speaks.”</p></li>
-<li><h3>Play by talking</h3><p>Question suspects, search rooms, roll for initiative. Turns are short, and each one ends with a question for you.</p></li>
-</ol>
-<p style="margin-top:22px"><a class="link-arrow" href="/how-it-works">More on how a story goes ${icon("arrow", 18)}</a></p>
-</div>
-</section>
-
-<section class="section" id="byoa" aria-labelledby="byo-h">
-<div class="wrap">
-<div class="section-head">${byoaBadge()}<h2 id="byo-h">Use the assistant you already have.</h2>
-<p class="lead">Plot Speaks isn't another app. It's a library of stories that Claude, ChatGPT, Gemini and others can play with you. Your assistant is the narrator; Plot Speaks brings the story and keeps the answer key.</p></div>
-<div class="byo-grid">
-<div class="pill-card"><span class="ic-wrap">${icon("app")}</span><div><h3>No new app</h3><p>Play in the assistant app already on your phone, in the car.</p></div></div>
-<div class="pill-card"><span class="ic-wrap">${icon("user")}</span><div><h3>No account with us</h3><p>No sign-up, no email, no password. The connector has no sign-in.</p></div></div>
-<div class="pill-card"><span class="ic-wrap">${icon("card")}</span><div><h3>No subscription</h3><p>The stories are free. Your assistant runs on the plan you already have.</p></div></div>
-</div>
-<ul class="ways" aria-label="How each assistant plays">
-<li><h3>Claude <span class="status status-ok">Free plan works</span></h3><p>One tap to add. Voice tested: the connector loads the story and checks your accusation.</p></li>
-<li><h3>ChatGPT <span class="status">Free and Plus: paste</span></h3><p>Paste the story, and a passenger holds the answer key. Connectors need Business, Enterprise or Edu; an app listing is planned.</p></li>
-<li><h3>Gemini <span class="status">US, 18+</span></h3><p>A custom app on a personal Google account in the US. Voice not tested yet.</p></li>
-<li><h3>And more <span class="status">Voice untested</span></h3><p>Vibe (formerly Le Chat, free plan too), Perplexity and Grok can add it by its address.</p></li>
-</ul>
-<p style="margin-top:18px"><a class="link-arrow" href="/connect">Step-by-step for each assistant ${icon("arrow", 18)}</a></p>
-<div class="split">
-<div class="panel panel-key"><h3>${icon("key", 26)} We keep the answer key</h3>
-<p>Your assistant tells the story, but it never sees who did it. When you accuse someone, it asks Plot Speaks, and Plot Speaks says whether you're right. So the narrator can't spoil the ending, even by accident.</p>
-<p>Adventures work the same way: the big surprises stay with Plot Speaks until you reach them.</p></div>
-<div class="panel"><h3>${icon("shield", 26)} Your conversation stays with your assistant</h3>
-<p>Plot Speaks never hears you. It receives only what the tools are given: the story name, the accused name, a rating or a submitted story; nothing else from your conversation. We count those plays without names or accounts, to learn which stories work.</p>
-<p class="fine">The chat itself lives in your assistant account (Claude, ChatGPT, Gemini or another), under that company's privacy terms.</p></div>
-</div>
-</div>
-</section>
-
-<section class="section night" aria-labelledby="drive-h">
-<div class="wrap">
-<div class="section-head"><p class="eyebrow">${icon("clock", 18)} Made for the drive</p><h2 id="drive-h">The best seat is the back seat.</h2>
-<p class="lead">A long drive is an hour of talking anyway. Plot Speaks gives it a plot.</p></div>
-<ul class="drive-grid">
-<li>${icon("mic", 30)}<h3>Hands-free</h3><p>You talk, the narrator answers. Nobody types a thing.</p></li>
-<li>${icon("clock", 30)}<h3>Fits the trip</h3><p>Stories run 20 to 60 minutes. Longer ones come in chapters, each ending with a recap.</p></li>
-<li>${icon("pause", 30)}<h3>Stops when you stop</h3><p>Say <q>Plot Speaks, pause the story</q> at the gas station, and <q>resume</q> when you're rolling again.</p></li>
-<li>${icon("users", 30)}<h3>The whole car plays</h3><p>Anyone can call out a question. Family mysteries are written for kids about 7 to 10.</p></li>
-<li>${icon("eyeoff", 30)}<h3>No screen</h3><p>There's nothing to watch. Eyes stay on the window, or on the road.</p></li>
-</ul>
-<p class="passenger">${icon("shield", 22)}<span>Set it up before you drive. The driver keeps eyes on the road; a passenger handles the phone if anything needs a tap.</span></p>
-</div>
-<div class="road" aria-hidden="true"></div>
 </section>
 
 <section class="section" id="stories" aria-labelledby="stories-h">
@@ -1337,7 +1324,6 @@ ${sections}
 </div>
 </section>
 
-<section class="cta alt"><div class="wrap">${connectPanel({ id: "cta", heading: CONNECT.headline })}</div></section>
 ${connectDialogs({ url: origin + "/mcp", story: example })}`;
 
   return page({
@@ -1708,6 +1694,64 @@ ${panels}
 }
 
 // ============================================================================ HOW IT WORKS
+// The explainer sections that used to sit on the home page (Ben, 2026-10-17: separate pages, not one long scroll).
+function aboutSections(example: string): string {
+  return `<section class="section alt" aria-labelledby="how-h">
+<div class="wrap">
+<div class="section-head"><p class="eyebrow">${icon("book", 18)} How it works</p><h2 id="how-h">Three steps, then just talk.</h2></div>
+<ol class="steps3">
+<li><h3>Connect once</h3><p>Tap Connect on your assistant and follow the short steps. No sign-in, and Claude's Free plan has room for it. Do it once, parked.</p></li>
+<li><h3>Open Plot Speaks</h3><p>Say “Open Plot Speaks” for a quick intro, then browse, start or write a story. Or name one: “Start ${esc(example)} with Plot Speaks.”</p></li>
+<li><h3>Play by talking</h3><p>Question suspects, search rooms, roll for initiative. Turns are short, and each one ends with a question for you.</p></li>
+</ol>
+</div>
+</section>
+
+<section class="section" id="byoa" aria-labelledby="byo-h">
+<div class="wrap">
+<div class="section-head">${byoaBadge()}<h2 id="byo-h">Use the assistant you already have.</h2>
+<p class="lead">Plot Speaks isn't another app. It's a library of stories that Claude, ChatGPT, Gemini and others can play with you. Your assistant is the narrator; Plot Speaks brings the story and keeps the answer key.</p></div>
+<div class="byo-grid">
+<div class="pill-card"><span class="ic-wrap">${icon("app")}</span><div><h3>No new app</h3><p>Play in the assistant app already on your phone, in the car.</p></div></div>
+<div class="pill-card"><span class="ic-wrap">${icon("user")}</span><div><h3>No account with us</h3><p>No sign-up, no email, no password. The connector has no sign-in.</p></div></div>
+<div class="pill-card"><span class="ic-wrap">${icon("card")}</span><div><h3>No subscription</h3><p>The stories are free. Your assistant runs on the plan you already have.</p></div></div>
+</div>
+<ul class="ways" aria-label="How each assistant plays">
+<li><h3>Claude <span class="status status-ok">Free plan works</span></h3><p>One tap to add. Voice tested: the connector loads the story and checks your accusation.</p></li>
+<li><h3>ChatGPT <span class="status">Free and Plus: paste</span></h3><p>Paste the story, and a passenger holds the answer key. Connectors need Business, Enterprise or Edu; an app listing is planned.</p></li>
+<li><h3>Gemini <span class="status">US, 18+</span></h3><p>A custom app on a personal Google account in the US. Voice not tested yet.</p></li>
+<li><h3>And more <span class="status">Voice untested</span></h3><p>Vibe (formerly Le Chat, free plan too), Perplexity and Grok can add it by its address.</p></li>
+</ul>
+<p style="margin-top:18px"><a class="link-arrow" href="/connect">Step-by-step for each assistant ${icon("arrow", 18)}</a></p>
+<div class="split">
+<div class="panel panel-key"><h3>${icon("key", 26)} We keep the answer key</h3>
+<p>Your assistant tells the story, but it never sees who did it. When you accuse someone, it asks Plot Speaks, and Plot Speaks says whether you're right. So the narrator can't spoil the ending, even by accident.</p>
+<p>Adventures work the same way: the big surprises stay with Plot Speaks until you reach them.</p></div>
+<div class="panel"><h3>${icon("shield", 26)} Your conversation stays with your assistant</h3>
+<p>Plot Speaks never hears you. It receives only what the tools are given: the story name, the accused name, a rating or a submitted story; nothing else from your conversation. We count those plays without names or accounts, to learn which stories work.</p>
+<p class="fine">The chat itself lives in your assistant account (Claude, ChatGPT, Gemini or another), under that company's privacy terms.</p></div>
+</div>
+</div>
+</section>
+
+<section class="section night" aria-labelledby="drive-h">
+<div class="wrap">
+<div class="section-head"><p class="eyebrow">${icon("clock", 18)} Made for the drive</p><h2 id="drive-h">The best seat is the back seat.</h2>
+<p class="lead">A long drive is an hour of talking anyway. Plot Speaks gives it a plot.</p></div>
+<ul class="drive-grid">
+<li>${icon("mic", 30)}<h3>Hands-free</h3><p>You talk, the narrator answers. Nobody types a thing.</p></li>
+<li>${icon("clock", 30)}<h3>Fits the trip</h3><p>Stories run 20 to 60 minutes. Longer ones come in chapters, each ending with a recap.</p></li>
+<li>${icon("pause", 30)}<h3>Stops when you stop</h3><p>Say <q>Plot Speaks, pause the story</q> at the gas station, and <q>resume</q> when you're rolling again.</p></li>
+<li>${icon("users", 30)}<h3>The whole car plays</h3><p>Anyone can call out a question. Family mysteries are written for kids about 7 to 10.</p></li>
+<li>${icon("eyeoff", 30)}<h3>No screen</h3><p>There's nothing to watch. Eyes stay on the window, or on the road.</p></li>
+</ul>
+<p class="passenger">${icon("shield", 22)}<span>Set it up before you drive. The driver keeps eyes on the road; a passenger handles the phone if anything needs a tap.</span></p>
+</div>
+</section>
+
+`;
+}
+
 export function howPage(stories: PublicStory[], origin: string): string {
   const example = exampleTitle(stories.map(meta));
   const body = `<div class="wrap narrow prose">
@@ -1716,6 +1760,9 @@ export function howPage(stories: PublicStory[], origin: string): string {
 <h1>One narrator, every voice. You ask the questions.</h1>
 <p class="lead">Your assistant becomes the narrator. It reads short scenes aloud, plays every character, and ends each turn by asking what you do.</p>
 </header>
+</div>
+${aboutSections(example)}
+<div class="wrap narrow prose">
 <h2>Before you drive</h2>
 <ol class="steps">
 <li><a href="/connect">Add the Plot Speaks connector</a> to Claude (or Gemini, Vibe and others). On ChatGPT Free or Plus, or anywhere without the connector, copy a story from its page and paste it into a new chat.</li>
@@ -1873,6 +1920,36 @@ export function supportPage(origin: string): string {
 // TERMS. Plain-language terms, written 2026-10-16 because ChatGPT's Plugin Directory requires a
 // terms URL. NOT LEGAL ADVICE: Ben should have a lawyer review this page before relying on it.
 // Keep it in step with privacyPage() and with what submissions.ts actually does (claim codes, review).
+// ============================================================================ PREVIEW
+// The pieces waiting for Ben's voice check (stories/catalog.json "preview"), by kind, each with the
+// phrase that starts it. They start only by exact name, so the phrase is the test.
+export function previewPage(previews: PublicStory[], origin: string): string {
+  const metas = previews.map(meta);
+  const shelves = KINDS.map((k) => ({ k, items: metas.filter((m) => kindShelf(m) === k).sort((a, b) => sortKey(a.title).localeCompare(sortKey(b.title))) })).filter((g) => g.items.length);
+  const body = `<div class="wrap">
+<header class="page-head">
+<p class="eyebrow">${icon("star", 18)} In testing</p>
+<h1>New, waiting for a voice check.</h1>
+<p class="lead">These aren't listed yet. Each starts only when you name it exactly, so say the phrase on its card to your assistant, with the Plot Speaks connector on.</p>
+</header>
+${shelves.map((g) => `<section class="cat"><div class="cat-head"><span class="ic-wrap kind-${g.k.id}">${icon(g.k.icon, 24)}</span><div><h3>${esc(g.k.name)}</h3><p>${esc(g.k.blurb)}</p></div></div>
+<ul class="cards">
+${g.items.map((m) => `<li class="card" data-cat="${categoryOf(m).id}">
+<div style="position:relative">${cover(m)}${m.minutes ? `<span class="badge">${icon("clock", 13)}${m.minutes} min</span>` : ""}</div>
+<div class="card-body">
+<h4 class="title"><a href="/stories/${encodeURIComponent(m.slug)}">${esc(m.title)}</a></h4>
+<p class="pitch">${esc(m.pitch)}</p>
+${facts(m)}
+<p class="saybox"><b>Say</b>“Start ${esc(m.title)} with Plot Speaks.”</p>
+${m.slug === "werewolf" ? `<p class="muted">Needs four or more people and <a href="/games/werewolf">the phone page</a>.</p>` : ""}
+</div>
+</li>`).join("\n")}
+</ul>
+</section>`).join("\n")}
+</div>`;
+  return page({ title: "In testing · Plot Speaks", description: "New Plot Speaks stories and games waiting for a voice check.", body, origin, path: "/preview" });
+}
+
 // ============================================================================ WEREWOLF (car edition)
 // The secret half of Werewolf for players in one car (plan 6.1). Nobody can whisper or close their
 // eyes in a car, so this page, on one phone passed round, deals the cards and takes the night's
@@ -2033,13 +2110,18 @@ export function siteOrigin(url: URL): string {
 }
 
 // Returns a Response for site paths, or null to let the caller handle the request (e.g. /mcp).
-export async function handleSite(request: Request, stories: PublicStory[], db: D1Database | undefined): Promise<Response | null> {
+export async function handleSite(request: Request, stories: PublicStory[], db: D1Database | undefined, previews: PublicStory[] = []): Promise<Response | null> {
   if (request.method !== "GET" && request.method !== "HEAD") return null;
   const url = new URL(request.url);
   const path = url.pathname.replace(/(.)\/$/, "$1");
+  // Ben's test list: every preview piece with the exact phrase that starts it. Not linked, not indexed.
+  if (path === "/preview") return new Response(previewPage(previews, siteOrigin(url)), { headers: { ...HTML, "x-robots-tag": "noindex", "cache-control": "no-store" } });
   const origin = siteOrigin(url);
   if (path === "/" || path === "/index.html") {
-    return new Response(catalogPage(stories, await loadRatings(db), origin), { headers: HTML });
+    return new Response(catalogPage(stories, await loadRatings(db), origin, previews), { headers: HTML });
+  }
+  if (path === "/games") {
+    return new Response(catalogPage(stories, await loadRatings(db), origin, previews, "games"), { headers: HTML });
   }
   if (path === "/connect") return new Response(connectPage(stories, origin), { headers: HTML });
   if (path === "/how-it-works") return new Response(howPage(stories, origin), { headers: HTML });
@@ -2053,7 +2135,8 @@ export async function handleSite(request: Request, stories: PublicStory[], db: D
   if (!m && !path.startsWith("/stories")) return null;
   let slug = "";
   try { slug = m ? decodeURIComponent(m[1]) : ""; } catch { slug = ""; }
-  const s = stories.find((x) => x.slug === slug);
+  // Preview pieces have story pages too (reached from /preview), but no place in the catalogue.
+  const s = stories.find((x) => x.slug === slug) ?? previews.find((x) => x.slug === slug);
   if (!s) return new Response(notFoundPage(origin), { status: 404, headers: { ...HTML, "cache-control": "no-store" } });
   if (m && m[2] === "/story.md") {
     return new Response(s.story, { headers: { "content-type": "text/markdown; charset=utf-8", "cache-control": "public, max-age=60", "x-content-type-options": "nosniff" } });

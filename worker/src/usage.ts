@@ -19,7 +19,7 @@ const RPC_METHODS = new Set([
   "resources/read", "resources/templates/list", "completion/complete", "logging/setLevel",
 ]);
 
-const KNOWN_PAGES = new Set(["connect", "how-it-works", "write", "privacy", "support", "terms"]);
+const KNOWN_PAGES = new Set(["games", "connect", "how-it-works", "write", "privacy", "support", "terms", "preview"]);
 
 // Search engines, link previews, uptime checks and scripts (the smoke test, monitoring) are
 // counted apart from people, so the page-view numbers mean visits.

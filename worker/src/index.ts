@@ -31,6 +31,7 @@ const STORIES = stories as unknown as Story[]; // generated JSON: its inferred t
 // The catalog site gets the slug and the public story.md text ONLY: never endings or cues.
 const toPublic = (s: Story): PublicStory => ({ slug: s.slug, story: s.story });
 const PUBLIC_STORIES: PublicStory[] = STORIES.filter((s) => !s.preview).map(toPublic);
+const PREVIEW_STORIES: PublicStory[] = STORIES.filter((s) => s.preview).map(toPublic);
 const BUILTINS: Builtins = { slugs: new Set(STORIES.map((s) => s.slug)), storyFor: (slug) => STORIES.find((s) => s.slug === slug)?.story ?? null };
 
 // These rules travel with the server itself, not only inside the story text: on 2026-10-15
@@ -82,7 +83,7 @@ const isMystery = (s: Story) => s.endings.length > 0 || kindOfStory(s) === "myst
 // included); "classic" and "dark" split it. "kids" exists only outside ChatGPT (OpenAI's plugin rules).
 const LIST_GENRES = ["murder-mystery", "classic", "dark", "kids", "adventure"] as const;
 const LIST_GENRES_GPT = ["murder-mystery", "classic", "dark", "adventure"] as const;
-const WRITE_GENRES_GPT = ["murder-mystery", "dark", "adventure", "branching", "trivia"] as const;
+const WRITE_GENRES_GPT = ["murder-mystery", "dark", "adventure", "branching", "trivia", "game"] as const;
 function matchesGenre(s: Story, genre?: (typeof LIST_GENRES)[number]): boolean {
   if (!genre) return true;
   const c = categoryOf(s);
@@ -763,7 +764,7 @@ function createServer(ctx: Ctx) {
       annotations: { ...READ_ONLY, title: "Write a story" },
       description: "Returns material for writing a Plot Speaks story: a short introduction to how a story is built (a public story.md and a private answer key, secrets.md, reviewed by a person before anything is published), a suggested way to draft and review it together, and the format template.",
       inputSchema: {
-        genre: (gpt ? z.enum(WRITE_GENRES_GPT) : z.enum(WRITE_GENRES)).optional().describe("murder-mystery (default), dark (a dark murder mystery), adventure, branching (a choose-your-path story) or trivia (a trivia board)"),
+        genre: (gpt ? z.enum(WRITE_GENRES_GPT) : z.enum(WRITE_GENRES)).optional().describe("murder-mystery (default), dark (a dark murder mystery), adventure, branching (a choose-your-path story), trivia (a trivia board) or game (a voice game)"),
         length: z.enum(LENGTHS).optional().describe("20 or 30 (minutes, one chapter; default 30), or 2-chapter"),
       },
     },
@@ -1008,7 +1009,7 @@ export default {
     if (url.pathname !== "/mcp") {
       // Approved submissions join the catalog in the same public-only shape (slug + story.md text).
       const approved = await listApprovedSubmissions(env.DB);
-      const site = await handleSite(request, approved.length ? [...PUBLIC_STORIES, ...approved.filter((a) => !BUILTINS.slugs.has(a.slug))] : PUBLIC_STORIES, env.DB);
+      const site = await handleSite(request, approved.length ? [...PUBLIC_STORIES, ...approved.filter((a) => !BUILTINS.slugs.has(a.slug))] : PUBLIC_STORIES, env.DB, PREVIEW_STORIES);
       if (site) {
         // A tally per page view, for the admin stats (src/usage.ts): counts only, no visitor data.
         ctx.waitUntil(countPage(env.DB, request, site));
