@@ -148,6 +148,60 @@ export async function adminStats(db: D1Database, env: { ENVIRONMENT?: string }, 
       // In the players' words; tester rows (ours) are marked so they can be skipped.
       texts: ratingTexts.map((r) => ({ story: r.story, stars: num(r.stars), spoiled: r.spoiled === null ? null : Boolean(r.spoiled), comment: r.comment ?? null, feedback: r.feedback ?? null, at: new Date(num(r.at)).toISOString(), tester: Boolean(num(r.tester)) })),
     },
+    // Verdicts from players on stories still being tested (migration 0011): passes and needs-work by
+    // story, and the newest suggestions in their words. Empty if the table isn't there yet.
+    testVerdicts: await (async () => {
+      try {
+        const by = (await db.prepare("SELECT story, sum(CASE WHEN verdict = 'passed' THEN 1 ELSE 0 END) AS passed, sum(CASE WHEN verdict = 'needs_work' THEN 1 ELSE 0 END) AS needs_work, sum(tester) AS by_testers FROM test_verdicts GROUP BY story ORDER BY story").all<Row>()).results ?? [];
+        const texts = (await db.prepare("SELECT story, verdict, feedback, at, tester FROM test_verdicts WHERE at >= ? AND feedback IS NOT NULL AND feedback <> '' ORDER BY at DESC LIMIT 50").bind(since).all<Row>()).results ?? [];
+        return {
+          byStory: by.map((r) => ({ story: r.story, passed: num(r.passed), needsWork: num(r.needs_work), byTesters: num(r.by_testers) })),
+          texts: texts.map((r) => ({ story: r.story, verdict: r.verdict, feedback: r.feedback, at: new Date(num(r.at)).toISOString(), tester: Boolean(num(r.tester)) })),
+        };
+      } catch { return { byStory: [], texts: [] }; }
+    })(),
+    // Challenges the three judges upheld (a right answer the board refused): story, "category|value|votes|what the
+    // player said". These are the alternative names and spellings to add to a clue's Also accept.
+    upheldChallenges: await (async () => {
+      try { return ((await db.prepare("SELECT story, detail, at FROM play_events WHERE kind = 'challenge' AND verdict = 'upheld' ORDER BY at DESC LIMIT 50").all<Row>()).results ?? []).map((r) => ({ story: r.story, detail: r.detail, at: new Date(num(r.at)).toISOString() })); }
+      catch { return []; }
+    })(),
+    // Real difficulty (migration 0022): clues asked at least five times, hardest and easiest by share right.
+    clueDifficulty: await (async () => {
+      try {
+        const rows = ((await db.prepare("SELECT story, clue_id, asked, right FROM clue_stats WHERE asked >= 5").all<Row>()).results ?? []).map((r) => ({ story: r.story, clue: r.clue_id, asked: num(r.asked), right: num(r.right), share: num(r.right) / Math.max(1, num(r.asked)) }));
+        rows.sort((a, b) => a.share - b.share);
+        return { counted: rows.length, hardest: rows.slice(0, 20), easiest: rows.slice(-20).reverse() };
+      } catch { return { counted: 0, hardest: [], easiest: [] }; }
+    })(),
+    // "Did it connect?" answers (migration 0018): yes/no per assistant, and the latest problems reported.
+    connectFeedback: await (async () => {
+      try {
+        const totals = ((await db.prepare("SELECT assistant, outcome, count(*) AS n FROM connect_feedback GROUP BY assistant, outcome").all<Row>()).results ?? []).map((r) => ({ assistant: r.assistant, outcome: r.outcome, n: num(r.n) }));
+        const problems = ((await db.prepare("SELECT assistant, issue, note, page, at FROM connect_feedback WHERE outcome = 'no' ORDER BY at DESC LIMIT 50").all<Row>()).results ?? []).map((r) => ({ assistant: r.assistant, issue: r.issue, note: r.note, page: r.page, at: new Date(num(r.at)).toISOString() }));
+        return { totals, problems };
+      } catch { return { totals: [], problems: [] }; }
+    })(),
+    // GitHub (migration 0016): totals per kind, and who is new since the first (baseline) run.
+    github: await (async () => {
+      try {
+        const totals = ((await db.prepare("SELECT kind, count(*) AS n FROM github_seen GROUP BY kind").all<Row>()).results ?? []).map((r) => [String(r.kind), num(r.n)]);
+        const fresh = ((await db.prepare("SELECT kind, login, first_at FROM github_seen WHERE baseline = 0 ORDER BY first_at DESC LIMIT 50").all<Row>()).results ?? []).map((r) => ({ kind: r.kind, login: r.login, at: new Date(num(r.first_at)).toISOString() }));
+        const days = ((await db.prepare("SELECT day, followers, stars, watchers, forks FROM github_counts ORDER BY day DESC LIMIT 30").all<Row>()).results ?? []).map((r) => ({ day: r.day, followers: num(r.followers), stars: num(r.stars), watchers: num(r.watchers), forks: num(r.forks) }));
+        return { totals: Object.fromEntries(totals), newSinceBaseline: fresh, dailyCounts: days };
+      } catch { return { totals: {}, newSinceBaseline: [], dailyCounts: [] }; }
+    })(),
+    // Names upheld challenges taught the boards (migration 0014): fold the good ones into secrets.md
+    // with tools/check-story/add-aliases.mjs; clue_id is "category|answer".
+    learnedAliases: await (async () => {
+      try { return ((await db.prepare("SELECT story, clue_id, alias, at FROM clue_aliases ORDER BY at DESC LIMIT 100").all<Row>()).results ?? []).map((r) => ({ story: r.story, clue: r.clue_id, alias: r.alias, at: new Date(num(r.at)).toISOString() })); }
+      catch { return []; }
+    })(),
+    // Teams players asked for that Team Trivia doesn't cover (request_team), most asked first.
+    teamRequests: await (async () => {
+      try { return ((await db.prepare("SELECT detail AS team, count(*) AS n, max(at) AS last FROM play_events WHERE kind = 'team_request' GROUP BY detail ORDER BY n DESC, last DESC LIMIT 50").all<Row>()).results ?? []).map((r) => ({ team: r.team, n: num(r.n), last: new Date(num(r.last)).toISOString() })); }
+      catch { return []; }
+    })(),
     submissions: {
       ...subsBy,
       newInWindow: subs.reduce((s, r) => s + num(r.in_window), 0),

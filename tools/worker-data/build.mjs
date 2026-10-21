@@ -21,6 +21,7 @@ import { connectorStory, connectorNotes } from "./connector.mjs";
 import { kindOf, isFamily } from "../check-story/rules.mjs";
 import { compileBranches } from "../check-story/branches.mjs";
 import { compileTrivia } from "../check-story/trivia.mjs";
+import { buildTeams } from "./build-teams.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const field = (fm, key) => {
@@ -44,14 +45,31 @@ const catalogJson = JSON.parse(readFileSync(join(root, "stories", "catalog.json"
 const previewSet = new Set(catalogJson.preview ?? []);
 // "testing": published to everyone, marked as new and being tested (a badge, and a feedback ask).
 const testingSet = new Set(catalogJson.testing ?? []);
-const published = catalogOnly ? new Set([...catalogJson.published, ...previewSet]) : null;
+// "seasonal": {slug: {from: "MM-DD", to: "MM-DD"}} (plan 2026-10-19, item 13): published, but listed and
+// offered only between those dates each year (the Worker checks); outside them it starts by exact name.
+const seasonal = catalogJson.seasonal ?? {};
+// "weekly": {slug: {"2": "YYYY-MM-DD", ...}} (plan 2026-10-19, item 12): a serialized season. Chapter 1 is out
+// when the story is published; each later chapter opens on its date (UTC), and the Worker says when.
+const weekly = catalogJson.weekly ?? {};
+for (const [slug, dates] of Object.entries(weekly)) for (const [ch, d] of Object.entries(dates)) {
+  if (!/^\d+$/.test(ch) || !/^\d{4}-\d{2}-\d{2}$/.test(d)) throw new Error(`catalog.json weekly.${slug}: chapter numbers to YYYY-MM-DD dates`);
+}
+for (const [slug, w] of Object.entries(seasonal)) {
+  if (!/^\d{2}-\d{2}$/.test(w?.from ?? "") || !/^\d{2}-\d{2}$/.test(w?.to ?? "")) throw new Error(`catalog.json seasonal.${slug}: from and to must be MM-DD`);
+}
+const published = catalogOnly ? new Set([...catalogJson.published, ...previewSet, ...Object.keys(seasonal)]) : null;
+// A "testing" story must also be published (2026-10-21: Ballpark was only in "testing", so the
+// production build left it out while dev, which builds every folder, showed it).
+const unpublishedTesting = [...testingSet].filter((s) => !catalogJson.published.includes(s) && !seasonal[s]);
+if (unpublishedTesting.length) throw new Error(`catalog.json: in "testing" but not "published": ${unpublishedTesting.join(", ")}`);
 
 for (const slug of readdirSync(join(root, "stories")).sort()) {
   if (published && !published.has(slug)) continue;
   const dir = join(root, "stories", slug);
   // Every kind but a rules-only game needs its secrets.md; a story folder without one is a draft.
   if (!existsSync(join(dir, "story.md"))) continue;
-  if (!existsSync(join(dir, "secrets.md")) && !/^\s*kind:\s*(game|campaign)\b/m.test(readFileSync(join(dir, "story.md"), "utf8"))) continue;
+  // Team trivia (trivia_source: teams) takes its boards from teams/, so it needs no secrets.md either.
+  if (!existsSync(join(dir, "secrets.md")) && !/^\s*(kind:\s*(game|campaign)\b|trivia_source:\s*teams\b)/m.test(readFileSync(join(dir, "story.md"), "utf8"))) continue;
   const story = readFileSync(join(dir, "story.md"), "utf8").replace(
     /\r\n/g,
     "\n",
@@ -96,6 +114,8 @@ for (const slug of readdirSync(join(root, "stories")).sort()) {
     slug,
     preview: previewSet.has(slug),
     testing: testingSet.has(slug),
+    ...(seasonal[slug] ? { season: { from: seasonal[slug].from, to: seasonal[slug].to } } : {}),
+    ...(weekly[slug] ? { release: weekly[slug] } : {}),
     title: field(fm, "title") || slug,
     genre: field(fm, "genre"),
     tone: field(fm, "tone").toLowerCase(),
@@ -118,7 +138,7 @@ for (const slug of readdirSync(join(root, "stories")).sort()) {
     // Choose-your-path stories: the node graph, served one node at a time by the choose tool.
     branches: kindOf({ kind: field(fm, "kind"), genre: field(fm, "genre") }) === "branching" ? compileBranches(secrets) : null,
     // Trivia boards: categories, values, clues and answers, served one clue at a time.
-    trivia: kindOf({ kind: field(fm, "kind"), genre: field(fm, "genre") }) === "trivia" ? compileTrivia(secrets) : null,
+    trivia: kindOf({ kind: field(fm, "kind"), genre: field(fm, "genre") }) === "trivia" && field(fm, "trivia_source") !== "teams" ? compileTrivia(secrets) : null,
     // Games with a hidden pick (twenty questions, mode b): the server picks one per play.
     picks: [...((/^##\s+Picks\b[^\n]*\n([\s\S]*?)(?=^##\s|(?![\s\S]))/m.exec(secrets) || [, ""])[1].matchAll(/^\s*[-*]\s+(.+)$/gm))].map((m) => m[1].trim()),
   });
@@ -127,6 +147,15 @@ for (const slug of readdirSync(join(root, "stories")).sort()) {
 const outDir = join(root, "worker", "src", "generated");
 mkdirSync(outDir, { recursive: true });
 writeFileSync(join(outDir, "stories.json"), JSON.stringify(stories, null, 2));
+// What's new (stories/whats-new.json): newest first, each {id: "YYYY-MM-DD-slug", line}. Read aloud by
+// open_plot_speaks and shown on the home page. Checked here so a bad entry fails the build, not a play.
+const news = JSON.parse(readFileSync(join(root, "stories", "whats-new.json"), "utf8"));
+if (!Array.isArray(news) || news.some((n) => !/^\d{4}-\d{2}-\d{2}-[a-z0-9-]+$/.test(n.id) || typeof n.line !== "string" || n.line.length < 10 || n.line.length > 220)) throw new Error("stories/whats-new.json: entries need an id like 2026-10-19-name and a line of 10-220 characters");
+if (news.some((n, i) => i && n.id > news[i - 1].id)) throw new Error("stories/whats-new.json: newest first");
+writeFileSync(join(outDir, "news.json"), JSON.stringify(news, null, 2));
+// The sports team database (tools/teams/README.md), for the team-trivia story.
+const teams = buildTeams(root);
+console.log(`wrote worker/src/generated/teams.json: ${teams.length} teams`);
 console.log(
   `wrote worker/src/generated/stories.json: ${stories.map((s) => `${s.slug} (${s.endings.length} endings, ${Object.keys(s.cues).length} cues${s.story_connector.length > 1 ? `, ${s.story_connector.length} chapters` : ""}${s.full_reveal ? ", full reveal" : ""}${s.branches ? `, ${Object.keys(s.branches.nodes).length} nodes` : ""})`).join(", ")}`,
 );

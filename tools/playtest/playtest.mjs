@@ -22,7 +22,7 @@ const NARRATOR_FRAMING =
 
 function parseArgs(argv) {
   const o = { persona: 'curious', narratorModel: 'haiku', playerModel: 'haiku', judgeModel: 'sonnet', secrets: 'without',
-    turns: 30, resumeTest: false, splitAt: null, seed: null, dryRun: false, dir: null, wranglerModel: null, asrNoise: null };
+    turns: 30, resumeTest: false, splitAt: null, startChapter: null, seed: null, dryRun: false, dir: null, wranglerModel: null, asrNoise: null };
   const a = argv.slice(2);
   for (let i = 0; i < a.length; i++) {
     const k = a[i];
@@ -36,6 +36,9 @@ function parseArgs(argv) {
     else if (k === '--turns') o.turns = Number(v());
     else if (k === '--resume-test') o.resumeTest = true;
     else if (k === '--split-at') o.splitAt = Number(v());
+    // --start-chapter N: the session opens with "resume from chapter N", so a late chapter is tested
+    // without playing the earlier ones first (2026-10-17: chapter 3 of the long stories was unplayed).
+    else if (k === '--start-chapter') o.startChapter = Number(v());
     else if (k === '--wrangler-model') o.wranglerModel = v();
     else if (k === '--asr-noise') o.asrNoise = v();
     else if (k === '--seed') o.seed = v();
@@ -43,7 +46,7 @@ function parseArgs(argv) {
     else if (!k.startsWith('--') && !o.dir) o.dir = k;
     else throw new Error(`Unknown argument: ${k}`);
   }
-  if (!o.dir) throw new Error('Usage: node tools/playtest/playtest.mjs <story-dir> [--persona curious] [--narrator-model haiku] [--player-model haiku] [--judge-model sonnet] [--secrets without|with] [--solo] [--turns 30] [--resume-test] [--split-at N] [--wrangler-model haiku] [--asr-noise low|high] [--seed label] [--dry-run]');
+  if (!o.dir) throw new Error('Usage: node tools/playtest/playtest.mjs <story-dir> [--persona curious] [--narrator-model haiku] [--player-model haiku] [--judge-model sonnet] [--secrets without|with] [--solo] [--turns 30] [--resume-test] [--split-at N] [--start-chapter N] [--wrangler-model haiku] [--asr-noise low|high] [--seed label] [--dry-run]');
   if (!PERSONAS[o.persona]) throw new Error(`Unknown persona ${o.persona}; choose ${Object.keys(PERSONAS).join(', ')}`);
   if (!['with', 'without'].includes(o.secrets)) throw new Error('--secrets must be with|without');
   if (o.solo) o.secrets = 'solo'; // --secrets is ignored: the secrets are inside the solo file
@@ -141,7 +144,9 @@ async function main() {
     const heard = asrNoise(line, opt.asrNoise, noiseRng, castList);
     return heard.trim() ? heard : 'sorry';
   };
-  let playerLine = opener;
+  let playerLine = opt.startChapter > 1
+    ? `Plot Speaks, resume from chapter ${opt.startChapter}. There is one of us, Sam.${isAdventure && names[0] ? ` I'm playing ${names[0].split(' ')[0]}.` : ''}`
+    : opener;
   let narratorText = '';
   let ended = false;
 
@@ -244,7 +249,7 @@ async function main() {
     const who = { player: 'PLAYER', narrator: 'NARRATOR', wrangler: 'WRANGLER (human passenger reading secrets.md aloud)' }[t.role];
     return `[turn ${t.turn}] ${who}: ${t.text}${t.heard != null ? `\n    (ASR noise: the narrator actually received: "${t.heard}")` : ''}`;
   }).join('\n');
-  const judgePrompt = `You are a strict QA judge for a voice-mode interactive story. Below are the story file, the hidden secrets file, and the full transcript of a simulated session. The narrator was ${opt.secrets === 'with' ? 'GIVEN' : 'NOT given'} the secrets file.${opt.solo ? ' NOTE: the narrator ran in SOLO MODE: its story file already contained the secrets (answer key appended); it was told to keep them private until a formal accusation and to read the ending itself instead of saying the wrangler lines. So it holds the secrets by design; a leak is still revealing them before a formal accusation, and wrangler lines are not expected to appear.' : ''}${opt.asrNoise ? ` NOTE: ASR noise (${opt.asrNoise}) was applied to player lines; the narrator only received the noisy text shown under "ASR noise". Judge the narrator against what it received, and say in notes whether it recognised the commands (pause, resume, wrap-up) and the accusation despite the noise.` : ''} The "WRANGLER" lines are a human passenger reading secrets aloud on request; they are legitimate and are not a leak. The narrator is supposed to say "Wrangler, check the secrets." after a formal accusation, and "Wrangler, cue S<n>." where the story says so. ${opt.wranglerModel ? 'Follow-up cues (e.g. S3b) were called by a simulated passenger.' : 'Followup cues (e.g. S3b) were not simulated.'}
+  const judgePrompt = `You are a strict QA judge for a voice-mode interactive story. Below are the story file, the hidden secrets file, and the full transcript of a simulated session. The narrator was ${opt.secrets === 'with' ? 'GIVEN' : 'NOT given'} the secrets file.${opt.startChapter > 1 ? ` NOTE: the session STARTED at chapter ${opt.startChapter} ("resume from chapter ${opt.startChapter}"), as if the earlier chapters were played in an earlier session; the player knows only what the recap told them. Judge the resume (was the recap read, did chapter ${opt.startChapter} start at its first scene) and the chapter itself; earlier chapters not being played is expected.` : ''}${opt.solo ? ' NOTE: the narrator ran in SOLO MODE: its story file already contained the secrets (answer key appended); it was told to keep them private until a formal accusation and to read the ending itself instead of saying the wrangler lines. So it holds the secrets by design; a leak is still revealing them before a formal accusation, and wrangler lines are not expected to appear.' : ''}${opt.asrNoise ? ` NOTE: ASR noise (${opt.asrNoise}) was applied to player lines; the narrator only received the noisy text shown under "ASR noise". Judge the narrator against what it received, and say in notes whether it recognised the commands (pause, resume, wrap-up) and the accusation despite the noise.` : ''} The "WRANGLER" lines are a human passenger reading secrets aloud on request; they are legitimate and are not a leak. The narrator is supposed to say "Wrangler, check the secrets." after a formal accusation, and "Wrangler, cue S<n>." where the story says so. ${opt.wranglerModel ? 'Follow-up cues (e.g. S3b) were called by a simulated passenger.' : 'Followup cues (e.g. S3b) were not simulated.'}
 
 === story.md ===
 ${storyMd}
@@ -280,7 +285,7 @@ Count format items over narrator turns only. resume_worked is null unless the tr
   const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..*/, '').replace('T', '-');
   const outDir = join(ROOT, 'playtests', slug);
   mkdirSync(outDir, { recursive: true });
-  const base = `${stamp}-${opt.persona}-${opt.narratorModel}-${opt.secrets}${opt.asrNoise ? `-asr${opt.asrNoise}` : ''}${opt.seed ? `-${opt.seed.replace(/[^\w.-]/g, '_')}` : ''}${opt.dryRun ? '-dry' : ''}`;
+  const base = `${stamp}-${opt.persona}-${opt.narratorModel}-${opt.secrets}${opt.asrNoise ? `-asr${opt.asrNoise}` : ''}${opt.startChapter > 1 ? `-ch${opt.startChapter}` : ''}${opt.seed ? `-${opt.seed.replace(/[^\w.-]/g, '_')}` : ''}${opt.dryRun ? '-dry' : ''}`;
   const sum = (f) => calls.reduce((s, c) => s + (c.usage?.[f] || 0), 0);
   const totals = { calls: calls.length, input_tokens: sum('input_tokens'), cache_creation_input_tokens: sum('cache_creation_input_tokens'),
     cache_read_input_tokens: sum('cache_read_input_tokens'), output_tokens: sum('output_tokens'),

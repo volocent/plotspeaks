@@ -39,6 +39,36 @@ export async function runRetention(db: D1Database | undefined, now = Date.now())
     const cutoff = new Date(now - COUNT_DAYS * DAY).toISOString().slice(0, 10);
     counts.daily_counts = (await db.prepare("DELETE FROM daily_counts WHERE day < ?").bind(cutoff).run()).meta?.changes ?? 0;
   } catch { /* table not there yet */ }
+  // Connect-check notes (migration 0018): the typed note goes at 90 days; the yes/no and the problem stay.
+  try {
+    counts.connect_notes = (await db.prepare("UPDATE connect_feedback SET note = NULL WHERE at < ? AND note IS NOT NULL").bind(old).run()).meta?.changes ?? 0;
+  } catch { /* table not there yet */ }
+  // GitHub totals (migration 0017): as long as the counts.
+  try {
+    const cutoff = new Date(now - COUNT_DAYS * DAY).toISOString().slice(0, 10);
+    counts.github_counts = (await db.prepare("DELETE FROM github_counts WHERE day < ?").bind(cutoff).run()).meta?.changes ?? 0;
+  } catch { /* table not there yet */ }
+  // Watch codes (migration 0021): a day.
+  try {
+    counts.watch_codes = (await db.prepare("DELETE FROM watch_codes WHERE created_at < ?").bind(now - DAY).run()).meta?.changes ?? 0;
+  } catch { /* table not there yet */ }
+  // Shared path codes (migration 0020): thirty days.
+  try {
+    counts.path_codes = (await db.prepare("DELETE FROM path_codes WHERE created_at < ?").bind(now - 30 * DAY).run()).meta?.changes ?? 0;
+  } catch { /* table not there yet */ }
+  // Head-to-head codes (migration 0015): thirty days.
+  try {
+    counts.board_codes = (await db.prepare("DELETE FROM board_codes WHERE created_at < ?").bind(now - 30 * DAY).run()).meta?.changes ?? 0;
+  } catch { /* table not there yet */ }
+  // The daily board's scores (migration 0013): kept as long as the counts.
+  try {
+    const cutoff = new Date(now - COUNT_DAYS * DAY).toISOString().slice(0, 10);
+    counts.daily_scores = (await db.prepare("DELETE FROM daily_scores WHERE day < ?").bind(cutoff).run()).meta?.changes ?? 0;
+  } catch { /* table not there yet */ }
+  // A tester's verdict (migration 0011) is kept; its suggestion is cleared at 90 days like a comment.
+  try {
+    counts.verdict_feedback = (await db.prepare("UPDATE test_verdicts SET feedback = NULL WHERE at < ? AND feedback IS NOT NULL").bind(old).run()).meta?.changes ?? 0;
+  } catch { /* table not there yet */ }
   // Play state (migration 0008): where a choose-your-path play is; goes with its play.
   try {
     counts.play_state = (await db.prepare("DELETE FROM play_state WHERE updated_at < ? OR play_id NOT IN (SELECT id FROM plays)").bind(old).run()).meta?.changes ?? 0;

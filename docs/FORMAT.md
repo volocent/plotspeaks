@@ -127,7 +127,7 @@ Every mystery's wrong-accusation ending offers "one more accusation, or the full
 
 ## Connector version of story.md
 
-`story.md` stays written for paste play (the passenger "wrangler" hand-offs above), and the site serves it as written. `tools/worker-data/build.mjs` (and the Worker, for approved submissions) builds the version `start_story` serves with `tools/worker-data/connector.mjs`: the front matter becomes a one-line header; the accusation hand-off becomes a `check_accusation` call; the solo-play line, the wrangler trust sentences ("the wrangler's line is the truth", "same microphone") and "That one comes later, wrangler" go; "Wrangler, cue S2" and "Narrator, cue S2c" (also in cue notes and the Listen-for table) become `get_cue` calls; the full-reveal offers point at `reveal_solution`. Curly quotes are straightened first. Two-chapter stories are served one chapter at a time, chapter 2 with chapter 1's recap at its top. Any sentence still mentioning the wrangler after the rewrites is dropped, and the build prints it, so write hand-offs in the standard wording above.
+`story.md` stays written for paste play (the passenger "wrangler" hand-offs above), and the site serves it as written. `tools/worker-data/build.mjs` (and the Worker, for approved submissions) builds the version `start_story` serves with `tools/worker-data/connector.mjs`: the front matter becomes a one-line header; the accusation hand-off becomes a `check_accusation` call; the solo-play line, the wrangler trust sentences ("the wrangler's line is the truth", "same microphone") and "That one comes later, wrangler" go; "Wrangler, cue S2" and "Narrator, cue S2c" (also in cue notes and the Listen-for table) become `get_cue` calls; the full-reveal offers point at `reveal_solution`. Curly quotes are straightened first. Stories with two or more chapters are served one chapter at a time: each later chapter carries every earlier chapter's recap and, marked as already played, its places, people and clues, so a return visit matches what the players saw; later chapters stay out. Any sentence still mentioning the wrangler after the rewrites is dropped, and the build prints it, so write hand-offs in the standard wording above.
 
 ## Fair-play checklist (what `review_story` checks or asks the writer's assistant to check)
 
@@ -182,6 +182,8 @@ A board the narrator hosts. The server holds every clue and answer; the narrator
 
 **Answers are checked on the server:** exact after dropping "what is", articles and punctuation; a spelling slip on words of five letters or more; a surname for a two-word name; anything in "Also accept". Numbers are exact. A disputed ruling goes to three different AI models (Workers AI); it flips only when at least two agree.
 
+**Sound words (the one exception to "no sound effects"):** a trivia ruling opens with "Ding!" for a right answer and "Bzzt." for a wrong one, which the host says in its own voice (a voice assistant can't play audio clips). The trivia preface tells the host to drop them if the player asks for "no sounds". Games and stories outside trivia keep the no-sound-effects rule.
+
 **Before a board is published:** three independent agents answer every clue blind; a clue stays only if all three match the key; then a blind player agent plays the whole board, and its hit rate per row sets the difficulty labels.
 
 ## Campaigns (kind: campaign)
@@ -193,3 +195,13 @@ A D&D-style campaign (SRD 5.2.1 only, with the CC BY 4.0 attribution) played ove
 **secrets.md:** optional; truths the narrator must not reveal early go here only if a tool serves them (none does yet), so for now the world seed lives in story.md.
 
 **What the server enforces:** HP between 0 and the maximum; levels up one at a time, 1 to 5; spell slots spent and refilled only by a long rest; items removed only if carried; time never runs backwards; the dead stay dead. Dice are rolled on the server. Resume: a three-word code given at the start.
+
+### Open worlds (kind: campaign, rules_system: none)
+
+An open world is a campaign without D&D rules and without a set ending (Ben, 2026-10-17): a frontier town, a freighter crew, a detective agency, a family archipelago. It runs on the same engine and tools, and the site shelves it with the campaigns as "Open worlds". `rules_system: none`; no SRD attribution or `## Rules digest`. Instead story.md gives the narrator:
+
+- **Plain dice:** one check (usually 1d20 plus a skill bonus of 0 to +5, against a difficulty never said aloud; families use 1d6 with a friendly second try), five or six skills, and how the engine's fields are used (`class` is the role, `hp` is health or grit, `gold` is the world's money, spell slots unused).
+- **A world that moves:** factions with clocks the narrator advances as days pass, recurring people who remember the players, and places with things to do.
+- **Something new on demand:** job, case or "needs help today" tables the narrator draws from whenever the players want one, so a session never runs dry.
+- **Arcs that can end without ending the world:** each long arc says what the world looks like after it resolves, so play goes on.
+- **Sessions, not chapters:** 20 to 45 minutes, ending at a natural stop with a recap, a `world_update` note and the resume code. "Plot Speaks, wrap it up" ends the session cleanly, never the world.

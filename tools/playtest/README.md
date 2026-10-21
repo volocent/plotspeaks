@@ -24,7 +24,7 @@ node tools/playtest/summarize.mjs                                            # t
 node --test tools/playtest/test/lib.test.mjs tools/playtest/test/asr.test.mjs  # unit tests
 ```
 
-Options: `--persona`, `--narrator-model`, `--player-model`, `--judge-model` (default sonnet), `--wrangler-model` (a passenger model that calls follow-up cues), `--secrets without|with`, `--solo`, `--asr-noise low|high` (misheard-speech noise on the player's lines), `--turns` (default 30), `--resume-test`, `--split-at N`, `--seed label`, `--dry-run`. The session also ends on an accepted ending after the wrangler line, or if the player says "Plot Speaks, end the story".
+Options: `--persona`, `--narrator-model`, `--player-model`, `--judge-model` (default sonnet), `--wrangler-model` (a passenger model that calls follow-up cues), `--secrets without|with`, `--solo`, `--asr-noise low|high` (misheard-speech noise on the player's lines), `--turns` (default 30), `--resume-test`, `--split-at N`, `--start-chapter N` (open with "resume from chapter N" to test a late chapter on its own), `--seed label`, `--dry-run`. The session also ends on an accepted ending after the wrangler line, or if the player says "Plot Speaks, end the story".
 
 `--resume-test` starts a NEW narrator conversation (no memory) at "resume from chapter 2" in the narrator's output, or at exchange N, and sends "Plot Speaks, resume from chapter 2." plus a "We found ..." summary written by the player model.
 

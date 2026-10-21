@@ -10,7 +10,7 @@
 
 export const TOOL_NAMES = new Set([
   "open_plot_speaks", "list_stories", "claim_plays", "my_history", "start_story", "choose", "game_board", "game_question", "game_answer", "game_challenge", "roll", "world_recall", "world_update", "check_accusation", "reveal_solution", "get_cue", "rate_story",
-  "write_story", "review_story", "submit_story", "withdraw_submission",
+  "write_story", "review_story", "submit_story", "withdraw_submission", "team_roster", "request_team", "pick_for_me",
 ]);
 
 // MCP methods named in the error tallies; anything else a client sends is "other", so the keys stay few.

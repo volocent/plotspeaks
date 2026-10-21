@@ -95,8 +95,8 @@ test('connectorStory: chapter 1 leaves chapter 2 out; chapter 2 starts from chap
   assert.doesNotMatch(one, /### Scene 2\.1/);
   assert.match(one, /chapter: 2/);
   assert.match(two, /### Scene 2\.1/);
-  assert.doesNotMatch(two, /### Scene 1\.1/);
-  assert.match(two, /## Chapter 1 \(already played\)[\s\S]*"So far: the box\."/);
+  // Earlier chapters stay whole for return visits (2026-10-17), after their recap, marked played.
+  assert.match(two, /## Chapter 1 \(already played\)[\s\S]*"So far: the box\."[\s\S]*### Scene 1\.1[\s\S]*### Scene 2\.1/);
   assert.match(two, /## Endings/);
   const single = connectorStory(STORY.replace('  chapters: 2', '  chapters: 1').replace(/## Chapter 2[\s\S]*?(?=## Endings)/, '')).parts;
   assert.equal(single.length, 1);

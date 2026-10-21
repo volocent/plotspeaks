@@ -33,7 +33,15 @@ const cookie = (req: Request, name: string) => (req.headers.get("cookie") ?? "")
 const setCookie = (name: string, value: string, maxAge: number) => `${name}=${value}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`;
 
 export const signInConfigured = (env: AuthEnv) => Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.SESSION_SECRET && env.DB);
-const safeNext = (next: string | null) => (next && /^\/(?!\/)[\w\-./?=&%#]*$/.test(next) ? next : "/account");
+// Only a path on this same site: parsed as a URL against a placeholder origin, so a query with "+",
+// ":" or "," (an OAuth request's) survives, and "//evil" or "/\evil" can't leave the site.
+const safeNext = (next: string | null) => {
+  if (!next || !next.startsWith("/") || next.startsWith("//") || next.includes("\\")) return "/account";
+  try {
+    const u = new URL(next, "https://same.invalid");
+    return u.origin === "https://same.invalid" ? u.pathname + u.search : "/account";
+  } catch { return "/account"; }
+};
 
 /** Starts Google sign-in. The state, PKCE verifier and return path ride in a short, signed cookie. */
 export async function startSignIn(req: Request, env: AuthEnv): Promise<Response> {
@@ -52,14 +60,18 @@ export async function startSignIn(req: Request, env: AuthEnv): Promise<Response>
 }
 
 /** Google's redirect back: checks the state, swaps the code for an ID token, signs the person in. */
-export async function finishSignIn(req: Request, env: AuthEnv): Promise<Response> {
+// sessionSeconds: how long the sign-in lasts. The site keeps it for SESSION_DAYS; the account
+// connector's host only needs it for the consent page that follows, so a shared computer doesn't stay
+// able to approve new connectors for the person (review 2026-10-17).
+export async function finishSignIn(req: Request, env: AuthEnv, sessionSeconds = SESSION_DAYS * 86400): Promise<Response> {
   if (!signInConfigured(env)) return new Response("Sign-in isn't set up yet.\n", { status: 503 });
   const url = new URL(req.url);
   const flow = cookie(req, FLOW_COOKIE) ?? "";
   const [payload, sig] = flow.split(".");
   const bad = (why: string) => new Response(`Sign-in didn't complete (${why}). Please try again from the site.\n`, { status: 400, headers: { "content-type": "text/plain", "set-cookie": setCookie(FLOW_COOKIE, "", 0) } });
-  if (!payload || !sig || sig !== (await hmac(env.SESSION_SECRET!, payload))) return bad("the sign-in link expired");
-  const f = JSON.parse(new TextDecoder().decode(fromB64url(payload))) as { state: string; verifier: string; next: string; at: number };
+  if (!payload || !sig || !sameText(sig, await hmac(env.SESSION_SECRET!, payload))) return bad("the sign-in link expired");
+  let f: { state: string; verifier: string; next: string; at: number };
+  try { f = JSON.parse(new TextDecoder().decode(fromB64url(payload))); } catch { return bad("the sign-in link expired"); }
   if (f.state !== url.searchParams.get("state") || Date.now() - f.at > 600_000) return bad("the sign-in link expired");
   const code = url.searchParams.get("code");
   if (!code) return bad(url.searchParams.get("error") === "access_denied" ? "you cancelled" : "no code from Google");
@@ -68,30 +80,42 @@ export async function finishSignIn(req: Request, env: AuthEnv): Promise<Response
     body: new URLSearchParams({ code, client_id: env.GOOGLE_CLIENT_ID!, client_secret: env.GOOGLE_CLIENT_SECRET!, redirect_uri: `${url.origin}/auth/google/callback`, grant_type: "authorization_code", code_verifier: f.verifier }),
   });
   if (!tok.ok) return bad("Google refused the sign-in");
-  const idToken = String(((await tok.json()) as { id_token?: string }).id_token ?? "");
   // The ID token came straight from Google's token endpoint over TLS, so its claims can be read
   // without checking the signature (OpenID Connect Core 3.1.3.7); its audience and issuer still are.
-  const claims = JSON.parse(new TextDecoder().decode(fromB64url(idToken.split(".")[1] ?? ""))) as { sub?: string; aud?: string; iss?: string; exp?: number; email?: string; email_verified?: boolean; name?: string };
+  type Claims = { sub?: string; aud?: string; iss?: string; exp?: number; email?: string; email_verified?: boolean; name?: string };
+  let claims: Claims;
+  try {
+    const idToken = String(((await tok.json()) as { id_token?: string }).id_token ?? "");
+    claims = JSON.parse(new TextDecoder().decode(fromB64url(idToken.split(".")[1] ?? ""))) as Claims;
+  } catch { return bad("the sign-in couldn't be verified"); }
   if (!claims.sub || claims.aud !== env.GOOGLE_CLIENT_ID || !/^(https:\/\/)?accounts\.google\.com$/.test(claims.iss ?? "") || (claims.exp ?? 0) * 1000 < Date.now()) return bad("the sign-in couldn't be verified");
-  const user = await upsertUser(env.DB!, claims.sub, claims.email_verified ? claims.email ?? null : null, claims.name ?? null);
-  const session = random(32);
-  await env.DB!.prepare("INSERT INTO sessions (id_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)").bind(await sha256(session), user.id, Date.now(), Date.now() + SESSION_DAYS * 86_400_000).run();
+  let session: string;
+  try {
+    const user = await upsertUser(env.DB!, claims.sub, claims.email_verified ? claims.email ?? null : null, claims.name ?? null);
+    session = random(32);
+    await env.DB!.prepare("INSERT INTO sessions (id_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)").bind(await sha256(session), user.id, Date.now(), Date.now() + sessionSeconds * 1000).run();
+  } catch { return bad("Plot Speaks couldn't save the sign-in just now"); }
   const headers = new Headers({ location: f.next, "cache-control": "no-store" });
-  headers.append("set-cookie", setCookie(SESSION_COOKIE, session, SESSION_DAYS * 86400));
+  headers.append("set-cookie", setCookie(SESSION_COOKIE, session, sessionSeconds));
   headers.append("set-cookie", setCookie(FLOW_COOKIE, "", 0));
   return new Response(null, { status: 302, headers });
 }
 
+// One statement, so two first sign-ins at the same moment can't both insert (google_sub is UNIQUE).
 async function upsertUser(db: D1Database, sub: string, email: string | null, name: string | null): Promise<User> {
   const now = Date.now();
-  const found = await db.prepare("SELECT id FROM users WHERE google_sub = ?").bind(sub).first<{ id: string }>();
-  if (found) {
-    await db.prepare("UPDATE users SET email = ?, name = ?, last_seen_at = ? WHERE id = ?").bind(email, name, now, found.id).run();
-    return { id: found.id, email, name };
-  }
-  const id = random(12);
-  await db.prepare("INSERT INTO users (id, google_sub, email, name, created_at, last_seen_at) VALUES (?, ?, ?, ?, ?, ?)").bind(id, sub, email, name, now, now).run();
-  return { id, email, name };
+  const row = await db.prepare(`INSERT INTO users (id, google_sub, email, name, created_at, last_seen_at) VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(google_sub) DO UPDATE SET email = excluded.email, name = excluded.name, last_seen_at = excluded.last_seen_at RETURNING id`)
+    .bind(random(12), sub, email, name, now, now).first<{ id: string }>();
+  if (!row) throw new Error("user upsert returned nothing");
+  return { id: row.id, email, name };
+}
+// Compares two strings in time that doesn't depend on where they differ.
+function sameText(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let d = 0;
+  for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return d === 0;
 }
 
 /** The signed-in person for a site request, or null. Never throws. */
@@ -115,13 +139,19 @@ export async function signOut(req: Request, env: AuthEnv): Promise<Response> {
   return new Response(null, { status: 303, headers: { location: "/", "set-cookie": setCookie(SESSION_COOKIE, "", 0), "cache-control": "no-store" } });
 }
 
-/** Deletes the account and everything kept for it. Plays already counted stay as anonymous counts. */
+/**
+ * Deletes the account and everything kept for it: history, heard clues, sessions, and the saved
+ * state and resume codes of its plays (a campaign world can hold whatever the players narrated).
+ * The plays themselves stay as anonymous counts. The caller also revokes the connector's grants.
+ */
 export async function deleteAccount(env: AuthEnv, userId: string): Promise<void> {
   const db = env.DB!;
   await db.batch([
     db.prepare("DELETE FROM user_history WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM user_seen WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM sessions WHERE user_id = ?").bind(userId),
+    db.prepare("DELETE FROM campaign_codes WHERE play_id IN (SELECT id FROM plays WHERE user_id = ?)").bind(userId),
+    db.prepare("DELETE FROM play_state WHERE play_id IN (SELECT id FROM plays WHERE user_id = ?)").bind(userId),
     db.prepare("UPDATE plays SET user_id = NULL WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM users WHERE id = ?").bind(userId),
   ]);
@@ -167,10 +197,13 @@ export async function claimPlays(db: D1Database | undefined, userId: string, pla
       const reveal = events.find((e) => e.kind === "reveal");
       const accused = events.find((e) => e.kind === "accusation");
       const outcome = solved ? `solved (${solved.detail})` : ending ? `ending: ${ending.detail}` : reveal?.detail === "gave_up" ? "gave up" : accused ? `accused ${accused.detail}` : null;
-      await db.batch([
+      // The history row is added only if the play really is this person's after the update, so a
+      // play someone else claimed a moment earlier never shows up here.
+      const res = await db.batch([
         db.prepare("UPDATE plays SET user_id = ? WHERE id = ? AND (user_id IS NULL OR user_id = ?)").bind(userId, id, userId),
-        db.prepare("INSERT OR IGNORE INTO user_history (user_id, play_id, story, title, kind, started_at, outcome) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(userId, id, play.story, t.title.slice(0, 120), t.kind, play.started_at, outcome),
+        db.prepare("INSERT OR IGNORE INTO user_history (user_id, play_id, story, title, kind, started_at, outcome) SELECT ?, id, story, ?, ?, started_at, ? FROM plays WHERE id = ? AND user_id = ?").bind(userId, t.title.slice(0, 120), t.kind, outcome, id, userId),
       ]);
+      if (!res[0]?.meta.changes) { skipped++; continue; }
       claimed.push(play.story);
     } catch { skipped++; }
   }

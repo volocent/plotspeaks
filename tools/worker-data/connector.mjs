@@ -200,8 +200,17 @@ export function connectorStory(storyMd) {
       out.push(...lines.slice(cursor, r.i));
       const num = Number(r.chapter);
       if (num === n) out.push(...lines.slice(r.i, r.end));
-      else if (num === n - 1) {
-        out.push(`## Chapter ${num} (already played)`, '', `Chapter ${num} was served by an earlier start_story call. Its recap block, to read aloud first when chapter ${n} begins or on a resume:`, ...recapOf(r));
+      else if (num < n) {
+        // Every earlier chapter is kept whole (2026-10-17): players go back to earlier places, and
+        // without the scene text the narrator invented what they held. Nothing in it is a spoiler
+        // any more; the next chapter stays out.
+        out.push(`## Chapter ${num} (already played)`, '',
+          num === n - 1
+            ? `Chapter ${num} was served by an earlier start_story call. Read its recap block aloud first when chapter ${n} begins or on a resume:`
+            : `Chapter ${num} was played earlier. Its recap block:`,
+          ...recapOf(r), '',
+          `Chapter ${num}'s places, people and clues, kept so a return visit matches what the players saw (don't replay its scenes or re-announce its clues):`,
+          ...lines.slice(r.i + 1, r.end).filter((l, j, a) => !/^###\s+Recap block\b/i.test(l)));
       } else if (num > n) {
         if (num === n + 1) out.push(`## Chapter ${num} (not included here)`, '', `When chapter ${n}'s recap block has been read and the players are ready to go on, or they ask to resume from chapter ${num}, call start_story again with this story's slug, chapter: ${num} and the play id. It returns chapter ${num}, with chapter ${n}'s recap at its top.`, '');
       }

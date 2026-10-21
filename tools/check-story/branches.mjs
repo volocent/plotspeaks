@@ -121,7 +121,8 @@ export function exploreBranches(graph, cap = 20000) {
     reached.add(id);
     if (node.ending) { endings.add(id); continue; }
     const open = offered(node, flags).filter((c) => nodes[c.to]);
-    if (!open.length) deadEnds.push({ id, flags });
+    // A node that, with these flags, offers only puzzle answers shows the player no choices at all.
+    if (!open.some((c) => !c.answer)) deadEnds.push({ id, flags });
     for (const c of open) queue.push({ id: c.to, flags });
   }
   return { reached, endings, deadEnds, truncated };

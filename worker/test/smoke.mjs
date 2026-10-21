@@ -71,7 +71,7 @@ if (openServer) {
 }
 
 // ---------------------------------------------------------------- the tool surface (review S7, S8, B2)
-const EXPECTED_TOOLS = ['open_plot_speaks', 'list_stories', 'claim_plays', 'my_history', 'start_story', 'choose', 'game_board', 'game_question', 'game_answer', 'game_challenge', 'roll', 'world_recall', 'world_update', 'check_accusation', 'reveal_solution', 'get_cue', 'rate_story', 'write_story', 'review_story', 'submit_story', 'withdraw_submission'];
+const EXPECTED_TOOLS = ['open_plot_speaks', 'list_stories', 'claim_plays', 'my_history', 'start_story', 'choose', 'game_board', 'game_question', 'game_answer', 'game_challenge', 'roll', 'world_recall', 'world_update', 'check_accusation', 'reveal_solution', 'get_cue', 'rate_story', 'write_story', 'review_story', 'submit_story', 'withdraw_submission', 'team_roster', 'request_team', 'pick_for_me'];
 const toolList = (await rpc('tools/list', {})).json?.result?.tools ?? [];
 const tools = toolList.map((t) => t.name);
 ok(EXPECTED_TOOLS.every((t) => tools.includes(t)) && tools.length === EXPECTED_TOOLS.length, `tools: ${tools.join(', ')}`);
@@ -197,7 +197,8 @@ const bell1 = await call('start_story', { slug: 'keepers-bell' });
 const bellId = (/Play id: ([0-9a-f-]{36})/.exec(bell1) || [])[1];
 ok(/### Scene 1\.1/.test(bell1) && !/### Scene 2\.1/.test(bell1) && /chapter: 2/.test(bell1), 'S14: a two-chapter story serves chapter 1 only, with how to get chapter 2');
 const bell2 = await call('start_story', { slug: 'keepers-bell', chapter: 2, play_id: bellId });
-ok(/### Scene 2\.1/.test(bell2) && !/### Scene 1\.1/.test(bell2) && /Chapter 1 \(already played\)/.test(bell2) && bell2.includes(`Play id: ${bellId}`), 'S14: chapter 2 has chapter 1\'s recap at its top and keeps the play id');
+// Since 2026-10-17 chapter 2 also carries chapter 1's places (after its recap, marked played).
+ok(/### Scene 2\.1/.test(bell2) && /Chapter 1 \(already played\)[\s\S]*### Scene 1\.1[\s\S]*### Scene 2\.1/.test(bell2) && bell2.includes(`Play id: ${bellId}`), 'S14: chapter 2 carries chapter 1 (recap, then its places, marked played) and keeps the play id');
 const ch3 = await result('start_story', { slug: 'example-dinner-party', chapter: 2 });
 ok(isErr(ch3), 'asking for chapter 2 of a one-chapter story is an error');
 
@@ -208,6 +209,8 @@ for (const s of genStories) {
   const parts = Math.max(1, s.story_connector?.length ?? 1);
   for (let n = 1; n <= parts; n++) {
     const out = await call('start_story', n === 1 ? { slug: s.slug } : { slug: s.slug, chapter: n });
+    // A weekly season's later chapters are held until their date: that answer is right, and has no script.
+    if (/ISN'T OUT YET/.test(out)) continue;
     b1Checked++;
     toolOutputs.push([`start_story ${s.slug} ch${n}`, out]);
     if (/wrangler/i.test(out) || /Narrator,\s*cue/i.test(out) || !/narrator for/.test(out)) { b1Hits++; console.log(`FAIL  start_story ${s.slug} chapter ${n} still has paste-play text (or didn't start)`); }
@@ -281,7 +284,8 @@ if (branchSlug && branchGraph) {
 const triviaList = await call('list_stories', { kind: 'trivia' });
 // Prefer a board whose first clue has one step, so scoring and the challenge refusal are exercised too.
 const listedTrivia = [...triviaList.matchAll(/slug: ([a-z0-9-]+)/g)].map((m) => m[1]);
-const triviaCandidates = genStories.filter((s) => s.trivia && (listedTrivia.includes(s.slug) || s.preview));
+// Text-answer boards only: an estimate board (Ballpark) scores closeness and has its own checks below.
+const triviaCandidates = genStories.filter((s) => s.trivia && !s.trivia.categories.some((c) => c.estimate) && (listedTrivia.includes(s.slug) || s.preview));
 const triviaSlug = (triviaCandidates.find((s) => s.trivia.categories.find((c) => !c.final)?.clues[0]?.steps.length === 1) ?? triviaCandidates[0])?.slug;
 const triviaBoard = genStories.find((s) => s.slug === triviaSlug)?.trivia;
 if (triviaSlug && triviaBoard) {
@@ -301,12 +305,12 @@ if (triviaSlug && triviaBoard) {
   const again = await result('game_question', { slug: triviaSlug, play_id: tPlay, category: 'no such category' });
   ok(isErr(again) && /no category called/.test(again?.content?.[0]?.text ?? ''), 'an unknown category is refused with the list');
   const wrong = await call('game_answer', { slug: triviaSlug, play_id: tPlay, answer: 'zebra quantum pancake', player: 'Smoke' });
-  ok(q.steps.length > 1 ? /^NOT YET/.test(wrong) : /^NOT RIGHT/.test(wrong) && wrong.includes(q.answer), 'a wrong answer is ruled wrong (or gets the next step) and the answer is given after the ruling');
+  ok(q.steps.length > 1 ? /^NOT YET/.test(wrong) : /^Bzzt\. NOT RIGHT/.test(wrong) && wrong.includes(q.answer), 'a wrong answer is ruled wrong (or gets the next step) and the answer is given after the ruling');
   if (q.steps.length === 1) {
     const clue2 = await call('game_question', { slug: triviaSlug, play_id: tPlay, category: cat.name, value: 200 });
     const q2 = dealtFrom(clue2, 200);
     const right = await call('game_answer', { slug: triviaSlug, play_id: tPlay, answer: `what is ${q2.answer}`, player: 'Smoke' });
-    ok(/^CORRECT/.test(right) && new RegExp(`Smoke ${q2.value}`).test(right), 'a right answer scores its value for the named player');
+    ok(/^Ding! CORRECT/.test(right) && new RegExp(`Smoke ${q2.value}`).test(right), 'a right answer scores its value for the named player');
     const noChallenge = await result('game_challenge', { slug: triviaSlug, play_id: tPlay });
     ok(isErr(noChallenge) && /already ruled correct/.test(noChallenge?.content?.[0]?.text ?? ''), 'a correct ruling cannot be challenged');
   }
@@ -534,7 +538,7 @@ const noCover = await fetch(`${base}/covers/no-such-story.jpg`);
 await noCover.arrayBuffer();
 ok(noCover.status === 404, `an unknown cover is 404 (${noCover.status})`);
 
-for (const [method, path] of [['GET', '/admin/submissions'], ['POST', '/admin/cover'], ['POST', '/admin/submissions/abc123/approve']]) {
+for (const [method, path] of [['GET', '/admin/submissions'], ['POST', '/admin/cover'], ['POST', '/admin/github-watch'], ['POST', '/admin/submissions/abc123/approve']]) {
   const r = await fetch(`${base}${path}`, { method, headers: { 'content-type': 'application/json' }, body: method === 'POST' ? '{"slug":"keepers-bell"}' : undefined });
   await r.arrayBuffer();
   ok(r.status === 403 || r.status === 404, `${method} ${path} without the admin key is refused (${r.status})`);
@@ -653,6 +657,170 @@ if (!openServer && key) {
     ok(sj?.pageViews?.crawlers > 0 && sj?.mcp?.testers?.requests > 0 && sj?.mcp?.testers?.calls?.some((c) => c.key === 'start_story'),
       `the tallies count this run (script page views as crawlers: ${sj?.pageViews?.crawlers}; tester MCP requests: ${sj?.mcp?.testers?.requests})`);
     ok(sj?.mcp?.testers?.errors > 0, `deliberate bad calls show as tester MCP errors (${sj?.mcp?.testers?.errors})`);
+  }
+}
+
+// 2026-10-17: your-choice adventures (go back a choice), open worlds (plain words), long form
+// (a later chapter carries every earlier one).
+{
+  const gb = await call('start_story', { slug: 'gamebook-sky-pirates' });
+  const gbId = (/Play id: ([0-9a-f-]{36})/.exec(gb) || [])[1];
+  ok(Boolean(gbId) && /CHOICES/.test(gb), 'a your-choice adventure starts with its choices');
+  const moved = await call('choose', { slug: 'gamebook-sky-pirates', play_id: gbId, choice: '1' });
+  ok(/READ ALOUD/.test(moved), 'choose moves a your-choice adventure on');
+  const back = await call('choose', { slug: 'gamebook-sky-pirates', play_id: gbId, go_back: true });
+  ok(/BACK ONE CHOICE/.test(back) && /CHOICES/.test(back), 'choose with go_back returns to the last choice');
+  const again = await call('choose', { slug: 'gamebook-sky-pirates', play_id: gbId, go_back: true });
+  ok(/very first choice/.test(again), 'go_back at the opening says so');
+  const ow = await call('start_story', { slug: 'openworld-long-haul', new_campaign: true });
+  const owId = (/Play id: ([0-9a-f-]{36})/.exec(ow) || [])[1];
+  ok(Boolean(owId) && /RESUME CODE/.test(ow), 'an open world starts with a resume code');
+  await call('world_update', { slug: 'openworld-long-haul', play_id: owId, party: [{ name: 'Smoke Tester', class: 'Pilot', max_hp: 10 }] });
+  const hurt = await call('world_update', { slug: 'openworld-long-haul', play_id: owId, party: [{ name: 'Smoke Tester', damage: 10 }] });
+  ok(/health/.test(hurt) && !/death saves/.test(hurt) && !/\bgp\b/.test(hurt), 'an open world reads health, never HP or death saves');
+  const ch3 = await call('start_story', { slug: 'snowbound-lodge', chapter: 3 });
+  ok(/## Chapter 1 \(already played\)/.test(ch3) && /## Chapter 2 \(already played\)/.test(ch3), 'chapter 3 of a long mystery carries chapters 1 and 2');
+  const list = await call('list_stories', { kind: 'branching' });
+  ok(/your-choice adventure/.test(list), 'list_stories names your-choice adventures');
+  const storiesPage = await (await fetch(`${base}/stories`)).text();
+  ok(/Your-choice adventures/.test(storiesPage), '/stories has the Your-choice adventures shelf');
+  const gamesPage = await (await fetch(`${base}/games`)).text();
+  ok(/Open worlds/.test(gamesPage), '/games has the Open worlds shelf');
+  // Quick fire in trivia (Julia's feedback, 2026-10-19): the host asks which way to play; "random"
+  // deals any unplayed clue, and each ruling carries the tally and the next question.
+  const tg = await call('start_story', { slug: 'trivia-general' });
+  const tgId = (/Play id: ([0-9a-f-]{36})/.exec(tg) || [])[1];
+  ok(/MODE: before the first question/.test(tg), 'a trivia game asks which way to play (board or quick fire)');
+  const qf1 = await call('game_question', { slug: 'trivia-general', play_id: tgId, category: 'random' });
+  ok(/^QUESTION 1/.test(qf1), 'quick fire deals a random question');
+  const qf2 = await call('game_answer', { slug: 'trivia-general', play_id: tgId, answer: 'smoke test', player: 'Smoke' });
+  ok(/^(Ding! CORRECT|Bzzt\. NOT QUITE)/.test(qf2) && /TALLY/.test(qf2) && /QUESTION 2/.test(qf2), 'quick fire: a ruling carries the tally and the next question');
+  // What's new on open (plan 2026-10-19, item 6): an anonymous caller hears the newest line.
+  const opened2 = await call('open_plot_speaks', { skip_intro: true });
+  ok(/WHAT'S NEW/.test(opened2), 'open_plot_speaks carries a what\'s-new line');
+  const home = await (await fetch(`${base}/`)).text();
+  ok(/What&#39;s new\.|What's new\./.test(home), 'the home page shows what\'s new');
+
+  // The daily board (plan 2026-10-19, item 4): "daily" resolves to today's board with a shared deal.
+  const d1 = await call('start_story', { slug: 'daily' });
+  const d2 = await call('start_story', { slug: "today's board" });
+  const dSlug = (t) => (/Story slug: ([a-z0-9-]+)/.exec(t) || [])[1];
+  ok(/TODAY'S BOARD \(\d{4}-\d{2}-\d{2}\)/.test(d1) && dSlug(d1) && dSlug(d1) === dSlug(d2), 'start_story "daily" starts today\'s board, the same board twice');
+  const dId1 = (/Play id: ([0-9a-f-]{36})/.exec(d1) || [])[1], dId2 = (/Play id: ([0-9a-f-]{36})/.exec(d2) || [])[1];
+  const dCat = (/^- ([^:]+):/m.exec(d1.split('LEFT ON THE BOARD')[1] || '') || [])[1];
+  const dq1 = await call('game_question', { slug: dSlug(d1), play_id: dId1, category: dCat, value: 100 });
+  const dq2 = await call('game_question', { slug: dSlug(d2), play_id: dId2, category: dCat, value: 100 });
+  ok(dq1.split('\n')[1] && dq1.split('\n')[1] === dq2.split('\n')[1], 'two plays of today\'s board deal the same clue');
+  const games = await (await fetch(`${base}/games`)).text();
+  ok(/Today&#39;s board\.|Today's board\./.test(games), 'the games page describes today\'s board');
+
+  // "Did it connect?" (2026-10-20): the feedback endpoint refuses a malformed answer (nothing is stored).
+  const cfBad = await fetch(`${base}/api/connect-feedback`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ assistant: 'nobody', outcome: 'maybe' }) });
+  ok(cfBad.status === 400, `the connect check refuses a malformed answer (${cfBad.status})`);
+  const homeCheck = await (await fetch(`${base}/`)).text();
+  ok(/id="conn-check"/.test(homeCheck) && /Did it connect?/.test(homeCheck), 'the home page carries the Did it connect? box');
+
+  // Pick for me (plan 2026-10-19, item 14): one suggestion, and never an adult story for children.
+  const pk = await call('pick_for_me', { mood: 'a spooky mystery', minutes: 40 });
+  ok(/^PICK/.test(pk) && /start_story with slug [a-z0-9-]+/.test(pk), 'pick_for_me offers one story with its slug');
+  const pkKids = await call('pick_for_me', { mood: 'something fun', all_ages: true });
+  const kidSlug = (/start_story with slug ([a-z0-9-]+)/.exec(pkKids) || [])[1];
+  const kidStory = genStories.find((s) => s.slug === kidSlug);
+  ok(Boolean(kidStory) && !/rating:s*(PG-13|R)/.test(kidStory.story), `pick_for_me for all ages picks nothing rated PG-13 or R (${kidSlug})`);
+
+  // Watch the board (plan 2026-10-19, item 18): a trivia start carries a watch code; the view never shows an answer early.
+  const wStart = await call('start_story', { slug: 'trivia-general' });
+  const wCode = (/WATCH CODE: "([a-z]+ [a-z]+)"/.exec(wStart) || [])[1];
+  ok(Boolean(wCode), 'a trivia game starts with a watch code');
+  if (wCode) {
+    const wv = await (await fetch(`${base}/api/play/${wCode.replace(' ', '-')}`)).text();
+    const tgBoard = genStories.find((s) => s.slug === 'trivia-general')?.trivia;
+    const leaked = (tgBoard?.categories ?? []).flatMap((c) => c.clues.map((q) => q.answer)).filter((a) => a.length > 4).some((a) => wv.includes(`"${a}"`));
+    ok(/"categories"/.test(wv) && !leaked, 'the watch view shows the board and no answer before a ruling');
+  }
+  ok((await fetch(`${base}/api/play/nope-never`)).status === 404, 'an unknown watch code is 404');
+
+  // Your path (plan 2026-10-19, item 10): an unknown path code is refused plainly.
+  const pathBad = await call('start_story', { slug: 'versus', path_code: 'nope never ever' });
+  ok(/No path has the code/.test(pathBad), 'an unknown path code is refused');
+
+  // Head-to-head (plan 2026-10-19, item 7): an unknown code is refused plainly. (The full round trip,
+  // a board played out twice, is too long for the smoke test; it was probed on dev.)
+  const vsBad = await call('start_story', { slug: 'versus', versus_code: 'nope never ever' });
+  ok(/No finished board has the code/.test(vsBad), 'an unknown head-to-head code is refused');
+
+  // Estimate questions (plan 2026-10-19, item 3): Ballpark scores a number by closeness.
+  const bpBoard = genStories.find((s) => s.slug === 'ballpark')?.trivia;
+  if (bpBoard) {
+    const bp = await call('start_story', { slug: 'ballpark' });
+    const bpId = (/Play id: ([0-9a-f-]{36})/.exec(bp) || [])[1];
+    const bpCat = bpBoard.categories.find((c) => c.estimate);
+    const bpQ = await call('game_question', { slug: 'ballpark', play_id: bpId, category: bpCat.name, value: 100 });
+    const dealt = bpCat.clues.find((c) => c.value === 100 && bpQ.includes(c.steps[0]));
+    ok(Boolean(dealt), 'an estimate clue is read out (Ballpark)');
+    const noNum = await call('game_answer', { slug: 'ballpark', play_id: bpId, answer: 'no idea', player: 'Smoke' });
+    ok(/needs a number/.test(noNum), 'an answer with no number is asked for again');
+    const exact = await call('game_answer', { slug: 'ballpark', play_id: bpId, answer: `about ${dealt.num}`, player: 'Smoke' });
+    ok(/^Ding! EXACTLY RIGHT/.test(exact) && /Smoke scores 100/.test(exact), 'an exact estimate scores full points');
+    const bpQ2 = await call('game_question', { slug: 'ballpark', play_id: bpId, category: bpCat.name, value: 200 });
+    const far = await call('game_answer', { slug: 'ballpark', play_id: bpId, answer: 'one', player: 'Smoke' });
+    ok(/^Bzzt\. FAR OFF/.test(far) && /No points/.test(far), 'a far-off estimate scores nothing');
+    const noChal = await result('game_challenge', { slug: 'ballpark', play_id: bpId });
+    ok(isErr(noChal), 'an estimate cannot be challenged');
+  } else console.log('SKIP  estimate checks (ballpark is not built)');
+
+  // Sized to the drive, and a streak (plan 2026-10-19, items 1 and 2).
+  const ten = await call('start_story', { slug: 'trivia-general', minutes: 10 });
+  const tenId = (/Play id: ([0-9a-f-]{36})/.exec(ten) || [])[1];
+  ok(/SIZED FOR 10 MINUTES: quick fire of 12/.test(ten) && /QUESTION 1 of 12/.test(ten), 'start_story with minutes 10 deals a quick fire of 12 and the first question');
+  const tenA = await call('game_answer', { slug: 'trivia-general', play_id: tenId, answer: 'smoke test', player: 'Smoke' });
+  ok(/QUESTION 2 of 12/.test(tenA), 'a sized quick fire counts questions against its cap');
+  const twenty = await call('start_story', { slug: 'trivia-general', minutes: 22 });
+  ok(/SIZED FOR 22 MINUTES: four categories/.test(twenty), 'start_story with minutes 22 keeps four categories');
+  const sk = await call('start_story', { slug: 'trivia-general' });
+  const skId = (/Play id: ([0-9a-f-]{36})/.exec(sk) || [])[1];
+  const sk1 = await call('game_question', { slug: 'trivia-general', play_id: skId, category: 'streak' });
+  ok(/^QUESTION 1/.test(sk1), 'a streak starts with a question');
+  const sk2 = await call('game_answer', { slug: 'trivia-general', play_id: skId, answer: 'zebra quantum pancake', player: 'Smoke' });
+  ok(/STREAK OVER at 0 in a row/.test(sk2), 'a streak ends on the first miss with its count');
+  const sk3 = await result('game_question', { slug: 'trivia-general', play_id: skId, category: 'next' });
+  ok(isErr(sk3) && /streak is over/.test(sk3?.content?.[0]?.text ?? ''), 'nothing more is dealt after a streak ends');
+
+  // Team Trivia (Ben, 2026-10-19): name a team, get its board, tagline and roster; a team we don't cover
+  // can be requested.
+  const ttNone = await call('start_story', { slug: 'team-trivia' });
+  ok(/NO TEAM YET/.test(ttNone), 'team trivia asks which team when none is named');
+  const ttMany = await call('start_story', { slug: 'team-trivia', team: 'Rangers' });
+  ok(/Several teams fit/.test(ttMany), 'team trivia asks which team when the name fits several (Rangers)');
+  const ttNo = await call('start_story', { slug: 'team-trivia', team: 'Springfield Isotopes' });
+  ok(/isn't in the Team Trivia database/.test(ttNo), 'team trivia says plainly when a team is not covered');
+  const tt = await call('start_story', { slug: 'team-trivia', team: 'Yankees' });
+  const ttId = (/Play id: ([0-9a-f-]{36})/.exec(tt) || [])[1];
+  ok(Boolean(ttId) && /THE TEAM: New York Yankees/.test(tt) && /Nickname/.test(tt) && /Tagline/.test(tt) && /## The board/.test(tt), 'team trivia starts a board with the team, its nickname and tagline');
+  const ttQ = await call('game_question', { slug: 'team-trivia', play_id: ttId, category: 'Then', value: 100 });
+  ok(/^CLUE/.test(ttQ), 'a team board deals a clue from its own database');
+  const ttA = await call('game_answer', { slug: 'team-trivia', play_id: ttId, answer: 'smoke test', player: 'Smoke' });
+  ok(/LEFT:/.test(ttA) && /CLUE \(Then for 200/.test(ttA), 'a ruling on a team board lists what is left and carries the next clue in the same category');
+  // Stay in the category: "same" plays the next value (Then 100 was played, so Then 200).
+  const ttSame = await call('game_question', { slug: 'team-trivia', play_id: ttId, category: 'same' });
+  ok(/already open/.test(ttSame), 'on a board, "same" repeats the clue already carried by the ruling');
+  const tRival = await call('start_story', { slug: 'team-trivia', team: 'Yankees vs Red Sox' });
+  ok(/RIVALRY: New York Yankees against Boston Red Sox/.test(tRival) && /- Red Sox Then:/.test(tRival), 'team trivia plays a rivalry board for "Yankees vs Red Sox"');
+  const ttQuick = await call('game_question', { slug: 'team-trivia', play_id: ttId, category: 'random' });
+  ok(/^(QUESTION|That question is still open)/.test(ttQuick), 'a team board plays quick fire too');
+  const roster = await call('team_roster', { team: 'Liverpool' });
+  ok(/^ROSTER: Liverpool/.test(roster) || /ESPN|fetched/.test(roster), 'team_roster reads the roster from ESPN (or says it could not)');
+  ok(isErr(await result('team_roster', { team: 'Springfield Isotopes' })), 'team_roster refuses a team that is not covered');
+  if (!openServer) {
+    const req = await call('request_team', { team: 'Springfield Isotopes (smoke test)' });
+    ok(/^Request recorded/.test(req), 'request_team records a request for a team that is not covered');
+  }
+  // A tester's verdict on a story being tested (migration 0011): a verdict alone is enough.
+  const noArgs = await result('rate_story', { slug: 'gamebook-sky-pirates', play_id: gbId });
+  ok(isErr(noArgs), 'rate_story needs stars or a verdict');
+  if (!openServer) {
+    const v = await call('rate_story', { slug: 'gamebook-sky-pirates', play_id: gbId, verdict: 'needs_work', feedback: 'smoke test' });
+    ok(/marked as needing work/.test(v), 'rate_story takes a verdict without stars');
   }
 }
 

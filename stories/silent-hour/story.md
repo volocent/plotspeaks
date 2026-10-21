@@ -21,9 +21,9 @@ metadata:
 
 # The Silent Hour
 
-**Read aloud (cold open, beat 1):** January 1928: the Sanatorium Altwand, high above the village of Grisach, where the air is supposed to heal you. At four this afternoon an avalanche buried the only road and the funicular's lower track, and took the telephone line with it.
+**Read aloud (cold open, beat 1):** January 1928, the Sanatorium Altwand above Grisach. At four this afternoon an avalanche buried the only road, the funicular's lower track and the telephone line.
 
-**Read aloud (cold open, beat 2):** You were a police inspector once; now you're a patient, sleeping out on the covered sun terrace for the cure. At about twenty to twelve you woke and saw two shadows on the X-ray room's frosted window, one standing straight against the plate stand.
+**Read aloud (cold open, beat 2):** Once a police inspector, now a patient, you sleep out on the sun terrace. At about twenty to twelve you saw two shadows on the X-ray room's frosted window, one standing straight against the plate stand.
 
 **Read aloud (cold open, beat 3):** At about twenty past twelve, a lantern went from the east end of the house down to the funicular station. At twenty to one, Sister Zurbriggen shakes you awake: Dr. Tobler is dead in the X-ray room. Will you come?
 

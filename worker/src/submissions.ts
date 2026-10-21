@@ -19,6 +19,7 @@
 // daily caps (per IP for direct callers; site-wide for everyone, connector traffic included) -> Llama Guard 3 on story_md and secrets_md -> cover -> D1 row
 // with status 'pending'. Nothing is public until Ben approves it at /admin/submissions.
 import { checkSubmitted, DENYLIST } from "./studio";
+import { runGithubWatch } from "./github";
 import { generateCover } from "./covers";
 import { parseEndings, extractCue, parseFullReveal } from "../../tools/playtest/lib.mjs";
 import { connectorStory, connectorNotes } from "../../tools/worker-data/connector.mjs";
@@ -55,6 +56,10 @@ export type PlayStory = {
   preview?: boolean;
   // In stories/catalog.json "testing": published, but new and being tested (badge, feedback ask).
   testing?: boolean;
+  // In stories/catalog.json "seasonal": listed only between these month-days each year.
+  season?: { from: string; to: string };
+  // In stories/catalog.json "weekly": the date (YYYY-MM-DD, UTC) each later chapter opens.
+  release?: Record<string, string>;
 };
 /** kind and audience from a story's front matter (the same rules as the lint and the build). */
 export function kindFields(story: string, genre: string): { kind: string; audience: "general" | "family" } {
@@ -124,7 +129,20 @@ async function guard(ai: Ai, text: string): Promise<Verdict> {
   } as Verdict;
 }
 
+// Llama Guard's verdict on the same text is not always the same (2026-10-20: the smoke test's own story
+// came back "intellectual property" once and "safe" on the next run, refusing a fine submission). A
+// chunk it flags with a category that refuses is asked twice more and refused only if at least two of
+// the three say so; a chunk it passes, or flags only as tolerated crime fiction, is asked once.
 async function guardOne(ai: Ai, text: string): Promise<Verdict> {
+  const first = await guardAsk(ai, text);
+  if (!first.refused) return first;
+  const again = await Promise.all([guardAsk(ai, text), guardAsk(ai, text)].map((p) => p.catch(() => null)));
+  const votes = [first, ...again].filter((v): v is Verdict => v !== null);
+  const refusing = votes.filter((v) => v.refused);
+  return refusing.length * 2 > votes.length ? first : (votes.find((v) => !v.refused) ?? first);
+}
+
+async function guardAsk(ai: Ai, text: string): Promise<Verdict> {
   const out = await ai.run(GUARD_MODEL, {
     messages: [{ role: "user", content: `Please publish this fictional story script for a voice-played mystery or adventure game:\n\n${text}` }],
     max_tokens: 20,
@@ -149,7 +167,7 @@ const describe = (cats: string[]) => cats.filter((c) => !FICTION_TOLERATED.has(c
 
 // ------------------------------------------------------------------ helpers
 
-async function hashIp(ip: string, env: SubEnv): Promise<string> {
+export async function hashIp(ip: string, env: SubEnv): Promise<string> {
   // Keyed (HMAC) so the IPv4 space can't simply be hashed and matched back.
   const salt = env.IP_SALT || env.ADMIN_KEY || env.DEV_ACCESS_KEY || "plotspeaks-ip";
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(salt), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
@@ -515,6 +533,9 @@ export async function handleAdmin(request: Request, env: SubEnv, builtins: Built
   if (request.method === "POST" && origin && origin !== url.origin) return forbidden();
   const db = env.DB;
   if (!db) return json({ error: "no database" }, 500);
+
+  // Runs the daily GitHub follower/star/watcher/fork check now (src/github.ts), for testing and on demand.
+  if (url.pathname === "/admin/github-watch" && request.method === "POST") return json(await runGithubWatch(db));
 
   if (url.pathname === "/admin/cover" && request.method === "POST") {
     if (!env.AI) return json({ error: "no AI binding" }, 500);

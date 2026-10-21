@@ -20,11 +20,11 @@ metadata:
 
 # The Last Ferry
 
-**Read aloud (cold open, beat 1):** You're sitting in your car on the car deck of the Kittiwake, the last ferry of the night across the foggy Sallow estuary. The crossing from Greyhallow to Penmarrow takes forty minutes, and every two minutes the fog horn gives one long, low blast.
+**Read aloud (cold open, beat 1):** You're in your car on the deck of the Kittiwake, the last ferry across the foggy Sallow estuary. It's forty minutes from Greyhallow to Penmarrow, and the fog horn sounds every two minutes.
 
 **Read aloud (cold open, beat 2):** Around ten past, you watched the young deckhand tell off the lorry driver beside the cab until the horn came back. The lorry hid the blue hatchback from you the whole time.
 
-**Read aloud (cold open, beat 3):** Twenty minutes out, that same deckhand knocks on your window, pale as the fog. A passenger lies dead in the lounge, and whoever did it is still aboard. The captain can't turn back and wants you, the only investigator here — where do you start?
+**Read aloud (cold open, beat 3):** Twenty minutes out, that deckhand knocks on your window, pale as the fog. A passenger lies dead in the lounge, whoever did it is still aboard, and you're the only investigator here. Where do you start?
 
 ## How to run this (GM instructions)
 

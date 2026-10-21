@@ -46,7 +46,9 @@ export function checkStoryDir(dir, denylist) {
     for (const f of checkStoryText(story, { slug, denylist })) findings.push({ file: 'story.md', ...f });
     // A game the narrator runs from its rules alone (twenty questions, story improv) may have no secrets.md.
     const fm0 = parseFrontMatter(story);
-    if (secrets || !(fm0.ok && ['game', 'campaign'].includes(kindOf(fm0.metadata)))) findings.push(...checkSecretsFile(dir));
+    // Team trivia (metadata.trivia_source: teams) takes its boards from teams/, not secrets.md.
+    const teamsBoard = fm0.ok && fm0.metadata.trivia_source === 'teams';
+    if (secrets || !(fm0.ok && (['game', 'campaign'].includes(kindOf(fm0.metadata)) || teamsBoard))) findings.push(...checkSecretsFile(dir));
     if (secrets) {
       for (const f of [...checkAudioCues(secrets), ...checkDenylist(secrets, denylist), ...checkReadAloud(secrets)]) findings.push({ file: 'secrets.md', ...f });
     }
@@ -56,7 +58,7 @@ export function checkStoryDir(dir, denylist) {
     const fm = parseFrontMatter(story);
     if (secrets && fm.ok && kindOf(fm.metadata) === 'mystery') findings.push(...checkFullReveal(secrets, { genre: fm.metadata.genre }));
     if (fm.ok && kindOf(fm.metadata) === 'branching') findings.push(...checkBranches(secrets));
-    if (fm.ok && kindOf(fm.metadata) === 'trivia') findings.push(...checkTrivia(secrets));
+    if (fm.ok && kindOf(fm.metadata) === 'trivia' && fm.metadata.trivia_source !== 'teams') findings.push(...checkTrivia(secrets));
   }
   const errors = findings.filter((f) => f.severity === 'ERROR').length;
   const warnings = findings.filter((f) => f.severity === 'WARN').length;

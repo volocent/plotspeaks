@@ -1,0 +1,142 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 900" width="1280" height="900" font-family="Segoe UI, Helvetica, Arial, sans-serif" role="img" aria-labelledby="t d">
+<title id="t">Plot Speaks technical design</title><desc id="d">Players talk to their own AI assistant. The assistant calls the Plot Speaks MCP server, a Cloudflare Worker that holds every answer key and runs the game engines, with D1, KV, Workers AI and static assets behind it. Stories are linted and built into the Worker; the public repository holds the stories without their answer keys.</desc>
+<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#0B2643"/></marker></defs>
+<rect width="1280" height="900" fill="#FBF8F3"/>
+<text x="40" y="52" font-size="28" font-weight="800" fill="#14233D" text-anchor="start">Plot Speaks: how it works</text>
+<text x="40" y="78" font-size="14.5" font-weight="400" fill="#4B5B73" text-anchor="start">Voice games and stories played with your own AI assistant. The assistant narrates; the server keeps every answer.</text>
+<rect x="40" y="110" width="250" height="470" rx="14" fill="#EEF3F9" stroke="#C9D2DE" stroke-width="1.5"/>
+<text x="58" y="138" font-size="16" font-weight="800" fill="#14233D" text-anchor="start">1. Players</text>
+<text x="58" y="160" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">In the car, by voice</text>
+<rect x="58" y="180" width="214" height="64" rx="14" fill="#FFFFFF" stroke="#C9D2DE" stroke-width="1.5"/>
+<text x="72" y="206" font-size="15" font-weight="700" fill="#14233D" text-anchor="start">Claude</text>
+<text x="72" y="226" font-size="12" font-weight="400" fill="#4B5B73" text-anchor="start">connector · OAuth + Google</text>
+<rect x="58" y="258" width="214" height="64" rx="14" fill="#FFFFFF" stroke="#C9D2DE" stroke-width="1.5"/>
+<text x="72" y="284" font-size="15" font-weight="700" fill="#14233D" text-anchor="start">ChatGPT</text>
+<text x="72" y="304" font-size="12" font-weight="400" fill="#4B5B73" text-anchor="start">connector, or paste a story</text>
+<rect x="58" y="336" width="214" height="64" rx="14" fill="#FFFFFF" stroke="#C9D2DE" stroke-width="1.5"/>
+<text x="72" y="362" font-size="15" font-weight="700" fill="#14233D" text-anchor="start">Gemini</text>
+<text x="72" y="382" font-size="12" font-weight="400" fill="#4B5B73" text-anchor="start">custom app (US, personal)</text>
+<rect x="58" y="414" width="214" height="64" rx="14" fill="#FFFFFF" stroke="#F28C38" stroke-width="1.5" stroke-dasharray="6 5"/>
+<text x="72" y="440" font-size="15" font-weight="700" fill="#14233D" text-anchor="start">Alexa+</text>
+<text x="72" y="460" font-size="12" font-weight="400" fill="#4B5B73" text-anchor="start">MCP add-on (planned)</text>
+<rect x="58" y="492" width="214" height="64" rx="14" fill="#FFFFFF" stroke="#C9D2DE" stroke-width="1.5"/>
+<text x="72" y="518" font-size="15" font-weight="700" fill="#14233D" text-anchor="start">Others</text>
+<text x="72" y="538" font-size="12" font-weight="400" fill="#4B5B73" text-anchor="start">Vibe, Perplexity, Grok</text>
+<text x="165" y="572" font-size="12" font-weight="400" fill="#4B5B73" text-anchor="middle" font-style="italic">Your own assistant and plan</text>
+<path d="M290 345 L345 345" stroke="#0B2643" stroke-width="2" fill="none" marker-end="url(#ah)"/>
+<text x="318" y="325" font-size="11.5" font-weight="400" fill="#4B5B73" text-anchor="middle">MCP</text>
+<text x="318" y="370" font-size="11.5" font-weight="400" fill="#4B5B73" text-anchor="middle">HTTPS</text>
+<rect x="345" y="110" width="600" height="470" rx="18" fill="#FFFFFF" stroke="#0B2643" stroke-width="2.5"/>
+<rect x="345" y="110" width="600" height="40" rx="18" fill="#0B2643"/><rect x="345" y="130" width="600" height="20" fill="#0B2643"/>
+<text x="362" y="137" font-size="16" font-weight="800" fill="#FFFFFF" text-anchor="start">2. One Cloudflare Worker (TypeScript)</text>
+<text x="930" y="137" font-size="12.5" font-weight="700" fill="#F28C38" text-anchor="end">secrets stay here</text>
+<text x="362" y="176" font-size="13" font-weight="700" fill="#4B5B73" text-anchor="start">Front doors</text>
+<rect x="362" y="184" width="180" height="92" rx="14" fill="#FFFFFF" stroke="#C9D2DE" stroke-width="1.5"/>
+<text x="376" y="208" font-size="14.5" font-weight="700" fill="#14233D" text-anchor="start">/mcp</text>
+<text x="376" y="229" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">Open connector</text>
+<text x="376" y="246" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">one rate-limit rule</text>
+<text x="376" y="263" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">no sign-in</text>
+<rect x="552" y="184" width="180" height="92" rx="14" fill="#FFFFFF" stroke="#C9D2DE" stroke-width="1.5"/>
+<text x="566" y="208" font-size="14.5" font-weight="700" fill="#14233D" text-anchor="start">account host /mcp</text>
+<text x="566" y="229" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">OAuth 2.1 + Google</text>
+<text x="566" y="246" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">saved progress, history</text>
+<text x="566" y="263" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">unseen clues</text>
+<rect x="742" y="184" width="186" height="92" rx="14" fill="#FFFFFF" stroke="#C9D2DE" stroke-width="1.5"/>
+<text x="756" y="208" font-size="14.5" font-weight="700" fill="#14233D" text-anchor="start">Website + admin</text>
+<text x="756" y="229" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">stories, games, how it works</text>
+<text x="756" y="246" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">account page, review queue</text>
+<text x="756" y="263" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">key-gated /admin</text>
+<text x="362" y="304" font-size="13" font-weight="700" fill="#4B5B73" text-anchor="start">MCP tools</text>
+<rect x="362" y="312" width="566" height="58" rx="14" fill="#EEF3F9" stroke="#C9D2DE" stroke-width="1.5"/>
+<text x="376" y="335" font-size="12.2" font-weight="400" fill="#14233D" text-anchor="start">open_plot_speaks · list_stories · start_story · choose · game_question / answer / challenge</text>
+<text x="376" y="353" font-size="12.2" font-weight="400" fill="#14233D" text-anchor="start">check_accusation · reveal_solution · get_cue · world_update · roll · team_roster · rate_story</text>
+<text x="362" y="398" font-size="13" font-weight="700" fill="#4B5B73" text-anchor="start">Game engines (the server decides; the narrator reads)</text>
+<rect x="362" y="406" width="136" height="86" rx="14" fill="#FFFFFF" stroke="#C9D2DE" stroke-width="1.5"/>
+<text x="376" y="430" font-size="14.5" font-weight="700" fill="#14233D" text-anchor="start">Mysteries</text>
+<text x="376" y="451" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">accusation check,</text>
+<text x="376" y="468" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">one verdict line,</text>
+<text x="376" y="485" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">full reveal</text>
+<rect x="504" y="406" width="136" height="86" rx="14" fill="#FFFFFF" stroke="#C9D2DE" stroke-width="1.5"/>
+<text x="518" y="430" font-size="14.5" font-weight="700" fill="#14233D" text-anchor="start">Gamebooks</text>
+<text x="518" y="451" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">choice graph,</text>
+<text x="518" y="468" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">matcher, go back,</text>
+<text x="518" y="485" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">endings</text>
+<rect x="646" y="406" width="136" height="86" rx="14" fill="#FFFFFF" stroke="#C9D2DE" stroke-width="1.5"/>
+<text x="660" y="430" font-size="14.5" font-weight="700" fill="#14233D" text-anchor="start">Trivia</text>
+<text x="660" y="451" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">boards, quick fire,</text>
+<text x="660" y="468" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">streak, daily, versus,</text>
+<text x="660" y="485" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">estimates, challenges</text>
+<rect x="788" y="406" width="140" height="86" rx="14" fill="#FFFFFF" stroke="#C9D2DE" stroke-width="1.5"/>
+<text x="802" y="430" font-size="14.5" font-weight="700" fill="#14233D" text-anchor="start">Campaigns</text>
+<text x="802" y="451" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">world state, dice,</text>
+<text x="802" y="468" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">resume codes,</text>
+<text x="802" y="485" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">Team Trivia</text>
+<text x="362" y="520" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">Story submissions: lint → Llama Guard 3 → daily caps → a person approves → cover</text>
+<rect x="362" y="530" width="566" height="36" rx="14" fill="#FDEBD9" stroke="#F28C38" stroke-width="1.5"/>
+<text x="645" y="553" font-size="12.8" font-weight="700" fill="#0B2643" text-anchor="middle">The narrator never holds an answer key: the Worker returns one line at a time</text>
+<rect x="985" y="110" width="255" height="470" rx="14" fill="#EEF3F9" stroke="#C9D2DE" stroke-width="1.5"/>
+<text x="1003" y="138" font-size="16" font-weight="800" fill="#14233D" text-anchor="start">3. Storage and services</text>
+<rect x="1003" y="160" width="219" height="62" rx="14" fill="#FFFFFF" stroke="#C9D2DE" stroke-width="1.5"/>
+<text x="1015" y="184" font-size="14" font-weight="700" fill="#14233D" text-anchor="start">D1 (SQLite)</text>
+<text x="1015" y="203" font-size="11.5" font-weight="400" fill="#4B5B73" text-anchor="start">plays, play state, history, scores,</text>
+<text x="1015" y="217" font-size="11.5" font-weight="400" fill="#4B5B73" text-anchor="start">codes, learned names</text>
+<rect x="1003" y="234" width="219" height="62" rx="14" fill="#FFFFFF" stroke="#C9D2DE" stroke-width="1.5"/>
+<text x="1015" y="258" font-size="14" font-weight="700" fill="#14233D" text-anchor="start">KV</text>
+<text x="1015" y="277" font-size="11.5" font-weight="400" fill="#4B5B73" text-anchor="start">OAuth tokens, abuse counters</text>
+<rect x="1003" y="308" width="219" height="62" rx="14" fill="#FFFFFF" stroke="#C9D2DE" stroke-width="1.5"/>
+<text x="1015" y="332" font-size="14" font-weight="700" fill="#14233D" text-anchor="start">Workers AI</text>
+<text x="1015" y="351" font-size="11.5" font-weight="400" fill="#4B5B73" text-anchor="start">Llama Guard 3, three challenge judges,</text>
+<text x="1015" y="365" font-size="11.5" font-weight="400" fill="#4B5B73" text-anchor="start">cover art</text>
+<rect x="1003" y="382" width="219" height="62" rx="14" fill="#FFFFFF" stroke="#C9D2DE" stroke-width="1.5"/>
+<text x="1015" y="406" font-size="14" font-weight="700" fill="#14233D" text-anchor="start">Static assets</text>
+<text x="1015" y="425" font-size="11.5" font-weight="400" fill="#4B5B73" text-anchor="start">covers, audio samples, site files</text>
+<rect x="1003" y="456" width="219" height="62" rx="14" fill="#FFFFFF" stroke="#C9D2DE" stroke-width="1.5"/>
+<text x="1015" y="480" font-size="14" font-weight="700" fill="#14233D" text-anchor="start">Cron, daily</text>
+<text x="1015" y="499" font-size="11.5" font-weight="400" fill="#4B5B73" text-anchor="start">retention, GitHub watch</text>
+<path d="M945 330 L985 330" stroke="#0B2643" stroke-width="2" fill="none" marker-end="url(#ah)"/>
+<rect x="985" y="600" width="255" height="112" rx="14" fill="#FFFFFF" stroke="#C9D2DE" stroke-width="1.5" stroke-dasharray="6 5"/>
+<text x="1003" y="626" font-size="14" font-weight="800" fill="#14233D" text-anchor="start">Outside services</text>
+<text x="1003" y="648" font-size="12" font-weight="400" fill="#4B5B73" text-anchor="start">ESPN site API: team rosters (6 h cache)</text>
+<text x="1003" y="666" font-size="12" font-weight="400" fill="#4B5B73" text-anchor="start">Google sign-in (OpenID, PKCE)</text>
+<text x="1003" y="684" font-size="12" font-weight="400" fill="#4B5B73" text-anchor="start">GitHub API: followers and stars</text>
+<path d="M1112 600 L1112 582" stroke="#0B2643" stroke-width="2" fill="none" marker-end="url(#ah)" stroke-dasharray="6 5"/>
+<rect x="40" y="600" width="905" height="270" rx="14" fill="#FFFFFF" stroke="#C9D2DE" stroke-width="1.5"/>
+<text x="58" y="628" font-size="16" font-weight="800" fill="#14233D" text-anchor="start">4. Write, check, build, ship</text>
+<rect x="58" y="650" width="160" height="100" rx="14" fill="#FDEBD9" stroke="#F28C38" stroke-width="1.5"/>
+<text x="72" y="674" font-size="14.5" font-weight="700" fill="#14233D" text-anchor="start">stories/ + teams/</text>
+<text x="72" y="695" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">story.md (public)</text>
+<text x="72" y="712" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">secrets.md (answer keys,</text>
+<text x="72" y="729" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">never published)</text>
+<path d="M218 700 L234 700" stroke="#0B2643" stroke-width="2" fill="none" marker-end="url(#ah)"/>
+<rect x="234" y="650" width="160" height="100" rx="14" fill="#FFFFFF" stroke="#C9D2DE" stroke-width="1.5"/>
+<text x="248" y="674" font-size="14.5" font-weight="700" fill="#14233D" text-anchor="start">check-story lint</text>
+<text x="248" y="695" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">format, fair play,</text>
+<text x="248" y="712" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">trivia and branch rules,</text>
+<text x="248" y="729" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">unit tests</text>
+<path d="M394 700 L410 700" stroke="#0B2643" stroke-width="2" fill="none" marker-end="url(#ah)"/>
+<rect x="410" y="650" width="160" height="100" rx="14" fill="#FFFFFF" stroke="#C9D2DE" stroke-width="1.5"/>
+<text x="424" y="674" font-size="14.5" font-weight="700" fill="#14233D" text-anchor="start">worker-data build</text>
+<text x="424" y="695" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">compiles stories and</text>
+<text x="424" y="712" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">team boards into</text>
+<text x="424" y="729" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">generated JSON</text>
+<path d="M570 700 L586 700" stroke="#0B2643" stroke-width="2" fill="none" marker-end="url(#ah)"/>
+<rect x="586" y="650" width="160" height="100" rx="14" fill="#FFFFFF" stroke="#C9D2DE" stroke-width="1.5"/>
+<text x="600" y="674" font-size="14.5" font-weight="700" fill="#14233D" text-anchor="start">dev deploy + smoke</text>
+<text x="600" y="695" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">same code, dev data,</text>
+<text x="600" y="712" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">real tool calls</text>
+<text x="600" y="729" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">against the server</text>
+<path d="M746 700 L762 700" stroke="#0B2643" stroke-width="2" fill="none" marker-end="url(#ah)"/>
+<rect x="762" y="650" width="160" height="100" rx="14" fill="#FFFFFF" stroke="#C9D2DE" stroke-width="1.5"/>
+<text x="776" y="674" font-size="14.5" font-weight="700" fill="#14233D" text-anchor="start">prod deploy</text>
+<text x="776" y="695" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">migrations, restore</text>
+<text x="776" y="712" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">point, deploy,</text>
+<text x="776" y="729" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">prod smoke test</text>
+<rect x="58" y="772" width="869" height="80" rx="14" fill="#EEF3F9" stroke="#C9D2DE" stroke-width="1.5"/>
+<text x="74" y="798" font-size="13.5" font-weight="700" fill="#14233D" text-anchor="start">Public repo (volocent/plotspeaks)</text>
+<text x="74" y="820" font-size="12.2" font-weight="400" fill="#4B5B73" text-anchor="start">A scanned export of the stories (without answer keys), the lint and playtest tools, the Worker source and its tests.</text>
+<text x="74" y="837" font-size="12.2" font-weight="400" fill="#4B5B73" text-anchor="start">Answer keys exist only in the private working copy and inside the deployed Worker.</text>
+<path d="M138 750 L138 772" stroke="#0B2643" stroke-width="2" fill="none" marker-end="url(#ah)" stroke-dasharray="6 5"/>
+<text x="1112" y="750" font-size="11.5" font-weight="400" fill="#4B5B73" text-anchor="middle">AGPL server · CC BY-NC stories</text>
+<text x="1112" y="770" font-size="11.5" font-weight="400" fill="#4B5B73" text-anchor="middle">MIT tools · CC BY docs</text>
+<text x="1112" y="850" font-size="12" font-weight="600" fill="#4B5B73" text-anchor="middle">plotspeaks.com · a Volocent Labs product</text>
+</svg>

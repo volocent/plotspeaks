@@ -24,14 +24,19 @@
 // buttons, the category filter, the /connect tabs and the passenger page. Every page but the
 // passenger page works without them (it needs script to fetch a line on tap).
 import { kindOf, isFamily } from "../../tools/check-story/rules.mjs";
+import type { Profile } from "./profile";
+import news from "./generated/news.json";
 
 export type PublicStory = { slug: string; story: string; testing?: boolean };
-export type RatingSummary = { avg: number; count: number };
+// passed: players (not testers) who marked a story still being tested as passing their test.
+export type RatingSummary = { avg: number; count: number; passed?: number };
 
 type Meta = {
   slug: string; title: string; description: string; genre: string; tone: string; kind: string; audience: string; players: string;
   minutes: number | null; chapters: number | null; rating: string; license: string;
   rulesSystem: string; author: string; pitch: string; testing: boolean;
+  // metadata.style: "gamebook" puts a choose-your-path story on its own shelf (Ben, 2026-10-17).
+  style: string;
 };
 
 const esc = (s: string) =>
@@ -57,6 +62,7 @@ export function meta(p: PublicStory): Meta {
     description,
     genre: field("genre"),
     tone: field("tone").toLowerCase(),
+    style: field("style").toLowerCase(),
     kind: kindOf({ kind: field("kind"), genre: field("genre") }) as string,
     audience: isFamily({ audience: field("audience"), genre: field("genre") }) ? "family" : "general",
     players: field("players"),
@@ -106,13 +112,18 @@ type Other = { id: string; name: string; status: string; line: string; how?: str
 const OTHERS: Other[] = [
   { id: "lechat", name: "Vibe (formerly Le Chat)", status: "Free plan works", popup: true,
     line: "Free plan works. We haven't tested voice play yet.",
-    how: "In Vibe on the web (chat.mistral.ai), open <strong>Connectors → + Add Connector → Custom MCP Connector</strong>. Name it <strong>PlotSpeaks</strong> (no spaces), paste <code>{plainurl}</code> and tap <strong>Connect</strong>." },
+    how: "In Vibe on the web (chat.mistral.ai), open <strong>Connectors → + Add Connector → Custom MCP Connector</strong>. Name it <strong>PlotSpeaks</strong> (no spaces), paste <code>{url}</code> and tap <strong>Connect</strong>." },
   { id: "perplexity", name: "Perplexity", status: "Paid plans · untested", popup: true,
     line: "Paid plans can add it by its address. We haven't played a story through it yet.",
-    how: "<strong>Plugins → Add custom → Connector → Add MCP connector → Remote</strong>. Name it Plot Speaks, paste <code>{plainurl}</code>, leave authentication as <strong>None</strong>, tick the box and tap <strong>Add</strong>." },
+    how: "<strong>Plugins → Add custom → Connector → Add MCP connector → Remote</strong>. Name it Plot Speaks, paste <code>{url}</code>, choose <strong>OAuth</strong> if it asks (or use the address without an account and choose <strong>None</strong>), tick the box and tap <strong>Add</strong>." },
   { id: "grok", name: "Grok", status: "Untested", popup: true,
     line: "It can add a custom connector by address, but which plans and devices support it isn't documented. Untested.",
-    how: "Go to <strong>grok.com/connectors → New Connector → Custom</strong> and paste <code>{plainurl}</code>." },
+    how: "Go to <strong>grok.com/connectors → New Connector → Custom</strong> and paste <code>{url}</code>." },
+  // Claude Code (the directory form's "Claude Code external link" points here, #claude-code). Text
+  // only, not voice: for writers drafting and checking a story, or trying a game at the keyboard.
+  { id: "claude-code", name: "Claude Code", status: "For writers · text", popup: true,
+    line: "Write and check your own story or game from the terminal: Claude Code can use every Plot Speaks tool, including write_story, review_story and submit_story. Play there is by text, not voice.",
+    how: "Run <code>claude mcp add --transport http plot-speaks https://account.plotspeaks.com/mcp</code>, then in Claude Code type <code>/mcp</code>, pick plot-speaks and sign in with Google (it keeps your saved progress). Without an account: <code>claude mcp add --transport http plot-speaks https://plotspeaks.com/mcp</code>. Then ask: <em>\"Help me write a Plot Speaks story.\"</em>" },
   // Meta AI: the Meta AI app and meta.ai don't support connectors (directories-and-logos-2026.md §2.4, 2026-10-16).
   { id: "metaai", name: "Meta AI", status: "No connectors yet", popup: true,
     line: "Meta AI can't add connectors yet. Pasting a story may work, but we haven't tested it." },
@@ -146,7 +157,7 @@ const CONNECT: { headline: string; short: string; assistants: Assistant[] } = {
         "Voice works: in our test, Claude's voice mode loaded the story and checked an accusation through the connector.",
         "Say “Open Plot Speaks” or the story's name. A vague “play something” can send Claude on a detour.",
         "Doing it by hand: <strong>Customize → Connectors → + Add → Add custom connector</strong>, name it Plot Speaks and paste <code>{url}</code>.",
-        "Rather not sign in? <a href=\"{claudeplain}\" rel=\"noopener\">Connect without an account</a> (or paste <code>{plainurl}</code>). Every story and game still plays, but nothing is saved between chats.",
+        "Rather not sign in? <a href=\"{claudeplain}\" rel=\"noopener\">Connect without an account</a> (or paste <code>{url}</code>). Every story and game still plays, but nothing is saved between chats.",
       ],
       pop: {
         lead: "One tap. Check the name says <strong>Plot Speaks</strong>, tap <strong>Add</strong>, then <strong>sign in with Google</strong> and tap <strong>Allow</strong>. Signing in keeps your saved progress in stories and games.",
@@ -161,7 +172,7 @@ const CONNECT: { headline: string; short: string; assistants: Assistant[] } = {
     {
       id: "chatgpt", name: "ChatGPT", tab: "ChatGPT", btn: "ChatGPT", title: "Use with ChatGPT", status: "Free and Plus: paste",
       plan: "Today, custom connectors in ChatGPT need a <strong>Business, Enterprise or Edu</strong> plan. On <strong>Free and Plus</strong>, paste the story instead. It plays start to finish by voice: we've tested it on ChatGPT Free.",
-      button: { href: "/#stories", label: "Pick a story to paste" },
+      button: { href: "/stories", label: "Pick a story to paste" },
       steps: [
         "Open a story page and tap <strong>Copy the story</strong>.",
         "Start a <strong>new chat</strong> and paste it as the first message. Don't attach it as a file.",
@@ -170,7 +181,7 @@ const CONNECT: { headline: string; short: string; assistants: Assistant[] } = {
       say: "Plot Speaks, start the story.",
       notes: [
         "Without the connector, the answer key isn't in the chat. A passenger can hold it: every story page links a <strong>passenger page</strong> that shows the line to read aloud when the narrator asks.",
-        "On a Business, Enterprise or Edu plan, add it on the web: <strong>Plugins → + → Add custom MCP server</strong>, paste <code>{plainurl}</code> and choose no authentication.",
+        "On a Business, Enterprise or Edu plan, add it on the web: <strong>Plugins → + → Add custom MCP server</strong>, paste <code>{url}</code> and choose OAuth, then sign in with Google when it asks.",
         "A ChatGPT app listing is planned, so Free and Plus can connect too. Until then, paste.",
       ],
       pop: {
@@ -182,7 +193,7 @@ const CONNECT: { headline: string; short: string; assistants: Assistant[] } = {
           "Tap the voice button and say <strong>“Plot Speaks, start the story.”</strong>",
           "Give {passenger} to a passenger. It holds the answer key, so they read out the verdict when the narrator asks.",
         ],
-        alt: { head: "On Business, Enterprise or Edu", text: "On the web: <strong>Plugins → + → Add custom MCP server</strong>, paste the address and choose no authentication." },
+        alt: { head: "On Business, Enterprise or Edu", text: "On the web: <strong>Plugins → + → Add custom MCP server</strong>, paste the address and choose OAuth, then sign in with Google when it asks." },
         notes: [
           "A ChatGPT app listing is planned, so Free and Plus can connect too. No date yet.",
           "The family mysteries aren't offered in ChatGPT (its rules on content for under-13s). Play them in Claude, or by paste.",
@@ -193,21 +204,22 @@ const CONNECT: { headline: string; short: string; assistants: Assistant[] } = {
       id: "gemini", name: "Gemini", tab: "Gemini", btn: "Gemini", title: "Works with Gemini", status: "US, 18+, personal accounts",
       plan: "Gemini can add custom apps for people in the US who are 18 or older, on a personal Google account with Keep Activity turned on. Not on work or school accounts.",
       steps: [
-        "In your phone's browser, go to <strong>gemini.google.com → Menu → Settings → Connected Apps</strong> (it may sit under Personal Intelligence).",
-        "Choose <strong>Add a custom app</strong>, paste <code>{plainurl}</code>, tap <strong>Next</strong> and follow the prompts.",
+        "In your phone's browser, open <strong>gemini.google.com/customize/connectors</strong> (or <strong>Menu → Settings → Connected Apps</strong>; it may sit under Personal Intelligence).",
+        "Tap <strong>+ Custom</strong> (or <strong>Add a custom app</strong>), paste <code>{url}</code>, tap <strong>Next</strong> and sign in with Google when it asks.",
         "It then works in the Gemini app too. Type <strong>@Plot Speaks open</strong> for the intro, or <strong>@Plot Speaks</strong> and the story's name.",
       ],
+      button: { href: "https://gemini.google.com/customize/connectors", label: "Open Gemini" },
       open: "@Plot Speaks open.",
       say: "@Plot Speaks start {story}.",
-      notes: ["We haven't tested voice (Gemini Live) with Plot Speaks yet."],
+      notes: ["Signing in works in Gemini (checked 2026-10-20), so your progress is saved there too.", "We haven't tested voice (Gemini Live) with Plot Speaks yet."],
       pop: {
         lead: "For people in the <strong>US</strong>, <strong>18 or older</strong>, on a <strong>personal</strong> Google account with Keep Activity on. Not on work or school accounts.",
         steps: [
-          "Add it on the web: in your phone's browser, go to <strong>gemini.google.com → Menu → Settings → Connected Apps</strong> (it may sit under Personal Intelligence).",
-          "Choose <strong>Add a custom app</strong>, paste the address, tap <strong>Next</strong> and follow the prompts.",
+          "Add it on the web: in your phone's browser, open <strong>gemini.google.com/customize/connectors</strong> (or <strong>Menu → Settings → Connected Apps</strong>; it may sit under Personal Intelligence).",
+          "Tap <strong>+ Custom</strong> (or <strong>Add a custom app</strong>), paste the address, tap <strong>Next</strong> and sign in with Google when it asks.",
           "It then works in the Gemini app too.",
         ],
-        notes: ["We haven't tested voice (Gemini Live) with Plot Speaks yet."],
+        notes: ["Signing in works in Gemini (checked 2026-10-20), so your progress is saved there too.", "We haven't tested voice (Gemini Live) with Plot Speaks yet."],
       },
     },
     {
@@ -235,8 +247,9 @@ export function accountUrlFor(mcpUrl: string): string {
 }
 // {url}/{claude}: the account connector (preferred). {plainurl}/{claudeplain}: the one without an account.
 const fill = (s: string, url: string, story: string, extra: Record<string, string> = {}) =>
-  s.replace(/\{url\}/g, esc(accountUrlFor(url))).replace(/\{claude\}/g, esc(claudeLink(accountUrlFor(url))))
-    .replace(/\{plainurl\}/g, esc(url)).replace(/\{claudeplain\}/g, esc(claudeLink(url))).replace(/\{story\}/g, esc(story))
+  // Function replacements, so a "$&" or "$'" in a title is inserted as written.
+  s.replace(/\{url\}/g, () => esc(accountUrlFor(url))).replace(/\{claude\}/g, () => esc(claudeLink(accountUrlFor(url))))
+    .replace(/\{plainurl\}/g, () => esc(url)).replace(/\{claudeplain\}/g, () => esc(claudeLink(url))).replace(/\{story\}/g, () => esc(story))
     .replace(/\{(pick|passenger)\}/g, (all, k) => extra[k] ?? all);
 
 // ============================================================================ CATEGORIES
@@ -290,16 +303,23 @@ const CATEGORIES: Category[] = [
     match: (m) => m.kind === "adventure" },
   { id: "branching", name: "Choose your path", short: "Choose your path", icon: "arrow",
     blurb: "Every choice changes the story, and the story remembers what you did.",
-    match: (m) => m.kind === "branching" },
+    match: (m) => m.kind === "branching" && m.style !== "gamebook" },
   { id: "trivia", name: "Trivia", short: "Trivia", icon: "star",
     blurb: "Boards of questions by category and difficulty. Keep score, and challenge a ruling you think is wrong.",
     match: (m) => m.kind === "trivia" },
   { id: "game", name: "Games", short: "Games", icon: "users",
     blurb: "Parlour games the narrator runs for the whole car: twenty questions, werewolf and more.",
-    match: (m) => m.kind === "game" },
-  { id: "campaign", name: "Campaigns", short: "Campaigns", icon: "shield",
-    blurb: "A world that remembers you, played over several sessions.",
+    match: (m) => m.kind === "game" && m.style !== "winddown" },
+  // Last in the list so the indexes the shelves use for their blurbs stay put.
+  { id: "gamebook", name: "Your-choice adventures", short: "Your-choice", icon: "compass",
+    blurb: "Classic gamebook adventures told to you aloud. You are the hero; every scene ends with two or three clear choices; some paths lead to glory and some to a sticky end, and you can always go back and choose again.",
+    match: (m) => m.kind === "branching" && m.style === "gamebook" },
+  { id: "campaign", name: "Open worlds", short: "Open worlds", icon: "shield",
+    blurb: "No set ending: a world that remembers you, played over as many sessions as you like. Frontier towns, a freighter crew, a detective agency, gentle islands, and D&D-style campaigns.",
     match: (m) => m.kind === "campaign" },
+  { id: "winddown", name: "Wind-downs", short: "Wind-downs", icon: "moon",
+    blurb: "Slow, quiet pieces read softly at the end of the day: a walk to the sea, a cabin in the snow, a breathing count, and two for children. For passengers or home, not the driver.",
+    match: (m) => m.kind === "game" && m.style === "winddown" },
 ];
 const categoryOf = (m: Meta): Category => CATEGORIES.find((c) => c.match(m)) ?? CATEGORIES[1];
 // The shelves, in order. Mysteries gather three categories under one shelf with filter chips.
@@ -309,16 +329,20 @@ const KINDS: Kind[] = [
     blurb: "Someone is dead, or something is missing, and one of the people in front of you did it. Ask questions, then accuse.",
     note: "Family mysteries aren't offered in ChatGPT (its rules on content for under-13s); play them in Claude, or by paste." },
   { id: "adventure", name: "Adventures", icon: "compass", cats: ["adventure"], blurb: CATEGORIES[3].blurb },
+  { id: "gamebook", name: "Your-choice adventures", icon: "compass", cats: ["gamebook"], blurb: "Classic gamebook adventures told to you aloud. You are the hero; every scene ends with two or three clear choices; some paths lead to glory and some to a sticky end, and you can always go back and choose again." },
   { id: "branching", name: "Choose your path", icon: "arrow", cats: ["branching"], blurb: CATEGORIES[4].blurb },
   { id: "trivia", name: "Trivia", icon: "star", cats: ["trivia"], blurb: CATEGORIES[5].blurb },
   { id: "game", name: "Games", icon: "users", cats: ["game"], blurb: CATEGORIES[6].blurb },
-  { id: "campaign", name: "Campaigns", icon: "shield", cats: ["campaign"], blurb: CATEGORIES[7].blurb },
+  { id: "campaign", name: "Open worlds", icon: "shield", cats: ["campaign"], blurb: CATEGORIES.find((c) => c.id === "campaign")!.blurb },
+  { id: "winddown", name: "Wind-downs", icon: "moon", cats: ["winddown"], blurb: CATEGORIES.find((c) => c.id === "winddown")!.blurb },
 ];
-const kindShelf = (m: Meta): Kind => KINDS.find((k) => k.id === m.kind) ?? KINDS[0];
+const kindShelf = (m: Meta): Kind => KINDS.find((k) => k.id === (m.kind === "branching" && m.style === "gamebook" ? "gamebook" : m.kind === "game" && m.style === "winddown" ? "winddown" : m.kind)) ?? KINDS[0];
 
 const GENRE: Record<string, string> = { "murder-mystery": "Murder mystery", adventure: "Fantasy adventure", kids: "Family mystery" };
 const genreLabel = (m: Meta) =>
   m.genre === "murder-mystery" && m.tone === "dark" ? "Dark murder mystery"
+    : m.kind === "branching" && m.style === "gamebook" ? "Your-choice adventure"
+    : m.kind === "campaign" && !isSrd(m) ? "Open world"
     : GENRE[m.genre] ?? (m.genre ? m.genre.replace(/-/g, " ").replace(/^./, (c) => c.toUpperCase()) : "Story");
 const playersLabel = (p: string) => (p ? `${p.replace(/-/g, "–")} player${p === "1" ? "" : "s"}` : "");
 const isSrd = (m: Meta) => /^srd/i.test(m.rulesSystem);
@@ -356,6 +380,26 @@ function cover(m: Meta, opts: { alt?: string; eager?: boolean; cls?: string } = 
     `</div>`;
 }
 
+/**
+ * The address to add (Ben, 2026-10-20): the account address by default. A signed-in visitor sees only that
+ * (the server marks <body data-signed="in">); anyone else is asked to sign in first and told why, gets the
+ * same address, and can choose to continue without an account, which shows the other address.
+ */
+function addressBlock(mcpUrl: string, id: string, label = "The address to add"): string {
+  return `<div class="addr" data-addr>
+<div class="if-out addr-ask">
+<p class="addr-why"><strong>Sign in first?</strong> With a Google account, Plot Speaks keeps your progress: what you've played, the trivia you've already heard and your campaigns. You'll be asked to sign in when your assistant connects.</p>
+<p><a class="btn btn-ghost btn-sm" data-signin href="/auth/google/start?next=/connect">${icon("user", 18)}Sign in with Google</a></p>
+</div>
+<p class="addr-h">${esc(label)}:</p>
+${copyField(accountUrlFor(mcpUrl), `${id}-account`, false)}
+<div class="if-out">
+<p><button class="linkish" type="button" data-noacct>No thanks, continue without an account</button></p>
+<div class="addr-plain" hidden><p class="addr-h">Without an account (everything plays; nothing is saved between chats):</p>${copyField(mcpUrl, `${id}-plain`, false)}</div>
+</div>
+</div>`;
+}
+
 function copyField(url: string, id: string, big = false): string {
   return `<div class="urlbox${big ? " urlbox-big" : ""}">
 <code class="url" id="${id}">${esc(url)}</code>
@@ -364,13 +408,6 @@ function copyField(url: string, id: string, big = false): string {
 <p class="copy-status" role="status" aria-live="polite" data-status-for="${id}"></p>`;
 }
 
-// The honest ChatGPT line, at the top of /connect. passenger: the story's passenger page, if any.
-function chatgptNote(passenger?: string): string {
-  return `<div class="gpt-note">
-<p class="gpt-note-h">${icon("chat", 18)} Using ChatGPT?</p>
-<p>Today, custom connectors in ChatGPT need a Business, Enterprise or Edu plan. On Free and Plus, paste the story instead, and a passenger can hold the answer key with ${passenger ? `the <a href="${esc(passenger)}">passenger page</a>` : `a story's passenger page`}. A ChatGPT app listing is planned.</p>
-</div>`;
-}
 
 // ============================================================================ CONNECT BUTTONS
 // BYOA, the headline idea (Ben, 2026-10-16). One Connect button per assistant, text only (no
@@ -388,18 +425,17 @@ function aiButtons(label = "Connect your assistant", say = OPEN_LINE): string {
   const q = encodeURIComponent(say);
   const geminiSay = say === OPEN_LINE ? "@Plot Speaks open." : `@Plot Speaks ${say.replace(/ with Plot Speaks\.?$/i, "").replace(/^Start/, "start")}.`;
   return `<ul class="ai-btns" aria-label="${esc(label)}">
-${CONNECT.assistants.map((a) => `<li><a class="ai-btn" href="/connect#${a.id}" data-dialog="dlg-${a.id}">${a.logo ? `<span class="ai-btn-logo" aria-hidden="true">${a.logo}</span>` : ""}<span class="ai-btn-name">${esc(a.btn)}</span><span class="ai-btn-act">${icon("plug", 16)}Connect</span></a></li>`).join("\n")}
+${CONNECT.assistants.map((a) => `<li><a class="ai-btn" href="/connect#${a.id}" data-dialog="dlg-${a.id}">${a.logo ? `<span class="ai-btn-logo" aria-hidden="true">${a.logo}</span>` : ""}<span class="ai-btn-name">${esc(a.btn)}</span><span class="ai-btn-act"><span class="act-off">${icon("plug", 16)}Connect</span><span class="act-on">${icon("check", 16)}Connected</span></span></a></li>`).join("\n")}
 </ul>
 <div class="byoa-on" hidden>
-<p class="byoa-on-line"><span class="status status-ok">Connected</span><strong data-on-name></strong><button class="linkish" type="button" data-on-change>Change</button></p>
-<p class="byoa-on-act">
-<a class="btn btn-primary btn-big" hidden data-on="claude" href="https://claude.ai/new?q=${q}" rel="noopener">${icon("plug", 20)}Open in Claude</a>
-<a class="btn btn-primary btn-big" hidden data-on="chatgpt" href="https://chatgpt.com/?q=${q}" rel="noopener">${icon("plug", 20)}Open in ChatGPT</a>
-<button class="btn btn-primary btn-big" hidden type="button" data-on="gemini" data-copy-phrase="${esc(geminiSay)}">${icon("copy", 20)}Copy the phrase for Gemini</button>
-<button class="btn btn-primary btn-big" hidden type="button" data-on="other" data-copy-phrase="${esc(say)}">${icon("copy", 20)}Copy the phrase</button>
+<ul class="byoa-on-list">
+<li data-on="claude" hidden><span class="status status-ok">Connected</span><strong>Claude</strong><a class="btn btn-primary btn-sm" href="https://claude.ai/new?q=${q}" rel="noopener">${icon("plug", 18)}Open in Claude</a><button class="linkish" type="button" data-on-remove="claude">Remove</button></li>
+<li data-on="chatgpt" hidden><span class="status status-ok">Connected</span><strong>ChatGPT</strong><a class="btn btn-primary btn-sm" href="https://chatgpt.com/?q=${q}" rel="noopener">${icon("plug", 18)}Open in ChatGPT</a><button class="linkish" type="button" data-on-remove="chatgpt">Remove</button></li>
+<li data-on="gemini" hidden><span class="status status-ok">Connected</span><strong>Gemini</strong><button class="btn btn-primary btn-sm" type="button" data-copy-phrase="${esc(geminiSay)}">${icon("copy", 18)}Copy the phrase</button><button class="linkish" type="button" data-on-remove="gemini">Remove</button></li>
+<li data-on="other" hidden><span class="status status-ok">Connected</span><strong>Your assistant</strong><button class="btn btn-primary btn-sm" type="button" data-copy-phrase="${esc(say)}">${icon("copy", 18)}Copy the phrase</button><button class="linkish" type="button" data-on-remove="other">Remove</button></li>
+</ul>
 <span class="copied" role="status" aria-live="polite"></span>
-</p>
-<p class="byoa-on-say">It opens a new chat with <strong>“${esc(say)}”</strong> ready to send; or just say it in voice mode.</p>
+<p class="byoa-on-say">Claude and ChatGPT open a new chat with <strong>“${esc(say)}”</strong> ready to send; Gemini takes the phrase pasted in. Or just say it in voice mode.</p>
 </div>`;
 }
 // The home page's call to action, in the hero and again at the bottom: badge, buttons, the line.
@@ -408,7 +444,7 @@ function connectPanel(opts: { id: string; heading?: string }): string {
 ${byoaBadge()}
 ${opts.heading ? `<h2 class="byoa-h" id="${opts.id}-h">${esc(opts.heading)}</h2>` : `<h2 class="byoa-h byoa-h-sm" id="${opts.id}-h">Connect your assistant once.</h2>`}
 ${aiButtons()}
-<p class="byoa-line">Then just say <strong>“${esc(OPEN_LINE)}”</strong> No new app, no subscription. Sign in with Google when you connect, and Plot Speaks keeps your saved progress in stories and games.</p>
+<p class="byoa-line">Then just say <strong>“${esc(OPEN_LINE)}”</strong> No new app, no subscription. On Claude, sign in with Google when you connect and Plot Speaks keeps your saved progress in stories and games.</p>
 </section>`;
 }
 
@@ -418,7 +454,7 @@ function connectDialogs(ctx: DialogCtx): string {
   const extra = {
     pick: storyPage
       ? `Copy this story: <span class="dlg-copy"><button class="btn btn-primary btn-sm" type="button" data-copy-story>${icon("copy", 18)}Copy the story</button><span class="copied" role="status" aria-live="polite"></span></span>`
-      : `<a href="/#stories" data-close>Pick a story</a> and tap <strong>Copy the story</strong> on its page.`,
+      : `<a href="/stories" data-close>Pick a story</a> and tap <strong>Copy the story</strong> on its page.`,
     passenger: storyPage ? `<a href="${esc(storyPage.passenger)}">the passenger page</a>` : "the story's <strong>passenger page</strong> (every story page links one)",
   };
   const f = (s: string) => fill(s, url, story, extra);
@@ -430,14 +466,20 @@ function connectDialogs(ctx: DialogCtx): string {
     return `<p class="saybox"><b>Then say</b>“${esc(storyPage && a.id !== "chatgpt" ? sayStory : OPEN_LINE)}”<span class="saybox-sub">${sub}</span></p>`;
   };
   const list = (items: string[], cls = "steps") => items.length ? `<ol class="${cls}">${items.map((s) => `<li>${f(s)}</li>`).join("")}</ol>` : "";
-  const notes = (items: string[]) => items.length ? `<ul class="dlg-notes">${items.map((n) => `<li>${f(n)}</li>`).join("")}</ul>` : "";
+  const notes = (items: string[]) => items.length ? `<ul class="dlg-notes">${items.map((n) => `<li${/^Rather not sign in\?/.test(n) ? ' class="if-out"' : ""}>${f(n)}</li>`).join("")}</ul>` : "";
   return CONNECT.assistants.map((a) => {
     const id = `dlg-${a.id}`;
-    const copy = copyField(a.id === "claude" ? accountUrlFor(url) : url, `${id}-url`, false);
+    const copy = a.id === "claude" ? copyField(accountUrlFor(url), `${id}-url`, false) : addressBlock(url, `${id}-url`);
     let inner = `<p class="dlg-lead">${f(a.pop.lead)}</p>`;
     if (a.id === "claude") {
-      inner += `<p class="dlg-cta"><a class="btn btn-primary btn-big" href="${esc(claudeLink(accountUrlFor(url)))}" rel="noopener" data-connected="claude">${icon("plug", 20)}Connect to Claude</a></p>
-<p class="dlg-or">or copy the address</p>${copy}${notes(a.pop.notes)}`;
+      inner += `<p class="dlg-cta"><a class="btn btn-primary btn-big" href="${esc(claudeLink(accountUrlFor(url)))}" target="_blank" rel="noopener" data-connected="claude">${icon("plug", 20)}Connect to Claude</a></p>
+<p class="dlg-or">or copy the sign-in address</p>${copy}${notes(a.pop.notes)}`;
+    } else if (a.id === "gemini") {
+      // Gemini has no one-tap link like Claude's: the address is added by hand under Connected Apps. The
+      // box reads the same, with the address first (copy it, then open Gemini and paste it).
+      inner += `<p class="dlg-cta"><a class="btn btn-primary btn-big" href="https://gemini.google.com/customize/connectors" target="_blank" rel="noopener" data-connected="gemini" data-copy-url="${esc(accountUrlFor(url))}">${icon("plug", 20)}Copy the address and open Gemini</a></p>
+<p class="dlg-or">Then tap <strong>+ Custom</strong> and paste it. Or copy it here:</p>${copy}
+${list(a.pop.steps ?? [])}${notes(a.pop.notes)}`;
     } else if (a.id === "chatgpt") {
       inner += `<h3 class="dlg-h">${esc(a.pop.stepsHead ?? "")}</h3>${list(a.pop.steps ?? [])}`;
       if (a.pop.alt) inner += `<h3 class="dlg-h">${esc(a.pop.alt.head)}</h3><p>${f(a.pop.alt.text)}</p>${copy}`;
@@ -456,7 +498,7 @@ function connectDialogs(ctx: DialogCtx): string {
 <div class="cdlg-body">
 ${inner}
 ${thenSay(a)}
-<p class="dlg-done"><button class="btn btn-ghost btn-sm" type="button" data-connected="${a.id}">${icon("check", 18)}I've connected ${esc(a.btn)}</button><span>This page and every story page will then show an <strong>Open in ${esc(a.btn)}</strong> button instead. Remembered on this device only.</span></p>
+<p class="dlg-done"><button class="btn btn-ghost btn-sm" type="button" data-connected="${a.id}">${icon("check", 18)}I've connected ${esc(a.btn)}</button><span>This page and every story page will then show an <strong>Open in ${esc(a.btn)}</strong> button too. Remembered on this device only; you can add more than one.</span></p>
 <p class="dlg-more"><a class="link-arrow" href="/connect#${a.id}">Full details on the Connect page ${icon("arrow", 18)}</a></p>
 </div>
 </div>
@@ -485,29 +527,130 @@ const DIALOG_JS = `(function(){
     d.addEventListener("close",function(){if(d._from){d._from.focus();d._from=null;}});
   });
 })();`;
+// "Did it connect?" (Ben, 2026-10-20). Tapping Connect to Claude or Open Gemini opens that assistant in a
+// new tab and this box on the page, which can't be dismissed without an answer. Yes marks the assistant
+// connected on this device; no asks what happened, records it (/api/connect-feedback, no name or
+// address), and shows what to try for that problem. The ids here are what the endpoint accepts.
+const CONNECT_ISSUES: Record<"claude" | "gemini", { id: string; label: string; tip: string }[]> = {
+  claude: [
+    { id: "opened-app", label: "The link opened the Claude app, not the Add connector screen", tip: "Open the link in your phone's <strong>browser</strong> (Safari or Chrome), not the Claude app. Or add it by hand: in Claude, <strong>Customize → Connectors → + Add → Add custom connector</strong>, name it Plot Speaks and paste <code>{url}</code>." },
+    { id: "limit", label: "It says I already have a custom connector (Free plan)", tip: "Claude's Free plan has room for one custom connector. Remove the other one under <strong>Customize → Connectors</strong>, then tap Connect to Claude again." },
+    { id: "signin", label: "Signing in with Google didn't work", tip: "Try once more in your browser, and allow the Google window if it is blocked. Or connect without an account: add <code>{plainurl}</code> instead. Everything plays; nothing is saved between chats." },
+    { id: "workspace", label: "I'm on a Team or Enterprise plan and can't add it", tip: "On Team and Enterprise plans an admin adds custom connectors first. Send them the address: <code>{url}</code>." },
+    { id: "no-answer", label: "It's added, but Claude doesn't use Plot Speaks", tip: "In a new chat, tap <strong>+ → Connectors</strong> and make sure Plot Speaks is switched on. Then say <strong>“Open Plot Speaks.”</strong>" },
+    { id: "other", label: "Something else", tip: "Tell us above what happened and we'll look into it. You can also write to <strong>contact@plotspeaks.com</strong>." },
+  ],
+  gemini: [
+    { id: "no-menu", label: "I can't find Connected Apps or Add a custom app", tip: "Custom apps need a <strong>personal</strong> Google account in the <strong>US</strong>, 18 or older, with Keep Activity on (not a work or school account). Open <strong>gemini.google.com/customize/connectors</strong> in a browser; it may sit under Personal Intelligence." },
+    { id: "credentials", label: "It asked for credentials or Advanced features", tip: "Leave Advanced features empty and tap Next: Plot Speaks registers itself. If it still asks, use the address without an account: <code>{plainurl}</code>." },
+    { id: "signin", label: "Signing in didn't work", tip: "Use the address that needs no account: <code>{plainurl}</code>. Everything plays; nothing is saved between chats." },
+    { id: "no-answer", label: "It's added, but Gemini doesn't use Plot Speaks", tip: "In a new chat type <strong>@Plot Speaks open</strong> (the @ matters). Voice (Gemini Live) hasn't been tested with Plot Speaks yet, so try typing first." },
+    { id: "other", label: "Something else", tip: "Tell us above what happened and we'll look into it. You can also write to <strong>contact@plotspeaks.com</strong>." },
+  ],
+};
+function checkDialog(mcpUrl: string): string {
+  const f = (s: string) => s.replace(/\{url\}/g, esc(accountUrlFor(mcpUrl))).replace(/\{plainurl\}/g, esc(mcpUrl));
+  const names: Record<string, string> = { claude: "Claude", gemini: "Gemini" };
+  const retry: Record<string, string> = { claude: claudeLink(accountUrlFor(mcpUrl)), gemini: "https://gemini.google.com/customize/connectors" };
+  const issues = (Object.keys(CONNECT_ISSUES) as ("claude" | "gemini")[]).map((a) => `<div class="cc-issues" data-cc-for="${a}" hidden>
+${CONNECT_ISSUES[a].map((x, i) => `<label><input type="radio" name="cc-issue-${a}" value="${x.id}"${i === 0 ? " required" : ""}><span>${esc(x.label)}</span></label>`).join("\n")}
+</div>`).join("\n");
+  const tips = (Object.keys(CONNECT_ISSUES) as ("claude" | "gemini")[]).flatMap((a) => CONNECT_ISSUES[a].map((x) => `<p class="cc-tip" data-tip="${a}:${x.id}" hidden>${f(x.tip)}</p>`)).join("\n");
+  const retries = Object.keys(retry).map((a) => `<a class="btn btn-primary" data-cc-retry="${a}" hidden href="${esc(retry[a])}" target="_blank" rel="noopener" data-connected="${a}"${a === "gemini" ? ` data-copy-url="${esc(accountUrlFor(mcpUrl))}"` : ""}>${icon("plug", 18)}Try ${a === "claude" ? "Connect to Claude" : "Open Gemini"} again</a>`).join("");
+  return `<dialog class="cdlg cc" id="conn-check" aria-labelledby="cc-h">
+<div class="cdlg-in">
+<div class="cdlg-head"><h2 id="cc-h">Did it connect?</h2></div>
+<div class="cdlg-body">
+<div data-step="ask">
+<p class="dlg-lead">Finish the steps in the tab that just opened, then come back: did Plot Speaks connect to <strong data-cc-name>${esc(names.claude)}</strong>?</p>
+<p class="cc-row"><button class="btn btn-primary" type="button" data-cc="yes">${icon("check", 18)}Yes, it's connected</button><button class="btn btn-ghost" type="button" data-cc="no">No, it didn't work</button></p>
+</div>
+<div data-step="why" hidden>
+<p class="dlg-lead">Sorry about that. What happened?</p>
+${issues}
+<label class="cc-note-l" for="cc-note">Anything else we should know? (optional)</label>
+<textarea id="cc-note" rows="3" maxlength="800"></textarea>
+<p class="cc-row"><button class="btn btn-primary" type="button" data-cc="send">Show me what to try</button></p>
+<p class="cc-small">We keep the problem you pick and what you type, with no name or address, to fix these steps.</p>
+</div>
+<div data-step="tips" hidden>
+<h3 class="dlg-h">Try this</h3>
+${tips}
+<p class="cc-row">${retries}<button class="btn btn-ghost" type="button" data-cc="close">Close</button></p>
+<p class="cc-small">Still stuck? Write to <strong>contact@plotspeaks.com</strong> and we'll help.</p>
+</div>
+<div data-step="done" hidden>
+<p class="dlg-lead" data-done-for="claude">You're set. Open a new chat in Claude and say <strong>“Open Plot Speaks.”</strong></p>
+<p class="dlg-lead" data-done-for="gemini" hidden>You're set. Open a new chat in Gemini and type <strong>@Plot Speaks open</strong>.</p>
+<p class="cc-row"><button class="btn btn-primary" type="button" data-cc="close">Done</button></p>
+</div>
+</div>
+</div>
+</dialog>`;
+}
+const CHECK_JS = `(function(){
+  var d=document.getElementById("conn-check");if(!d||typeof d.showModal!=="function")return;
+  var NAMES={claude:"Claude",gemini:"Gemini"},id="claude";
+  function step(n){[].forEach.call(d.querySelectorAll("[data-step]"),function(s){s.hidden=s.getAttribute("data-step")!==n;});var b=d.querySelector(".cdlg-body");if(b)b.scrollTop=0;}
+  function send(outcome,issue){try{fetch("/api/connect-feedback",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({assistant:id,outcome:outcome,issue:issue||null,note:outcome==="no"?(d.querySelector("#cc-note").value||null):null,page:location.pathname})}).catch(function(){});}catch(e){}}
+  window.psConnectCheck=function(a){
+    id=NAMES[a]?a:"claude";
+    var n=d.querySelector("[data-cc-name]");if(n)n.textContent=NAMES[id];
+    [].forEach.call(d.querySelectorAll("[data-cc-for]"),function(x){x.hidden=x.getAttribute("data-cc-for")!==id;});
+    [].forEach.call(d.querySelectorAll("[data-cc-retry]"),function(x){x.hidden=x.getAttribute("data-cc-retry")!==id;});
+    [].forEach.call(d.querySelectorAll("[data-done-for]"),function(x){x.hidden=x.getAttribute("data-done-for")!==id;});
+    [].forEach.call(d.querySelectorAll("input[type=radio]"),function(r){r.checked=false;});
+    d.querySelector("#cc-note").value="";
+    step("ask");
+    [].forEach.call(document.querySelectorAll("dialog[open]"),function(o){if(o!==d)o.close();});
+    if(!d.open)d.showModal();
+  };
+  // An answer is needed: Esc and a click outside don't close it.
+  d.addEventListener("cancel",function(e){e.preventDefault();});
+  d.addEventListener("click",function(e){
+    var t=e.target.closest&&e.target.closest("[data-cc]");if(!t)return;
+    var act=t.getAttribute("data-cc");
+    if(act==="yes"){send("yes");if(window.psConnectedAdd)window.psConnectedAdd(id);step("done");}
+    else if(act==="no"){step("why");}
+    else if(act==="send"){var r=d.querySelector('[data-cc-for="'+id+'"] input:checked');var issue=r?r.value:"other";send("no",issue);
+      [].forEach.call(d.querySelectorAll("[data-tip]"),function(x){x.hidden=x.getAttribute("data-tip")!==id+":"+issue;});step("tips");}
+    else if(act==="close"){d.close();}
+  });
+})();`;
+
 // The visitor's connected assistant, remembered in this browser only (localStorage "ps.assistant";
 // a private window or cleared data just shows the Connect buttons again). Set by the Connect to
 // Claude link and the "I've connected" buttons; cleared by Change.
 const CONNECTED_JS = `(function(){
-  var KEY="ps.assistant",NAMES={claude:"Claude",chatgpt:"ChatGPT",gemini:"Gemini",other:"your assistant"};
-  function get(){try{return localStorage.getItem(KEY)||"";}catch(e){return "";}}
-  function set(v){try{if(v)localStorage.setItem(KEY,v);else localStorage.removeItem(KEY);}catch(e){}}
+  var KEY="ps.assistants",OLD="ps.assistant",NAMES={claude:"Claude",chatgpt:"ChatGPT",gemini:"Gemini",other:"your assistant"};
+  function get(){try{var v=JSON.parse(localStorage.getItem(KEY)||"null");if(Array.isArray(v))return v.filter(function(x){return NAMES[x];});var o=localStorage.getItem(OLD);return o&&NAMES[o]?[o]:[];}catch(e){return [];}}
+  function save(a){try{if(a.length)localStorage.setItem(KEY,JSON.stringify(a));else localStorage.removeItem(KEY);localStorage.removeItem(OLD);}catch(e){}}
+  function add(id){var a=get();if(a.indexOf(id)<0)a.push(id);save(a);}
+  function remove(id){save(get().filter(function(x){return x!==id;}));}
   function apply(){
-    var id=get();if(id&&!NAMES[id])id="";
-    [].forEach.call(document.querySelectorAll(".ai-btns"),function(u){u.hidden=Boolean(id);});
+    var ids=get();
+    [].forEach.call(document.querySelectorAll(".ai-btn[data-dialog]"),function(b){b.classList.toggle("is-on",ids.indexOf(b.getAttribute("data-dialog").replace("dlg-",""))>=0);});
     [].forEach.call(document.querySelectorAll(".byoa-on"),function(b){
-      b.hidden=!id;var say=b.nextElementSibling;if(say&&say.classList.contains("saybox"))say.hidden=Boolean(id);if(!id)return;
-      var n=b.querySelector("[data-on-name]");if(n)n.textContent=NAMES[id];
-      [].forEach.call(b.querySelectorAll("[data-on]"),function(el){el.hidden=el.getAttribute("data-on")!==id;});
+      b.hidden=!ids.length;var say=b.nextElementSibling;if(say&&say.classList.contains("saybox"))say.hidden=Boolean(ids.length);
+      [].forEach.call(b.querySelectorAll("li[data-on]"),function(li){li.hidden=ids.indexOf(li.getAttribute("data-on"))<0;});
     });
+    [].forEach.call(document.querySelectorAll("[data-conn]"),function(p){var on=ids.indexOf(p.getAttribute("data-conn"))>=0;p.classList.toggle("is-on",on);var tab=document.getElementById("tab-"+p.getAttribute("data-conn"));if(tab)tab.classList.toggle("is-on",on);});
   }
   document.addEventListener("click",function(e){
-    var t=e.target.closest&&e.target.closest("[data-connected],[data-on-change],[data-copy-phrase]");if(!t)return;
-    if(t.hasAttribute("data-connected")){set(t.getAttribute("data-connected"));apply();var d=t.closest("dialog");if(d&&t.tagName!=="A")d.close();return;}
-    if(t.hasAttribute("data-on-change")){e.preventDefault();set("");apply();return;}
-    var p=t.getAttribute("data-copy-phrase"),s=t.parentNode.querySelector(".copied");
+    var t=e.target.closest&&e.target.closest("[data-connected],[data-on-remove],[data-copy-phrase]");if(!t)return;
+    if(t.hasAttribute("data-copy-url")&&navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t.getAttribute("data-copy-url")).catch(function(){});}
+    if(t.hasAttribute("data-connected")){var cid=t.getAttribute("data-connected");if(t.tagName==="A"&&window.psConnectCheck){setTimeout(function(){window.psConnectCheck(cid);},300);return;}add(cid);apply();var d=t.closest("dialog");if(d&&t.tagName!=="A")d.close();return;}
+    if(t.hasAttribute("data-on-remove")){e.preventDefault();remove(t.getAttribute("data-on-remove"));apply();return;}
+    var p=t.getAttribute("data-copy-phrase"),s=t.closest(".byoa-on").querySelector(".copied");
     function done(ok){if(s){s.textContent=ok?"Copied. Paste it into a new chat, or just say it.":"Copy failed; say it instead: "+p;}}
     if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(p).then(function(){done(true);},function(){done(false);});}else done(false);
+  });
+  window.psConnectedAdd=function(id){add(id);apply();};
+  document.addEventListener("click",function(e){
+    var n=e.target.closest&&e.target.closest("[data-noacct]");
+    if(n){var box=n.closest("[data-addr]");var pl=box&&box.querySelector(".addr-plain");if(pl){pl.hidden=false;n.hidden=true;}return;}
+    var si=e.target.closest&&e.target.closest("[data-signin]");
+    if(si){si.setAttribute("href","/auth/google/start?next="+encodeURIComponent(location.pathname+location.hash));}
   });
   apply();
 })();`;
@@ -531,12 +674,12 @@ ${isMystery ? `<tr><td>"I accuse …"</td><td>${!m ? "Mysteries: your answer, ch
 const CSS = `
 :root{color-scheme:light;
   --navy:#12355B;--navy-2:#0F3E65;--orange:#EF7726;--sky:#3FB8E8;--peach:#F3C095;
-  --bg:#FBF7EF;--bg-2:#F4ECDD;--surface:#FFFDF9;--surface-2:#FBF3E6;
-  --ink:#13294A;--ink-2:#4B5B73;--line:#E7DCC9;--line-2:#D9CAB0;
-  --accent:#B4520C;--accent-soft:rgba(239,119,38,.12);--sky-ink:#14709E;
+  --bg:#EDF1F7;--bg-2:#E1E8F1;--surface:#FFFFFF;--surface-2:#F3F6FB;
+  --ink:#13294A;--ink-2:#43536B;--line:#D2DBE7;--line-2:#A7B6CA;
+  --accent:#B4520C;--accent-soft:rgba(239,119,38,.12);--sky-ink:#14709E;--ok:#2E9E5B;--ok-ink:#1D6E3E;--ok-soft:rgba(46,158,91,.12);
   --btn:#EF7726;--btn-ink:#14233D;--btn-hover:#F58A3E;
-  --shadow:0 1px 2px rgba(19,41,74,.06),0 8px 24px -12px rgba(19,41,74,.18);
-  --shadow-lg:0 2px 6px rgba(19,41,74,.06),0 24px 48px -24px rgba(19,41,74,.32);
+  --shadow:0 1px 2px rgba(19,41,74,.10),0 8px 24px -12px rgba(19,41,74,.26);
+  --shadow-lg:0 2px 6px rgba(19,41,74,.10),0 24px 48px -24px rgba(19,41,74,.40);
   --glow:rgba(243,192,149,.55);--focus:#0F6FA8;
   --night:#0B1D33;--night-2:#12355B;--night-ink:#F6F0E6;--night-ink-2:#B8C6D8;
   --radius:18px;--radius-lg:28px;--wrap:72rem;
@@ -545,12 +688,18 @@ const CSS = `
 @media (prefers-color-scheme:dark){:root{color-scheme:dark;
   --bg:#0A1A2E;--bg-2:#0D2139;--surface:#112846;--surface-2:#0F2440;
   --ink:#F5EFE5;--ink-2:#AEBDD0;--line:#1F3B60;--line-2:#2A4C78;
-  --accent:#F7A060;--accent-soft:rgba(239,119,38,.16);--sky-ink:#6FCBF2;
+  --accent:#F7A060;--accent-soft:rgba(239,119,38,.16);--sky-ink:#6FCBF2;--ok:#3FC47A;--ok-ink:#7FE0A8;--ok-soft:rgba(63,196,122,.16);
   --btn:#F28A3C;--btn-ink:#111E33;--btn-hover:#F69B55;
   --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px -14px rgba(0,0,0,.6);
   --shadow-lg:0 2px 6px rgba(0,0,0,.3),0 30px 60px -28px rgba(0,0,0,.8);
   --glow:rgba(63,184,232,.16);--focus:#7FD3F7;
   --night:#050E1A;--night-2:#163E6B}}
+/* The home hero is a night band in both themes (Ben, 2026-10-20: the dark theme looked better): the dark
+   palette, scoped to the hero, so the first screen looks the same whatever the visitor's setting. */
+.hero{--bg:#0A1A2E;--bg-2:#0D2139;--surface:#112846;--surface-2:#0F2440;--ink:#F5EFE5;--ink-2:#AEBDD0;--line:#1F3B60;--line-2:#2A4C78;--accent:#F7A060;--sky-ink:#6FCBF2;--btn:#F28A3C;--btn-ink:#111E33;--ok-ink:#7FE0A8;--ok-soft:rgba(63,196,122,.16);--shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px -14px rgba(0,0,0,.6);--shadow-lg:0 2px 6px rgba(0,0,0,.3),0 30px 60px -28px rgba(0,0,0,.8);color:var(--ink);background:var(--bg)}
+.hero .say-you{background:#1E4E80}
+.hero .waves circle:nth-child(1),.hero .waves circle:nth-child(2){stroke:var(--peach);opacity:.16}
+@media (prefers-color-scheme:light){.hero{background:radial-gradient(120% 90% at 85% 0%,#163E6B,#0A1A2E 62%)}}
 @media (prefers-color-scheme:dark){.say-you{background:#1E4E80}.night{border-block:1px solid #18324F}.waves circle:nth-child(1),.waves circle:nth-child(2){stroke:var(--peach);opacity:.16}}
 *,*::before,*::after{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%;scroll-behavior:smooth;scroll-padding-top:84px}
@@ -643,13 +792,14 @@ p{margin:0 0 1em}
 .hero-grid>*{min-width:0}
 @media (min-width:960px){.hero{padding:72px 0 88px}.hero-grid{grid-template-columns:1.1fr .9fr;gap:56px}.waves{right:-60px;top:-160px;width:760px;height:760px;opacity:.9}}
 .hero h1{margin:0 0 18px;white-space:nowrap;font-size:min(4.4rem,calc((100vw - 32px) / 13.2))}
-@media (min-width:900px){.hero h1{font-size:min(4.4rem,calc((50vw - 64px) / 13.2))}}
+@media (min-width:900px){.hero h1{font-size:min(3.4rem,calc((50vw - 64px) / 13.2))}}
 .hero h1 em{font-style:italic;font-weight:560;color:var(--accent)}
 .hero .lead{margin-bottom:28px}
 .hero-actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:6px}
 
 /* voice demo card */
 .voice{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);padding:22px;position:relative;max-width:30rem;justify-self:center;width:100%}
+@media (min-width:960px){.hero-grid{align-items:stretch}.hero .byoa{margin-bottom:0}.hero-grid>.voice{margin:0;max-width:none;display:flex;flex-direction:column;justify-content:center;padding:30px 30px}.hero-grid>.voice .voice-top{font-size:.9rem;margin-bottom:22px}.hero-grid>.voice .say{padding:16px 20px;margin-bottom:18px;max-width:96%}.hero-grid>.voice .say-you{font-size:1.12rem}.hero-grid>.voice .say-narrator{font-size:1.14rem}.hero-grid>.voice .bars{height:46px;margin:8px 0 4px}.hero-grid>.voice .sample{margin-top:20px}}
 .voice-top{display:flex;align-items:center;gap:10px;margin:0 0 16px;font:700 .8rem/1 var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2)}
 .live{width:9px;height:9px;border-radius:50%;background:var(--orange);box-shadow:0 0 0 0 rgba(239,119,38,.6);animation:live 2s infinite}
 @keyframes live{0%{box-shadow:0 0 0 0 rgba(239,119,38,.55)}70%{box-shadow:0 0 0 10px rgba(239,119,38,0)}100%{box-shadow:0 0 0 0 rgba(239,119,38,0)}}
@@ -670,6 +820,19 @@ p{margin:0 0 1em}
 .sample-btn .knob .ic-pause,.is-playing .sample-btn .knob .ic-play{display:none}
 .is-playing .sample-btn .knob .ic-pause{display:block}
 .sample-time{font:600 .86rem/1 var(--sans);color:var(--ink-2);font-variant-numeric:tabular-nums}
+.thread{display:flex;flex-direction:column;gap:8px}
+.thread .say{margin:0;padding:10px 14px;font-size:.98rem;line-height:1.4}
+.thread .say b{margin-bottom:3px}
+.thread .say-narrator{font-size:1rem}
+.hero-grid>.voice .thread .say{padding:7px 13px;margin:0;line-height:1.32}
+.hero-grid>.voice .thread .say b{font-size:.66rem;margin-bottom:2px}
+.hero-grid>.voice .thread .say-you{font-size:.93rem}
+.hero-grid>.voice .thread .say-narrator{font-size:.95rem}
+.hero-grid>.voice:has(.thread){padding:22px 24px}
+.hero-grid>.voice:has(.thread) .voice-top{margin-bottom:12px}
+.hero-grid>.voice:has(.thread) .bars{height:30px;margin:8px 0 0}
+.hero-grid>.voice:has(.thread) .sample{margin-top:10px}
+.js-sample.is-on .thread .say.is-said{opacity:.8}
 .js-sample{cursor:pointer}
 .js-sample .sample audio{display:none}
 .js-sample .bars i{animation-play-state:paused}
@@ -803,6 +966,8 @@ p{margin:0 0 1em}
 /* Shelf header accents, one per kind (plan section 3). */
 .ic-wrap.kind-mystery{background:linear-gradient(155deg,#1A4673,#0E2541)}
 .ic-wrap.kind-adventure{background:linear-gradient(160deg,#EF7726,#C25A12)}
+.cover-gamebook{background:radial-gradient(80% 80% at var(--gx,70%) var(--gy,20%),rgba(255,214,120,.75),transparent 60%),linear-gradient(155deg,#2E8B57,#14452F)}
+.ic-wrap.kind-gamebook{background:linear-gradient(155deg,#4CC38A,#2E8B57)}
 .ic-wrap.kind-branching{background:linear-gradient(155deg,#3FB8E8,#2381BB)}
 .ic-wrap.kind-trivia{background:linear-gradient(150deg,#E9A770,#C9773A)}
 .ic-wrap.kind-game{background:linear-gradient(155deg,#4F8F6C,#2D5C47)}
@@ -930,6 +1095,8 @@ details.script pre{margin:0;padding:0 18px 18px;white-space:pre-wrap;word-break:
 .ai-btns{list-style:none;margin:16px 0 14px;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 @media (min-width:560px){.ai-btns{grid-template-columns:repeat(4,minmax(0,1fr))}}
 .ai-btns li{display:flex;min-width:0}
+/* Side by side with the sample card on a narrow desktop the four buttons are cramped: two by two there. */
+@media (min-width:960px) and (max-width:1179px){.hero .ai-btns{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .ai-btn{flex:1;display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;gap:12px;min-height:92px;padding:14px 14px 13px;border-radius:18px;background:var(--surface);border:1.5px solid var(--line-2);box-shadow:var(--shadow);color:var(--ink);text-decoration:none;cursor:pointer;transition:transform .15s ease,border-color .15s ease,background-color .15s ease}
 .ai-btn:hover{border-color:var(--accent);color:var(--ink);transform:translateY(-2px)}
 .ai-btn:active{transform:translateY(0) scale(.99)}
@@ -937,8 +1104,72 @@ details.script pre{margin:0;padding:0 18px 18px;white-space:pre-wrap;word-break:
 .ai-btn-name{font:650 1.2rem/1.12 var(--serif);font-variation-settings:"SOFT" 50,"opsz" 36}
 .ai-btn-act{display:inline-flex;align-items:center;gap:6px;padding:7px 12px 7px 9px;border-radius:999px;background:var(--btn);color:var(--btn-ink);font:750 .84rem/1 var(--sans)}
 .byoa-on{margin:16px 0 14px;padding:16px 18px;border-radius:18px;background:var(--surface);border:1.5px solid var(--line-2);box-shadow:var(--shadow)}
-.byoa-on-line{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:0 0 12px;font-size:1.05rem}
-.byoa-on-act{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin:0}
+[data-signed="in"] .if-out{display:none!important}
+.addr{margin:10px 0 4px}
+.addr-ask{padding:14px 16px;border-radius:14px;background:var(--surface-2);border:1px solid var(--line);margin:0 0 12px}
+.addr-why{margin:0 0 10px;font-size:.98rem}
+.addr .addr-h{margin:10px 0 6px;font-size:.95rem;color:var(--ink-2)}
+.w-form{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:8px 0 12px}
+.w-form input{flex:1;min-width:12rem;padding:12px 14px;border-radius:14px;border:1.5px solid var(--line-2);background:var(--surface);color:var(--ink);font:600 1.15rem var(--sans)}
+.w-form label{font-weight:700}
+.w-scores{list-style:none;padding:0;margin:8px 0 16px;display:flex;flex-wrap:wrap;gap:10px}
+.w-scores li{display:flex;gap:12px;align-items:baseline;padding:10px 16px;border-radius:14px;background:var(--surface);border:1px solid var(--line);font-size:1.15rem}
+.w-scores strong{font:700 1.5rem var(--serif)}
+.w-open,.w-last{padding:18px 20px;border-radius:18px;background:var(--navy);color:#F6F0E6;margin:0 0 16px}
+.w-last.ok{background:#1D6E3E}
+.w-open .w-k,.w-last .w-k{color:#C9D5E4}
+.w-k{margin:0 0 6px;font:700 .85rem/1.2 var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2)}
+.w-clue{margin:0;font:500 clamp(1.3rem,4.5vw,1.8rem)/1.35 var(--serif)}
+.w-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+.w-cat{display:grid;gap:6px}
+.w-cat-h{margin:0;font:750 .95rem/1.2 var(--sans);text-align:center;min-height:2.4em;display:grid;place-items:center}
+.w-cell{margin:0;padding:12px 0;border-radius:12px;background:var(--btn);color:var(--btn-ink);text-align:center;font:800 1.3rem var(--sans)}
+.w-cell.done{background:var(--surface-2);color:var(--ink-2);opacity:.55;text-decoration:line-through}
+.w-final{margin:16px 0 0;font-weight:700}
+.badges{list-style:none;padding:0;margin:12px 0;display:flex;flex-wrap:wrap;gap:10px}
+.badges li{display:flex;flex-direction:column;gap:2px;padding:10px 14px;border-radius:14px;border:1.5px solid var(--ok);background:var(--ok-soft)}
+.badge-name{display:inline-flex;align-items:center;gap:6px;font-weight:750;color:var(--ok-ink)}
+.badge-why{font-size:.85rem;color:var(--ink-2)}
+.pstats{list-style:none;padding:0;margin:12px 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+.pstats li{padding:12px 14px;border-radius:14px;background:var(--surface);border:1px solid var(--line);display:flex;flex-direction:column}
+.pstats strong{font:700 1.5rem/1.1 var(--serif)}
+.pstats span{font-size:.88rem;color:var(--ink-2)}
+.pform{display:grid;gap:8px;max-width:30rem;margin:12px 0}
+.pform input[type=text],.pform input:not([type]){padding:10px 12px;border-radius:12px;border:1.5px solid var(--line-2);background:var(--surface);color:var(--ink);font:inherit}
+.pcheck{display:flex;gap:10px;align-items:flex-start;font-size:.95rem}
+.pform .btn{justify-self:start}
+.cc-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:16px 0 0}
+.cc-issues{display:grid;gap:8px;margin:6px 0 14px}
+.cc-issues[hidden]{display:none}
+.cc-issues label{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border:1px solid var(--line);border-radius:12px;background:var(--surface-2);cursor:pointer;font-size:.98rem}
+.cc-issues input{margin-top:3px;accent-color:var(--accent)}
+.cc-note-l{display:block;font-weight:600;font-size:.92rem;margin:4px 0 6px}
+#cc-note{width:100%;box-sizing:border-box;padding:10px 12px;border-radius:12px;border:1px solid var(--line-2);background:var(--surface);color:var(--ink);font:inherit}
+.cc-small{font-size:.86rem;color:var(--ink-2);margin:12px 0 0}
+.cc-tip{padding:12px 14px;border-radius:14px;background:var(--surface-2);border:1px solid var(--line);margin:0 0 4px}
+.conn-state{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin:6px 0 10px}
+.conn-state .conn-on{display:none}
+.conn-state.is-on .conn-on{display:inline-flex;align-items:center;gap:6px}
+.conn-state.is-on .conn-off{display:none}
+.tabs [role=tab].is-on::after{content:" ✓";color:var(--accent)}
+.addr-h{margin:12px 0 6px;font-size:.95rem;color:var(--ink-2)}
+.byoa-on-list{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.byoa-on-list .status-ok,.conn-state .status-ok{background:var(--ok-soft);color:var(--ok-ink)}
+.byoa-on{border-color:var(--ok)!important}
+.conn-state.is-on{padding:8px 12px;border-radius:14px;border:1.5px solid var(--ok);background:var(--ok-soft)}
+.tabs [role=tab].is-on::after{color:var(--ok)}
+.byoa-on-list li{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;font-size:1.02rem}
+.byoa-on-list li[hidden]{display:none}
+.byoa-on .copied{display:block;margin-top:8px}
+.ai-btn-act{white-space:nowrap}
+.hero .ai-btns{gap:8px}.hero .ai-btn{padding:12px 10px 11px}.hero .ai-btn-name{font-size:1.12rem}
+.ai-btn .act-on{display:none}
+.ai-btn.is-on .act-on{display:inline-flex;align-items:center;gap:6px}
+.ai-btn.is-on .act-off{display:none}
+.ai-btn.is-on{border-color:var(--ok);background:var(--ok-soft)}
+.ai-btn.is-on .ai-btn-act{background:var(--ok);color:#06210F;box-shadow:none;padding:6px 9px 6px 7px;font-size:.78rem}
+.byoa .ai-btn.is-on{border-color:#3FC47A;background:rgba(63,196,122,.18)}
+.byoa .ai-btn.is-on .ai-btn-act{background:#3FC47A;color:#06210F}
 .byoa-on-say{margin:12px 0 0;color:var(--ink-2);font-size:.98rem}
 .linkish{appearance:none;background:none;border:0;padding:0;color:var(--accent);text-decoration:underline;cursor:pointer;font:inherit}
 .dlg-done{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;margin:18px 0 6px;color:var(--ink-2);font-size:.95rem}
@@ -1010,7 +1241,7 @@ footer.foot{border-top:1px solid var(--line);padding:40px 0 48px;color:var(--ink
 @media (min-width:760px){.foot-grid{grid-template-columns:1.4fr 1fr}}
 .foot .brand{margin:0 0 12px}
 .foot nav{display:flex;flex-wrap:wrap;gap:8px 18px;margin:0 0 12px}
-.foot nav a{font-weight:650;text-decoration:none;color:var(--ink)}
+.foot nav a{font-weight:650;text-decoration:none;color:var(--ink);display:inline-block;padding:8px 0}
 .foot nav a:hover{color:var(--accent)}
 .foot p{margin:0 0 8px}
 
@@ -1063,7 +1294,8 @@ dialog.cdlg::backdrop{background:rgba(6,14,26,.6);-webkit-backdrop-filter:blur(3
 `;
 
 // ============================================================================ PAGE SHELL
-type Shell = { title: string; description: string; body: string; origin: string; path: string; script?: string };
+// section: the tab a page belongs to when its path isn't a tab (a story page is under Stories or Games).
+type Shell = { title: string; description: string; body: string; origin: string; path: string; script?: string; section?: string };
 // The four pages, shown as tabs under the header on every page (Ben, 2026-10-17: separate pages
 // with tabs, not one long home page).
 const NAV: [string, string][] = [["/", "Home"], ["/stories", "Stories"], ["/games", "Games"], ["/connect", "Connect"], ["/how-it-works", "How it works"], ["/write", "Write"]];
@@ -1071,8 +1303,8 @@ const NAV: [string, string][] = [["/", "Home"], ["/stories", "Stories"], ["/game
 const FONTS = "https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT@0,9..144,400..700,0..100;1,9..144,400..700,0..100&family=Plus+Jakarta+Sans:wght@400..800&display=swap";
 
 function page(s: Shell): string {
-  // A story page belongs to the Stories tab.
-  const cur = (href: string) => (href === s.path || (href === "/" && s.path.startsWith("/stories/")) ? ` aria-current="page"` : "");
+  // A story page belongs to the Stories or the Games tab.
+  const cur = (href: string) => (href === s.path || href === s.section ? ` aria-current="page"` : "");
   const links = NAV.map(([href, label]) => `<a href="${href}"${cur(href)}>${label}</a>`).join("");
   const url = s.origin + s.path;
   return `<!doctype html>
@@ -1117,6 +1349,7 @@ function page(s: Shell): string {
 </header>
 <main id="main">
 ${s.body}
+${/<a[^>]+data-connected=/.test(s.body) ? checkDialog(s.origin + "/mcp") : ""}
 </main>
 <footer class="foot"><div class="wrap foot-grid">
 <div>
@@ -1150,7 +1383,9 @@ ${s.body}
   var m=document.querySelector("details.menu");
   if(m){document.addEventListener("click",function(e){if(m.open&&!m.contains(e.target))m.open=false;});document.addEventListener("keydown",function(e){if(e.key==="Escape"&&m.open){m.open=false;m.querySelector("summary").focus();}});}
 })();
-${s.body.includes("data-dialog=") ? DIALOG_JS + "\n" + CONNECTED_JS : ""}
+${s.body.includes("data-dialog=") ? DIALOG_JS : ""}
+${/data-(dialog|connected|conn|addr)\b/.test(s.body) ? CONNECTED_JS : ""}
+${/<a[^>]+data-connected=/.test(s.body) ? CHECK_JS : ""}
 ${s.script ?? ""}
 </script>
 </body>
@@ -1166,13 +1401,18 @@ const bars = (n = 28) => `<div class="bars" aria-hidden="true">${Array.from({ le
 // `start` is when each line begins in the file, in seconds, as that script printed it. Change
 // the text here only together with the audio. Public story.md text only: the cold open, and a
 // fact the table volunteers in Scene 1.2.
+// The home page sample (Ben, 2026-10-21: a short opening, then the back and forth). Two voices from
+// Workers AI Aura (luna for you, angus for the narrator), joined with 0.6 s gaps; starts are each line's
+// time in the file. Every fact is from the story's public tables (no clue the player hasn't earned).
 const SAMPLE = {
-  src: "/audio/sample-last-toast.mp3", seconds: 38,
+  src: "/audio/sample-last-toast.mp3", seconds: 28,
   lines: [
-    { who: "you", start: 0.16, text: "“Start The Last Toast with Plot Speaks.”" },
-    { who: "narrator", start: 3.24, text: "Retired judge Marguerite Okafor is hosting her own retirement dinner at Harrow House, a stone place on a hill above the river. During the cheese course, the housekeeper finds Marguerite slumped in her study, a half-finished glass of port beside her. Snow has iced the roads, and nobody can leave. Everyone turns to you, the only investigator here. Where do you want to start?" },
-    { who: "you", start: 23.61, text: "“Who poured the port tonight?”" },
-    { who: "narrator", start: 25.78, text: "Father Reyes lifts his eyes from the table, and pauses. “I did, at ten past nine. Everyone drank from the same decanter, in front of the whole table, and nobody else is ill.” Who do you want to talk to next?" },
+    { who: "you", start: 0.05, text: "“Start The Last Toast with Plot Speaks.”" },
+    { who: "narrator", start: 2.69, text: "Harrow House, on a snowy night. During the cheese course, the judge is found dead in her study, a glass of port beside her. Who do you want to talk to?" },
+    { who: "you", start: 10.81, text: "“Who poured the port tonight?”" },
+    { who: "narrator", start: 12.85, text: "Father Reyes pauses. “I did, at ten past nine, from the same decanter for the whole table. Nobody else is ill.”" },
+    { who: "you", start: 19.51, text: "“June, where were you at nine twenty-four?”" },
+    { who: "narrator", start: 22.43, text: "June doesn't look up. “At the study door. I heard her on the phone, so I left her to it.” Who next?" },
   ],
 };
 
@@ -1181,13 +1421,15 @@ function sampleCard(lead: Meta): string {
   const withSample = lead.slug === "example-dinner-party";
   return `<figure class="voice rise rise-3" aria-label="Example of a story starting"${withSample ? ` data-sample="${esc(JSON.stringify(SAMPLE.lines))}"` : ""}>
 <p class="voice-top"><span class="live" aria-hidden="true"></span> In the car, by voice</p>
-<p class="say say-you" data-who="you"><b>You</b><span data-line>“Start ${esc(lead.title)} with Plot Speaks.”</span></p>
-<p class="say say-narrator" data-who="narrator"><b>Narrator</b><span data-line>${esc(lead.pitch)}</span></p>
+${withSample
+  ? `<div class="thread">${SAMPLE.lines.map((l, i) => `<p class="say say-${l.who}" data-i="${i}"><b>${l.who === "you" ? "You" : "Narrator"}</b><span>${esc(l.text)}</span></p>`).join("\n")}</div>`
+  : `<p class="say say-you" data-who="you"><b>You</b><span data-line>“Start ${esc(lead.title)} with Plot Speaks.”</span></p>
+<p class="say say-narrator" data-who="narrator"><b>Narrator</b><span data-line>${esc(lead.pitch)}</span></p>`}
 ${bars()}
 ${withSample ? `<div class="sample">
 <button type="button" class="btn btn-ghost btn-sm sample-btn" hidden aria-label="Play a ${SAMPLE.seconds}-second sample of ${esc(lead.title)}"><span class="knob">${icon("play", 18, "ic ic-play")}${icon("pausebars", 18, "ic ic-pause")}</span><span class="sample-label">Hear a sample (${SAMPLE.seconds}s)</span></button>
 <span class="sample-time" hidden aria-hidden="true"></span>
-<audio controls preload="none" src="${SAMPLE.src}" aria-label="A ${SAMPLE.seconds}-second sample of ${esc(lead.title)}: you start the story, the narrator reads the opening, you ask who poured the port, and Father Reyes answers."></audio>
+<audio controls preload="none" src="${SAMPLE.src}" aria-label="A ${SAMPLE.seconds}-second sample of ${esc(lead.title)}: you start the story, the narrator sets the scene, you ask who poured the port and Father Reyes answers, then you ask June where she was and she answers."></audio>
 </div>` : ""}
 </figure>`;
 }
@@ -1200,18 +1442,13 @@ const SAMPLE_JS = `(function(){
   var lines;try{lines=JSON.parse(card.getAttribute("data-sample"));}catch(e){return;}
   var audio=card.querySelector("audio"),btn=card.querySelector(".sample-btn"),label=btn.querySelector(".sample-label"),time=card.querySelector(".sample-time");
   if(!audio||!audio.canPlayType||!audio.canPlayType("audio/mpeg"))return;
-  var bubbles={you:card.querySelector('[data-who="you"]'),narrator:card.querySelector('[data-who="narrator"]')};
-  var first={you:bubbles.you.querySelector("[data-line]").textContent,narrator:bubbles.narrator.querySelector("[data-line]").textContent};
+  var bubbles=[].slice.call(card.querySelectorAll(".thread [data-i]"));
   var title=btn.getAttribute("aria-label"),idle=label.textContent,current=-1;
   card.classList.add("js-sample");btn.hidden=false;audio.removeAttribute("controls");
   function mmss(t){t=Math.max(0,Math.floor(t||0));return Math.floor(t/60)+":"+(t%60<10?"0":"")+t%60;}
   function show(i){
     if(i===current)return;current=i;
-    for(var k in bubbles)bubbles[k].classList.remove("is-speaking");
-    if(i<0)return;
-    // each bubble shows its speaker's latest line so far (right after a seek, too)
-    for(var w in bubbles){var txt=first[w];for(var n=0;n<=i;n++)if(lines[n].who===w)txt=lines[n].text;bubbles[w].querySelector("[data-line]").textContent=txt;}
-    bubbles[lines[i].who].classList.add("is-speaking");
+    bubbles.forEach(function(b,n){b.classList.toggle("is-speaking",n===i);b.classList.toggle("is-said",i>=0&&n<i);});
   }
   function lineAt(t){var i=0;for(var n=0;n<lines.length;n++)if(t>=lines[n].start-0.05)i=n;return i;}
   function state(){
@@ -1222,7 +1459,6 @@ const SAMPLE_JS = `(function(){
   }
   function reset(){
     card.classList.remove("is-on","is-playing");show(-1);
-    for(var k in bubbles)bubbles[k].querySelector("[data-line]").textContent=first[k];
     try{audio.currentTime=0;}catch(e){}
     time.hidden=true;label.textContent=idle;btn.setAttribute("aria-label",title);
   }
@@ -1247,7 +1483,7 @@ function storyCard(m: Meta, r: RatingSummary | undefined, testing = false): stri
   // shows the phrase that starts it, since it starts only by exact name.
   const flagged = testing || m.testing;
   return `<li class="card${flagged ? " card-testing" : ""}" data-cat="${categoryOf(m).id}">
-<div style="position:relative">${cover(m)}${m.minutes ? `<span class="badge">${icon("clock", 13)}${m.minutes} min</span>` : ""}${flagged ? `<span class="badge badge-testing">Being tested</span>` : ""}</div>
+<div style="position:relative">${cover(m)}${m.minutes ? `<span class="badge">${icon("clock", 13)}${m.minutes} min</span>` : ""}${flagged ? `<span class="badge badge-testing">Being tested${r?.passed ? ` · ${r.passed} passed` : ""}</span>` : ""}</div>
 <div class="card-body">
 <h4 class="title"><a href="/stories/${encodeURIComponent(m.slug)}">${esc(m.title)}</a></h4>
 <p class="by">Written by ${esc(authorOf(m))}</p>
@@ -1281,7 +1517,7 @@ const FILTER_JS = `(function(){
 })();`;
 
 // The two catalogue tabs (Ben, 2026-10-17): Stories and Games.
-const STORY_KINDS = ["mystery", "adventure", "branching"];
+const STORY_KINDS = ["mystery", "adventure", "gamebook", "branching", "winddown"];
 const GAME_KINDS = ["trivia", "game", "campaign"];
 
 export function catalogPage(stories: PublicStory[], ratings: Map<string, RatingSummary>, origin = "", previews: PublicStory[] = [], tab: "home" | "stories" | "games" = "home"): string {
@@ -1327,10 +1563,11 @@ ${g.items.map((m) => storyCard(m, ratings.get(m.slug), testing.has(m.slug))).joi
 <p class="eyebrow">${icon(games ? "star" : "book", 18)} ${games ? "Games" : "Stories"}</p>
 <h1>${games ? "Games the whole car can play." : "Pick tonight's story."}</h1>
 <p class="lead">${games
-  ? "Your assistant hosts: trivia boards with scores and challenges, twenty questions, story games, Werewolf on one shared phone, and campaigns that pick up where you left off."
+  ? "Your assistant hosts: trivia boards with scores and challenges, twenty questions, story games, Werewolf on one shared phone, and open worlds with no set ending that pick up where you left off."
   : "Every one is free and written for one narrator doing all the voices: mysteries where you name the culprit, adventures with dice, and stories where you choose the path."}</p>
 </header>
 ${testingNote}
+${games ? `<p class="note daily-note">${icon("star", 20)}<span><strong>Today's board.</strong> One trivia board a day, the same clues for everyone. Say &ldquo;Plot Speaks, today's board&rdquo;; at the end you hear how many have played and the top score.</span></p>` : ""}
 ${chips}
 <div id="stories-list">
 ${sections}
@@ -1338,7 +1575,7 @@ ${sections}
 </div>
 ${connectDialogs({ url: origin + "/mcp", story: example })}`;
     return page({ title: games ? "Games · Plot Speaks" : "Stories · Plot Speaks",
-      description: games ? "Trivia, twenty questions, story games, Werewolf for a car, and D&D-style campaigns, played by voice with your own assistant." : "Murder mysteries, fantasy adventures and choose-your-path stories you play by voice with your own assistant.",
+      description: games ? "Trivia, twenty questions, story games, Werewolf for a car, open worlds and D&D-style campaigns, played by voice with your own assistant." : "Murder mysteries, fantasy adventures and choose-your-path stories you play by voice with your own assistant.",
       body: listBody, origin, path: games ? "/games" : "/stories", script: FILTER_JS });
   }
   // Home: the counts behind the two doors.
@@ -1359,12 +1596,14 @@ ${lead ? sampleCard(lead) : ""}
 </div>
 </section>
 
+${news.length ? `<section class="section" aria-label="What's new"><div class="wrap"><p class="note whats-new">${icon("star", 20)}<span><strong>What's new.</strong> ${news.slice(0, 2).map((n) => esc(n.line)).join(" ")}</span></p></div></section>` : ""}
+
 <section class="section" aria-labelledby="pick-h">
 <div class="wrap">
 <div class="section-head"><h2 id="pick-h">What do you feel like?</h2></div>
 <div class="door-grid">
 <a class="door" href="/stories"><span class="ic-wrap kind-mystery">${icon("book", 26)}</span><span><strong>Stories</strong><span class="door-n">${allStories.length} to play</span><span class="door-p">Murder mysteries, fantasy adventures, and stories where you choose the path.</span></span>${icon("arrow", 22)}</a>
-<a class="door" href="/games"><span class="ic-wrap kind-trivia">${icon("star", 26)}</span><span><strong>Games</strong><span class="door-n">${allGames.length} to play</span><span class="door-p">Trivia with challenges, twenty questions, Werewolf for the car, and D&amp;D-style campaigns.</span></span>${icon("arrow", 22)}</a>
+<a class="door" href="/games"><span class="ic-wrap kind-trivia">${icon("star", 26)}</span><span><strong>Games</strong><span class="door-n">${allGames.length} to play</span><span class="door-p">Trivia with challenges, twenty questions, Werewolf for the car, and open worlds with no set ending.</span></span>${icon("arrow", 22)}</a>
 </div>
 ${anyTesting ? `<p class="note testing-note">${icon("star", 20)}<span><strong>New stories and games are being tested.</strong> Try one and tell us how it worked for you: your assistant asks at the end.</span></p>` : ""}
 </div>
@@ -1394,7 +1633,7 @@ export function storyPage(p: PublicStory, rating: RatingSummary | undefined, ori
     : "";
   const passenger = `/stories/${encodeURIComponent(m.slug)}/passenger`;
   const body = `<div class="wrap">
-<p class="crumbs"><a href="/#cat-${kindShelf(m).id}">← ${esc(kindShelf(m).name)}</a></p>
+<p class="crumbs"><a href="${GAME_KINDS.includes(kindShelf(m).id) ? "/games" : "/stories"}#cat-${kindShelf(m).id}">← ${esc(kindShelf(m).name)}</a></p>
 <section class="story-hero">
 ${cover(m, { alt: `Cover art for ${m.title}`, eager: true })}
 <div>
@@ -1402,6 +1641,7 @@ ${facts(m)}
 <h1>${esc(m.title)}</h1>
 <p class="byline">Written by <strong>${esc(authorOf(m))}</strong></p>
 ${stars(rating)}
+${m.testing ? `<p class="note testing-note">${icon("star", 20)}<span><strong>New, and being tested.</strong> At the end your assistant asks whether it passed your test or needs work, and what to improve. ${rating?.passed ? `${rating.passed} player${rating.passed === 1 ? " has" : "s have"} passed it so far.` : "Be one of the first to try it."}</span></p>` : ""}
 <p class="pitch">${esc(m.pitch)}</p>
 </div>
 </section>
@@ -1476,7 +1716,7 @@ ${connectorOnly ? "" : rulesOnly ? `<div class="block fallback" id="paste">
 ${m.minutes ? `<div><dt>Length</dt><dd>${m.minutes} minutes${m.chapters && m.chapters > 1 ? `, ${m.chapters} chapters` : ""}</dd></div>` : ""}
 ${m.players ? `<div><dt>Players</dt><dd>${esc(playersLabel(m.players))}</dd></div>` : ""}
 ${m.rating ? `<div><dt>Rating</dt><dd>${esc(m.rating)}</dd></div>` : ""}
-<div><dt>Play with</dt><dd>Claude, Gemini and others, through the connector. ChatGPT or any assistant, by pasting.</dd></div>
+<div><dt>Play with</dt><dd>${connectorOnly ? "Claude, Gemini and others, through the connector. It can't be pasted." : "Claude, Gemini and others, through the connector. ChatGPT or any assistant, by pasting."}</dd></div>
 <div><dt>Written by</dt><dd>${esc(m.author || "Volocent Labs")}</dd></div>
 </dl>
 </div>
@@ -1492,13 +1732,14 @@ ${connectDialogs({ url: origin + "/mcp", story: m.title, storyPage: { passenger,
   // Every "Copy the story" button (the paste section's and the ChatGPT pop-up's); each one's
   // status line is the element after it.
   const script = `(function(){
-  var t=document.getElementById("story-text").textContent;
+  // Connector-only stories (choose-your-path, trivia, campaigns) have no story text on the page.
+  var el=document.getElementById("story-text");if(!el)return;var t=el.textContent;
   [].forEach.call(document.querySelectorAll("[data-copy-story]"),function(b){
     var s=b.nextElementSibling||document.getElementById("copied");
     b.addEventListener("click",function(){window.psCopy(t,function(ok){s.textContent=ok?"Copied. Now paste it into a new chat.":"Couldn't copy. Open the script on this page and copy it by hand.";});});
   });
 })();`;
-  return page({ title: `${m.title} · Plot Speaks`, description: m.pitch, body, origin, path: `/stories/${encodeURIComponent(m.slug)}`, script });
+  return page({ title: `${m.title} · Plot Speaks`, description: m.pitch, body, origin, path: `/stories/${encodeURIComponent(m.slug)}`, script, section: GAME_KINDS.includes(kindShelf(m).id) ? "/games" : "/stories" });
 }
 
 // ============================================================================ PASSENGER
@@ -1710,28 +1951,28 @@ export function connectPage(stories: PublicStory[], origin: string): string {
     `<button type="button" role="tab" id="tab-${a.id}" aria-controls="${a.id}" aria-selected="${i === 0}">${esc(a.tab)}</button>`).join("")}</div>`;
   const panels = CONNECT.assistants.map((a) => `<section class="assistant" id="${a.id}" aria-labelledby="tab-${a.id} ${a.id}-h">
 <h2 id="${a.id}-h">${esc(a.name)} <span class="status${a.ok ? " status-ok" : ""}">${esc(a.status)}</span></h2>
+<p class="conn-state" data-conn="${a.id}"><span class="status status-ok conn-on">${icon("check", 16)} Connected on this device</span><button class="linkish conn-on" type="button" data-on-remove="${a.id}">Remove</button><button class="btn btn-ghost btn-sm conn-off" type="button" data-connected="${a.id}">${icon("check", 18)}I've connected ${esc(a.btn)}</button></p>
 <p class="plan">${fill(a.plan, url, example)}</p>
-${a.button ? `<p><a class="btn btn-primary btn-big" href="${fill(a.button.href, url, example)}"${a.button.href.startsWith("{") ? ` rel="noopener"` : ""}>${icon(a.id === "claude" ? "plug" : "book", 20)}${esc(a.button.label)}</a></p>` : ""}
+${a.id === "gemini" ? `<p class="muted" style="margin:14px 0 6px">The button copies the address and opens Gemini: tap <strong>+ Custom</strong> and paste it.</p>` : ""}
+${a.button ? `<p><a class="btn btn-primary btn-big" href="${fill(a.button.href, url, example)}"${a.button.href.startsWith("{") || a.button.href.startsWith("https://") ? ` target="_blank" rel="noopener"` : ""}${["claude", "gemini"].includes(a.id) ? ` data-connected="${a.id}"` : ""}${a.id === "gemini" ? ` data-copy-url="${esc(accountUrlFor(url))}"` : ""}>${icon(["claude", "gemini"].includes(a.id) ? "plug" : "book", 20)}${esc(a.button.label)}</a></p>` : ""}
 ${a.steps.length ? `<ol class="steps">${a.steps.map((s) => `<li>${fill(s, url, example)}</li>`).join("")}</ol>` : ""}
 ${a.others ? `<ul class="others">${OTHERS.map((o) => `<li id="${o.id}"><h3>${esc(o.name)} <span class="status">${esc(o.status)}</span></h3><p>${fill(o.line, url, example)}</p>${o.how ? `<p class="how">${fill(o.how, url, example)}</p>` : ""}</li>`).join("")}</ul>` : ""}
 ${a.open ? `<p class="saybox"><b>Then say</b>“${fill(a.open, url, example)}”<span class="saybox-sub">A quick intro, then browse, start or write a story.</span></p>` : ""}
 ${a.id === "claude" ? "<!--ACCOUNT-CONNECT-->" : ""}
 ${a.say ? `<p class="saybox${a.open ? " saybox-alt" : ""}"><b>${a.open ? "Or name a story" : "Then say"}</b>“${fill(a.say, url, example)}”</p>` : ""}
-<ul class="notes">${a.notes.map((n) => `<li class="note">${icon("check", 20)}<span>${fill(n, url, example)}</span></li>`).join("")}</ul>
+<ul class="notes">${a.notes.map((n) => `<li class="note${/^Rather not sign in\?/.test(n) ? " if-out" : ""}">${icon("check", 20)}<span>${fill(n, url, example)}</span></li>`).join("")}</ul>
 </section>`).join("\n");
   const body = `<div class="wrap narrow">
 <header class="page-head">
 <p class="eyebrow">${icon("plug", 18)} Connect</p>
 <h1>${esc(CONNECT.headline)}</h1>
 <p class="lead">Plot Speaks works as a connector: your assistant calls it to load a story and check your answers. Add it once, parked, then say <strong>“Open Plot Speaks”</strong> for a quick intro and the choice to browse, start or write a story, or name the story you want. Claude is the easiest: one tap, and its Free plan includes one custom connector.</p>
-<p class="muted" style="margin:0">The connector address, for any assistant:</p>
-${copyField(url, "mcp-url", false)}
-${chatgptNote()}
+${addressBlock(url, "mcp-url", "The connector address, for any assistant")}
 </header>
 ${tabs}
 ${panels}
 <p class="safety">${icon("shield", 20)}<span>Do all of this before you drive. Once you're moving, the driver keeps eyes on the road.</span></p>
-<p style="margin:28px 0 64px"><a class="link-arrow" href="/#stories">Pick a story ${icon("arrow", 18)}</a></p>
+<p style="margin:28px 0 64px"><a class="link-arrow" href="/stories">Pick a story ${icon("arrow", 18)}</a></p>
 </div>`;
   return page({
     title: "Connect Plot Speaks to your assistant",
@@ -1840,9 +2081,20 @@ ${phrasesTable(null)}
 <li><strong>It tells you something you never found:</strong> say “We haven't heard that yet.” The narrator should drop it and ask who you'd like to question; it must not explain the slip.</li>
 <li><strong>Bad signal:</strong> the whole script is already with your assistant once a story starts, so the story keeps going without a connection. Only an accusation, a hidden scene and the final rating need Plot Speaks; if one fails, the narrator says so and tries again when you ask. Start the story while you still have signal, and nothing is lost in a dead zone.</li>
 </ul>
+<h2>Playing on a free plan or a small model</h2>
+<p>A long game uses a lot of your assistant's allowance, because every turn re-reads the conversation so far. To make it go further:</p>
+<ul>
+<li><strong>Say how long you've got.</strong> Tell a trivia game &ldquo;I've got ten minutes&rdquo; and it is sized to fit: up to 10 minutes is a quick fire of 12 questions, up to 15 one of 20, up to 25 a four-category board, and more is the whole board. A whole board is about 40 turns on a small model; a quick fire is about one turn a question.</li>
+<li><strong>Watch the board on a phone.</strong> Every trivia game starts with a two-word code. A passenger opens <strong>plotspeaks.com/play</strong>, types it in, and sees the categories, the scores, the clue being read and each answer once it has been ruled.</li>
+<li><strong>Play a friend, on your own time.</strong> When a board ends, the host gives you a three-word code. A friend says &ldquo;Plot Speaks, play against code&hellip;&rdquo; and gets the same board dealt the same way; at the end they hear who scored more. Nothing is live, so you can each play whenever you like. Codes last 30 days.</li>
+<li><strong>Or pick quick fire, or a streak.</strong> Every trivia game offers the board (categories and points, like Jeopardy), quick fire (random questions one after another and a running tally) or a streak (quick fire until your first miss; one number to beat next time). Quick fire uses about a third fewer steps per question than the board.</li>
+<li><strong>Use the lightest model you have.</strong> Plot Speaks does the remembering, so a small, fast model (Claude Haiku, for example) is enough for most games. If your assistant has an effort or extended-thinking setting, leave it low or off: these are voice games, not essays.</li>
+<li><strong>Short games first.</strong> A choose-your-path story or a 15-minute game uses far less than a three-chapter mystery.</li>
+<li><strong>Short answers are fine.</strong> You can answer with a single word: &ldquo;yes&rdquo;, &ldquo;next&rdquo;, &ldquo;continue&rdquo;. If the assistant waits for more, say &ldquo;Plot Speaks, go on.&rdquo;</li>
+</ul>
 <h2>At the end</h2>
 <p>The narrator asks once whether you'd like to leave feedback: stars out of five, whether anything was given away too early, and anything you'd tell the people who make Plot Speaks. Say no and it drops it. Feedback goes to Volocent Labs and is deleted after 90 days.</p>
-<p style="margin:36px 0 64px"><a class="link-arrow" href="/#stories">Pick a story ${icon("arrow", 18)}</a></p>
+<p style="margin:36px 0 64px"><a class="link-arrow" href="/stories">Pick a story ${icon("arrow", 18)}</a></p>
 </div>`;
   return page({ title: "How Plot Speaks works", description: "How a Plot Speaks story goes: what to say, who holds the answer, and what to do if the narrator drifts.", body, origin, path: "/how-it-works" });
 }
@@ -1905,7 +2157,7 @@ export function privacyPage(origin: string): string {
 <li><strong>Trivia:</strong> the clues played, the scores, the names you give for scoring, and your last answer (in your words, so a challenge can be judged). A challenged answer is sent to three AI models on Cloudflare Workers AI to judge; nothing else about you goes with it.</li>
 <li><strong>Campaigns:</strong> the world your game builds (your characters' names and stats, places, people met, quests, one-line notes of what happened) and a hashed three-word resume code. Kept while you keep playing: deleted 90 days after the last session.</li>
 <li><strong>Dice:</strong> rolled on the server and not stored.</li>
-<li><strong>If you sign in (optional):</strong> your Google account's id, email and name; a session cookie on this site (we keep only a fingerprint of it, not the cookie); what you've played and how it ended; and the trivia questions you've heard. That is all: no Google password, no contacts, no conversations. You can delete it all at <a href="/account">your account page</a>.</li>
+<li><strong>If you sign in (optional):</strong> your Google account's id, email and name; a session cookie on this site (we keep only a fingerprint of it, not the cookie); what you've played and how it ended; and the trivia questions you've heard. If you choose a page name, that too, and whether your profile page is public: a public page shows only that name, your tester badges and game stats (never your history, name or email). That is all: no Google password, no contacts, no conversations. You can delete it all at <a href="/account">your account page</a>.</li>
 <li><strong>Adventure cues:</strong> which hidden scene was fetched, and the time.</li>
 <li><strong>Ratings and feedback:</strong> the stars, whether the ending was spoiled, any comment about the story and any feedback about the experience you choose to give (in your words, as your assistant passes them on), and the time.</li>
 </ul>
@@ -1961,7 +2213,7 @@ export function supportPage(origin: string): string {
 <li>Found something in a story that shouldn't be there, or a spoiler? Open an issue with the story title.</li>
 <li>Privacy questions: see <a href="/privacy">Privacy</a>.</li>
 </ul>
-<p style="margin:36px 0 64px"><a class="link-arrow" href="/#stories">Back to the stories ${icon("arrow", 18)}</a></p>
+<p style="margin:36px 0 64px"><a class="link-arrow" href="/stories">Back to the stories ${icon("arrow", 18)}</a></p>
 </div>`;
   return page({ title: "Support · Plot Speaks", description: "Help with Plot Speaks: quick fixes for the connector and the narrator, and how to reach us.", body, origin, path: "/support" });
 }
@@ -1970,7 +2222,7 @@ export function supportPage(origin: string): string {
 // terms URL. NOT LEGAL ADVICE: Ben should have a lawyer review this page before relying on it.
 // Keep it in step with privacyPage() and with what submissions.ts actually does (claim codes, review).
 // ============================================================================ ACCOUNT
-type AccountView = { user: { name: string | null; email: string | null } | null; history: { story: string; title: string; kind: string; started_at: number; outcome: string | null }[]; configured: boolean; accountMcp: string | null };
+type AccountView = { profile?: Profile | null; notice?: string | null; user: { name: string | null; email: string | null } | null; history: { story: string; title: string; kind: string; started_at: number; outcome: string | null }[]; configured: boolean; accountMcp: string | null };
 const WHY_SIGN_IN = `<ul class="why">
 <li><strong>No repeats.</strong> Ask for "a murder mystery I haven't played" and your assistant knows which ones you have. Trivia boards deal you questions you haven't heard yet.</li>
 <li><strong>Campaigns that wait for you.</strong> Pick up your D&amp;D-style campaign in any new chat, with no code to remember.</li>
@@ -1995,12 +2247,87 @@ ${v.accountMcp ? `<div class="note">${icon("plug", 20)}<span><strong>Let your as
 ${v.history.length ? `<div class="table-wrap"><table class="phrases"><thead><tr><th scope="col">Story or game</th><th scope="col">Kind</th><th scope="col">Started</th><th scope="col">How it ended</th></tr></thead><tbody>
 ${v.history.map((h) => `<tr><td><a href="/stories/${encodeURIComponent(h.story)}">${esc(h.title)}</a></td><td>${esc(kindName(h.kind))}</td><td>${when(h.started_at)}</td><td>${esc(h.outcome ?? "not finished")}</td></tr>`).join("\n")}
 </tbody></table></div>` : `<p>Nothing yet. Plays through the account connector show up here.</p>`}
+${v.profile ? profileSection(v.profile, v.notice ?? null, origin) : ""}
 <h2>Your account</h2>
 <form method="post" action="/account/signout" style="display:inline"><button class="btn btn-ghost" type="submit">Sign out</button></form>
 <details class="script" style="margin-top:22px"><summary>Delete my account</summary>
 <p>This deletes your account, your history and the trivia questions you've heard. Plays already counted stay as anonymous numbers. It can't be undone.</p>
 <form method="post" action="/account/delete"><button class="btn btn-primary" type="submit">Delete my account and history</button></form></details></div>`;
   return page({ title: "Account · Plot Speaks", description: "Optional sign-in with Google, so Plot Speaks remembers what you've played.", body, origin, path: "/account" });
+}
+
+// ============================================================================ WATCH
+// A trivia game's board on a passenger's phone (plan 2026-10-19, item 18): read-only, refreshed every few
+// seconds from /api/play/<code>. Built for a second screen: big type, no controls but the code box.
+function watchPage(origin: string, code: string): string {
+  const body = `<div class="wrap narrow watch">
+<header class="page-head"><p class="eyebrow">${icon("star", 18)} Watch the board</p><h1 data-w-title>Follow a trivia game.</h1>
+<p class="lead" data-w-lead>Type the two-word code the host gave you. The board, the scores and each clue show here as you play.</p></header>
+<form class="w-form" data-w-form><label for="wcode">Code</label><input id="wcode" name="code" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="e.g. amber fox" value="${esc(code.replace(/-/g, " "))}"><button class="btn btn-primary" type="submit">Watch</button></form>
+<p class="w-status" role="status" aria-live="polite" data-w-status></p>
+<div class="w-board" data-w-board hidden></div>
+</div>`;
+  return page({ title: "Watch the board · Plot Speaks", description: "Follow a Plot Speaks trivia game on a second screen.", body, origin, path: "/play", script: WATCH_JS });
+}
+const WATCH_JS = `(function(){
+  var form=document.querySelector("[data-w-form]"),input=document.getElementById("wcode"),status=document.querySelector("[data-w-status]"),boardEl=document.querySelector("[data-w-board]"),title=document.querySelector("[data-w-title]"),timer=null,code="";
+  function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];});}
+  function draw(d){
+    title.textContent=d.title;boardEl.hidden=false;var lead=document.querySelector("[data-w-lead]");if(lead)lead.hidden=true;
+    var h="";
+    if(d.scores.length)h+='<ul class="w-scores">'+d.scores.map(function(s){return'<li><span>'+esc(s.name)+'</span><strong>'+s.score+'</strong></li>';}).join("")+'</ul>';
+    if(d.last)h+='<div class="w-last '+(d.last.correct?'ok':'no')+'"><p class="w-k">'+esc(d.last.category)+(d.last.value?' · '+d.last.value:'')+' · '+esc(d.last.player)+(d.last.correct?' got it':' missed it')+'</p><p class="w-clue">'+esc(d.last.answer)+'</p></div>';
+    if(d.open)h+='<div class="w-open"><p class="w-k">'+esc(d.open.category)+(d.open.value?' · '+d.open.value:'')+'</p><p class="w-clue">'+esc(d.open.clue)+'</p></div>';
+    if(d.categories.length)h+='<div class="w-grid">'+d.categories.map(function(c){return'<div class="w-cat"><p class="w-cat-h">'+esc(c.name)+'</p>'+c.values.map(function(v){return'<p class="w-cell'+(v.played?' done':'')+'">'+v.value+'</p>';}).join("")+'</div>';}).join("")+'</div>';
+    else h+='<p class="w-k">'+(d.mode==="streak"?"Streak":"Quick fire")+' · '+d.asked+' asked</p>';
+    if(d.final)h+='<p class="w-final">Final: '+esc(d.final.name)+(d.final.played?' (played)':'')+'</p>';
+    boardEl.innerHTML=h;status.textContent="";
+  }
+  function poll(){fetch("/api/play/"+encodeURIComponent(code.replace(/ /g,"-")),{cache:"no-store"}).then(function(r){if(r.status===404){status.textContent="No game has that code (codes last a day). Check the two words with the host.";boardEl.hidden=true;stop();return null;}return r.ok?r.json():null;}).then(function(d){if(d)draw(d);}).catch(function(){status.textContent="Can't reach Plot Speaks right now; trying again.";});}
+  function stop(){if(timer){clearInterval(timer);timer=null;}}
+  function start(c){code=c.trim().toLowerCase().replace(/[^a-z ]+/g," ").replace(/ +/g," ").trim();if(!/^[a-z]+ [a-z]+$/.test(code)){status.textContent="The code is two words, like amber fox.";return;}stop();status.textContent="Loading the board...";poll();timer=setInterval(poll,4000);try{history.replaceState(null,"","/play/"+code.replace(/ /g,"-"));}catch(e){}}
+  form.addEventListener("submit",function(e){e.preventDefault();start(input.value);});
+  if(input.value)start(input.value);
+})();`;
+
+// ============================================================================ PROFILE
+// Badges and game stats (src/profile.ts), on /account and, when the player turns it on, at /p/<handle>.
+function profileStats(p: Profile): string {
+  const when = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+  const stat = (n: string | number, label: string) => `<li><strong>${esc(String(n))}</strong><span>${esc(label)}</span></li>`;
+  return `${p.badges.length ? `<ul class="badges">${p.badges.map((b) => `<li><span class="badge-name">${icon("star", 16)}${esc(b.name)}</span><span class="badge-why">${esc(b.why)}</span></li>`).join("")}</ul>` : ""}
+<ul class="pstats">
+${stat(p.finished, "games and stories finished")}
+${stat(p.boardsCleared, "trivia boards cleared")}
+${stat(p.bestStreak ?? "none yet", "best trivia streak")}
+${stat(p.verdicts, "tester verdicts")}
+${p.campaigns ? stat(p.campaigns, "campaigns") : ""}
+</ul>
+${p.teams.length ? `<p class="muted">Team Trivia: ${p.teams.map(esc).join(", ")}</p>` : ""}
+${p.dailies.length ? `<h3>Today's board, lately</h3><div class="table-wrap"><table class="phrases"><thead><tr><th scope="col">Day</th><th scope="col">Score</th><th scope="col">Top that day</th></tr></thead><tbody>${p.dailies.map((d) => `<tr><td>${when(d.day)}</td><td>${d.score}</td><td>${d.top}${d.score >= d.top ? " (you)" : ""}</td></tr>`).join("")}</tbody></table></div>` : ""}`;
+}
+const PROFILE_NOTICES: Record<string, string> = {
+  saved: "Saved.", taken: "That name is taken. Try another.", invalid: "Use 3 to 20 lower-case letters, numbers or single hyphens.", "not-allowed": "That name isn't allowed. Try another.", error: "That didn't save. Please try again.",
+};
+function profileSection(p: Profile, notice: string | null, origin: string): string {
+  const url = p.handle ? `${origin}/p/${p.handle}` : null;
+  return `<h2 id="profile">Your profile</h2>
+${profileStats(p)}
+${notice && PROFILE_NOTICES[notice] ? `<p class="note" role="status">${esc(PROFILE_NOTICES[notice])}</p>` : ""}
+<form class="pform" method="post" action="/account/profile">
+<label for="handle">A name for your page (optional)</label>
+<input id="handle" name="handle" value="${esc(p.handle ?? "")}" maxlength="20" autocomplete="off" spellcheck="false" placeholder="e.g. night-owl-42">
+<label class="pcheck"><input type="checkbox" name="public" value="1"${p.public ? " checked" : ""}> Share a public page with my badges and game stats (never my history, name or email)</label>
+<button class="btn btn-primary" type="submit">Save</button>
+</form>
+${p.public && url ? `<p>Your page: <a href="${esc(url)}">${esc(url)}</a></p>` : ""}`;
+}
+export function publicProfilePage(p: Profile, origin: string): string {
+  const body = `<div class="wrap narrow prose"><header class="page-head"><p class="eyebrow">${icon("user", 18)} Player</p><h1>${esc(p.handle ?? "")}</h1>
+<p class="lead">Plays Plot Speaks: stories and games out loud with their own assistant.</p></header>
+${profileStats(p)}
+<p><a class="link-arrow" href="/">Play Plot Speaks ${icon("arrow", 18)}</a></p></div>`;
+  return page({ title: `${p.handle} · Plot Speaks`, description: "A Plot Speaks player's badges and game stats.", body, origin, path: `/p/${p.handle}` });
 }
 
 // ============================================================================ PREVIEW
@@ -2157,7 +2484,7 @@ export function notFoundPage(origin = ""): string {
 <p class="eyebrow">${icon("compass", 18)} Wrong turn</p>
 <h1>There's no story at this address.</h1>
 <p class="lead">It may have moved, or the link is off by a letter.</p>
-<p><a class="btn btn-primary" href="/#stories">See all the stories</a></p>
+<p><a class="btn btn-primary" href="/stories">See all the stories</a></p>
 </header></div>` });
 }
 
@@ -2172,6 +2499,11 @@ async function loadRatings(db: D1Database | undefined): Promise<Map<string, Rati
   try {
     const { results } = await db.prepare("SELECT story, AVG(stars) AS avg, COUNT(*) AS count FROM ratings WHERE coalesce(tester, 0) = 0 AND (comment IS NULL OR comment <> 'smoke test') GROUP BY story").all<{ story: string; avg: number; count: number }>();
     for (const r of results ?? []) out.set(r.story, { avg: Number(r.avg), count: Number(r.count) });
+    // Passes from players on stories being tested (migration 0011); testers' own are left out.
+    try {
+      const v = await db.prepare("SELECT story, COUNT(*) AS passed FROM test_verdicts WHERE verdict = 'passed' AND tester = 0 GROUP BY story").all<{ story: string; passed: number }>();
+      for (const r of v.results ?? []) out.set(r.story, { ...(out.get(r.story) ?? { avg: 0, count: 0 }), passed: Number(r.passed) });
+    } catch { /* table not there yet */ }
   } catch (e) {
     // Ratings are decoration: a missing table or a D1 hiccup must not take the catalog down.
     console.log(JSON.stringify({ event: "ratings_error", message: String(e) }));
@@ -2209,6 +2541,7 @@ export async function handleSite(request: Request, stories: PublicStory[], db: D
   if (path === "/games") {
     return new Response(catalogPage(stories, await loadRatings(db), origin, previews, "games"), { headers: HTML });
   }
+  if (path === "/play" || /^\/play\/[a-z-]{3,60}$/.test(path)) return new Response(watchPage(origin, path.length > 6 ? path.slice(6) : ""), { headers: { ...HTML, "x-robots-tag": "noindex", "cache-control": "no-store" } });
   if (path === "/connect") return new Response(connectPage(stories, origin), { headers: HTML });
   if (path === "/how-it-works") return new Response(howPage(stories, origin), { headers: HTML });
   if (path === "/write") return new Response(writePage(origin), { headers: HTML });

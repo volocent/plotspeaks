@@ -21,11 +21,11 @@ metadata:
 
 # The Last Séance
 
-**Read aloud (cold open, beat 1):** London, November 1893, and the fog has swallowed Graycliff Place. You came to Madame Garnet's séance as a sceptic, asked by Rosamund Coldwell to expose her, and sat in the dark circle between Rosamund and her father, Ezra.
+**Read aloud (cold open, beat 1):** London, November 1893, fog over Graycliff Place. You came to Madame Garnet's séance as a sceptic, asked by Rosamund Coldwell to expose her, and sat in the dark between Rosamund and her father, Ezra.
 
 **Read aloud (cold open, beat 2):** In the blackness, the glowing spirit-trumpet drifted to Ezra. From the cabinet came Jory's frightened gasp, "It's gone!", and in that same moment a whisper at Ezra's ear: "Guv'nor, it's me."
 
-**Read aloud (cold open, beat 3):** Ezra breathed, "Laurence, who was with you?" His hand crushed yours, then went slack, and when the gas came up he was dead in his chair. The constable is an hour off in the fog; where do you begin?
+**Read aloud (cold open, beat 3):** Ezra breathed, "Laurence, who was with you?" His hand crushed yours, then went slack; when the gas came up, he was dead. The constable is an hour off; where do you begin?
 
 ## How to run this (GM instructions)
 

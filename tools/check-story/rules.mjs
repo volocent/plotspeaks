@@ -125,6 +125,9 @@ export function checkFrontMatter(text, opts = {}) {
     oneOf('ai_disclosure', AI_DISCLOSURES);
     // Optional: sorts mysteries into a category on the site (dark = grimmer themes, still no gore or method).
     if (metadata.tone !== undefined && !TONES.includes(metadata.tone)) out.push(err(at('metadata.tone'), 'front-matter', `metadata.tone must be one of ${TONES.join('|')}; found "${metadata.tone}"`));
+    // Optional: style gamebook shelves a choose-your-path story under "Your-choice adventures"; style
+    // winddown shelves a read-aloud game (kind: game) under "Wind-downs" (2026-10-21).
+    if (metadata.style !== undefined && !((metadata.style === 'gamebook' && kindOf(metadata) === 'branching') || (metadata.style === 'winddown' && kindOf(metadata) === 'game'))) out.push(err(at('metadata.style'), 'front-matter', `metadata.style may only be "gamebook" (kind: branching) or "winddown" (kind: game); found "${metadata.style}"`));
     if (metadata.kind !== undefined && !KINDS.includes(metadata.kind)) out.push(err(at('metadata.kind'), 'front-matter', `metadata.kind must be one of ${KINDS.join('|')}; found "${metadata.kind}"`));
     if (metadata.audience !== undefined && !AUDIENCES.includes(metadata.audience)) out.push(err(at('metadata.audience'), 'front-matter', `metadata.audience must be one of ${AUDIENCES.join('|')}; found "${metadata.audience}"`));
     if (metadata.genre === 'kids' && metadata.audience !== 'family') out.push(err(at('metadata.genre'), 'front-matter', 'genre kids needs audience: family (family content is never offered to ChatGPT)'));
