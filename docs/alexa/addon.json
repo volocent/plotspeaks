@@ -1,0 +1,78 @@
+{
+  "_comment": "Draft Alexa+ MCP add-on manifest for Plot Speaks. Field names follow Amazon's add-on documentation as read on 2026-10-21; the alexa-ai CLI that validates and deploys it is in an invitation-only preview, so this file is unvalidated. See docs/alexa/README.md.",
+  "manifestVersion": "1.0",
+  "addon": {
+    "name": "Plot Speaks",
+    "type": "mcp",
+    "locales": {
+      "en-US": {
+        "name": "Plot Speaks",
+        "shortDescription": "Murder mysteries, trivia and story games you play out loud. Alexa narrates; Plot Speaks keeps the answers.",
+        "description": "Bring your own AI, and a library of games to play with it. Plot Speaks is a library of murder mysteries, choose-your-path adventures, trivia boards, party games, open worlds and quiet wind-downs that Alexa plays with you by voice. Alexa is the narrator and the host; the Plot Speaks server keeps every answer key, rules on every accusation and every trivia answer, and gives up exactly one line at a time, only when you have earned it.\n\nMysteries: question suspects, search rooms, then accuse. The server rules with a single line and reveals the solution only after a correct accusation or when you give up. Trivia: ten general boards, Team Trivia for 356 teams with today's roster, a daily board everyone plays with the same deal, quick fire, streak, and \"I've got ten minutes\" sizing. Challenge a ruling and three independent judges decide. Games: Werewolf, Twenty Questions, open worlds that remember you, and wind-downs for the end of the day.\n\nSign in with Google once and your progress, ratings and badges are kept. A second screen can follow a trivia game at plotspeaks.com/play. Anyone can write and submit a story by voice; submissions are screened and reviewed before they are listed. Stories are free.",
+        "examplePhrases": [
+          "Alexa, open Plot Speaks.",
+          "Alexa, start The Last Toast with Plot Speaks.",
+          "Alexa, play today's trivia board on Plot Speaks.",
+          "Alexa, play a wind-down from Plot Speaks."
+        ],
+        "keywords": ["games", "trivia", "mystery", "stories", "family", "voice games", "road trip"],
+        "privacyPolicyUrl": "https://plotspeaks.com/privacy",
+        "termsOfUseUrl": "https://plotspeaks.com/terms",
+        "supportUrl": "https://plotspeaks.com/support",
+        "media": {
+          "icons": {
+            "light": {
+              "72": "https://plotspeaks.com/alexa/icon-72.png",
+              "64": "https://plotspeaks.com/alexa/icon-64.png",
+              "88": "https://plotspeaks.com/alexa/icon-88.png",
+              "126": "https://plotspeaks.com/alexa/icon-126.png",
+              "180": "https://plotspeaks.com/alexa/icon-180.png",
+              "241": "https://plotspeaks.com/alexa/icon-241.png"
+            }
+          },
+          "carouselImage": "https://plotspeaks.com/alexa/carousel-600x900.png",
+          "banners": ["https://plotspeaks.com/alexa/banner-1200x600.png"]
+        }
+      }
+    },
+    "category": "GAMES_TRIVIA_AND_ACCESSORIES",
+    "publisher": {
+      "name": "Volocent Labs LLC",
+      "website": "https://plotspeaks.com",
+      "email": "contact@plotspeaks.com"
+    },
+    "distribution": {
+      "countries": ["US"],
+      "isFree": true
+    }
+  },
+  "mcp": {
+    "transport": "streamable-http",
+    "protocolVersion": "2025-11-25",
+    "serverUrl": "https://account.plotspeaks.com/mcp",
+    "openServerUrl": "https://plotspeaks.com/mcp",
+    "authentication": {
+      "service": {
+        "type": "oauth2_client_credentials",
+        "tokenUrl": "https://account.plotspeaks.com/token",
+        "scopes": ["mcp:service"],
+        "_status": "planned: a static client for Alexa's service calls is added to the account host once the add-on console supplies the redirect URI"
+      },
+      "user": {
+        "type": "oauth2_authorization_code",
+        "pkce": "S256",
+        "authorizationUrl": "https://account.plotspeaks.com/authorize",
+        "tokenUrl": "https://account.plotspeaks.com/token",
+        "resourceMetadataUrl": "https://account.plotspeaks.com/.well-known/oauth-protected-resource/mcp",
+        "scopes": ["mcp:tools", "mcp:resources"],
+        "accountLinking": "google-sign-in"
+      }
+    },
+    "latencyBudgetMs": 500,
+    "slowTools": {
+      "game_challenge": "three model judges, 2 to 4 s; answers with the ruling when done",
+      "team_roster": "ESPN fetch, cached 6 h",
+      "submit_story": "Llama Guard screening"
+    }
+  }
+}

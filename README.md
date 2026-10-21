@@ -1,14 +1,29 @@
 # Plot Speaks
 
-Interactive story scripts you play by voice with your own AI assistant: murder mysteries first, fantasy adventures second. One narrator, short spoken turns, built for long drives. A Volocent Labs project.
+**Bring your own AI.** Plot Speaks is a library of murder mysteries, choose-your-path adventures, trivia
+boards, party games, open worlds and wind-downs that your own AI assistant plays with you out loud. The
+assistant narrates and hosts; the Plot Speaks server (a remote MCP server) keeps every answer key, rules on
+every accusation and trivia answer, and gives up one line at a time. Live at **https://plotspeaks.com**.
+A Volocent Labs LLC product.
 
-**Status: early.** Play at **https://plotspeaks.com**: copy a story into a new ChatGPT or Claude chat, or add the Plot Speaks connector (`https://plotspeaks.com/mcp`, no sign-in), which loads stories and checks accusations so your assistant never holds the answer. The story format, the published stories and the tools that test them are here.
+**Assistant-agnostic by design.** The same server runs today in **Claude** (free plan, voice mode) and
+**Gemini** (custom connector), and any MCP client can connect to `https://plotspeaks.com/mcp` (no sign-in)
+or `https://account.plotspeaks.com/mcp` (OAuth 2.1, Google sign-in, progress kept). It was built to Alexa's
+published MCP add-on requirements; once Amazon opens the Alexa+ for Builders preview to us, the same server
+connects to Alexa+ unchanged, with the trivia watch page as the Echo Show game view. See
+[`docs/alexa/`](docs/alexa/) for the readiness notes and draft manifest, and
+[`docs/FRICTION-LOG.md`](docs/FRICTION-LOG.md) for what stood in the way.
 
-## How it works
+**What's in the library:** 20 murder mysteries (one a six-chapter weekly season), gamebook adventures with
+shareable path codes, ten general trivia boards (1,800+ clues), Team Trivia for 356 teams with today's
+roster, Ballpark estimates, a daily board everyone plays with the same deal, head-to-head by code, Werewolf,
+Twenty Questions, open worlds that remember you, six wind-downs. Every ending asks for a one-to-five star
+rating; a disputed trivia ruling goes to three independent AI judges and an upheld challenge teaches the
+board for everyone. Anyone can write and submit a story by voice in Story Studio; submissions are screened
+(Llama Guard, two-of-three vote) and reviewed by a person before they are listed.
 
-![Plot Speaks technical design: players and their assistants, the Cloudflare Worker with its game engines, storage and services, and the write, check, build and ship pipeline](docs/architecture.svg)
-
-The assistant narrates; the server keeps every answer key and decides every verdict. The diagram source is `docs/architecture.svg`.
+This repository is the scanned public export of the project: the server, the story format and the stories
+(without their answer keys), the lint and playtest tools, and the technical design.
 
 ## What's here
 
@@ -17,6 +32,8 @@ stories/        the published stories (murder mysteries, family mysteries, SRD a
 docs/FORMAT.md  the story format: front matter, GM instructions, scenes, recaps, endings
 docs/PLAY.md    how to play a story today
 docs/architecture.svg  the technical design of the whole solution
+docs/alexa/     Alexa+ add-on readiness notes and the draft listing manifest (addon.json)
+docs/FRICTION-LOG.md  what stood in the way of the Alexa+ add-on, entry by entry
 tools/          check-story (lint), playtest (simulated play), solo, worker-data (connector build and matching)
 worker/         the Plot Speaks MCP server (Cloudflare Worker)
 ```
