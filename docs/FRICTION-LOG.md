@@ -18,7 +18,10 @@ happened when we tried.
   hint is "available to select partners" on the Alexa+ overview page.
 - **Severity:** blocker. The server could not be connected to Alexa+ at all.
 - **Workaround:** none. Developer support case 75213628: Amazon confirmed the preview is "rolled out
-  to partners in phases", AccessDenied is expected, interest recorded.
+  to partners in phases", AccessDenied is expected, interest recorded. On the hackathon forum Amazon's
+  developer relations team had already said it plainly: "Access to the Alexa+ developer tools will not be
+  granted to hackathon participants… you are not expected to use those tools with your hackathon
+  submission" (https://amazonappdev2026.devpost.com/forum_topics/45262-is-the-alexa-mcp-toolkit-alexa-ai-cli-available-to-hackathon-participants).
 - **Suggestion:** state on the setup page that the role is allow-listed and link the request form;
   or allow hackathon entrants in the Alexa+ track to assume it for the window.
 
@@ -66,7 +69,9 @@ happened when we tried.
 
 - **Task:** enter the Alexa+ track with a self-hosted MCP server.
 - **Expected:** a path, during the hackathon window, from a running server to Alexa+.
-- **Actual:** the only path is the invitation-only toolkit (item 1). The "simulated experience"
-  allowance helps, but the headline promise and the reachable path do not match.
+- **Actual:** the only path is the invitation-only toolkit (item 1), and Amazon confirmed on the forum that
+  participants will not get it. The "simulated experience" allowance helps (and a real MCP host such as
+  Claude or Gemini is a better demo surface than a simulator), but the headline promise and the reachable
+  path do not match, and the setup docs still send entrants down the dead end first.
 - **Severity:** medium.
 - **Suggestion:** a hackathon-window allow-list, or a hosted simulator that takes an MCP URL.
