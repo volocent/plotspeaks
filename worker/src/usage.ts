@@ -57,6 +57,8 @@ export function countPage(db: D1Database | undefined, request: Request, res: Res
   if (request.method !== "GET" || res.status < 200 || res.status >= 300) return Promise.resolve();
   const p = pageOf(new URL(request.url).pathname);
   if (!p) return Promise.resolve();
+  // The QA browsers (Hank on dev, Becky on prod; .mcp.json) aren't visitors or crawlers: not counted.
+  if (/PlotSpeaks-QA\//.test(request.headers.get("user-agent") ?? "")) return Promise.resolve();
   if (NOT_A_PERSON.test(request.headers.get("user-agent") ?? "")) return bump(db, [["crawler", p.page]]);
   const items: [string, string][] = [["page", p.page]];
   if (p.page === "story" && p.slug) items.push(["story_page", p.slug]);

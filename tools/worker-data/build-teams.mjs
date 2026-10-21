@@ -25,7 +25,8 @@ const list = (s) => String(s ?? "").split(";").map((x) => x.trim()).filter(Boole
 export function buildTeams(root) {
   const dir = join(root, "teams");
   const out = [];
-  if (!existsSync(dir)) return out;
+  // No teams/ (the public repository leaves the team database out): an empty teams.json, so the Worker still builds.
+  if (!existsSync(dir)) { const outDir = join(root, "worker", "src", "generated"); mkdirSync(outDir, { recursive: true }); writeFileSync(join(outDir, "teams.json"), "[]"); return out; }
   for (const league of readdirSync(dir).filter((d) => !d.includes("."))) {
     for (const file of readdirSync(join(dir, league)).filter((f) => f.endsWith(".md"))) {
       const text = readFileSync(join(dir, league, file), "utf8");

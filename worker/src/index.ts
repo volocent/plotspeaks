@@ -1620,7 +1620,13 @@ async function mainFetch(request: Request, env: Env, ctx: ExecutionContext): Pro
     const url = new URL(request.url);
     // Plain http reaches the custom domain too, and the site builds its "Connect to Claude" link from
     // the request's origin; Claude refuses an http connector URL (Ben, 2026-10-16). Send everyone to https.
-    if (url.protocol === "http:" && url.hostname !== "localhost" && url.hostname !== "127.0.0.1") {
+    // Not on a local run: wrangler dev gives the request the first route's hostname, so the URL says
+    // dev.plotspeaks.com while the Host header still says 127.0.0.1 (2026-10-21: a clone of the public
+    // repository redirected every local request to itself, forever).
+    // wrangler dev rewrites the Host header as well; what it doesn't do is add cf-connecting-ip, which
+    // Cloudflare's edge puts on every request. No such header means a local run.
+    const localHost = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i.test(request.headers.get("host") ?? "") || request.headers.get("cf-connecting-ip") === null;
+    if (url.protocol === "http:" && url.hostname !== "localhost" && url.hostname !== "127.0.0.1" && !localHost) {
       url.protocol = "https:";
       return redirect(request, url.toString());
     }

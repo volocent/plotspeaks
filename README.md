@@ -21,6 +21,20 @@ tools/          check-story (lint), playtest (simulated play), solo, worker-data
 worker/         the Plot Speaks MCP server (Cloudflare Worker)
 ```
 
+## Run it yourself
+
+    cd worker
+    npm install
+    npm run data                                   # builds the stories into the Worker
+    npx wrangler d1 migrations apply plotspeaks-dev --local
+    npx wrangler dev --port 8799                   # http://127.0.0.1:8799
+
+Then point any MCP client at `http://127.0.0.1:8799/mcp` (no sign-in is needed locally), or browse the site at
+the same address. Two sample stories with invented answer keys, `stories/sample-harbor-lantern` (a short
+mystery) and `stories/sample-trivia`, play end to end from this repository; the published stories' keys stay
+private, so those play only on the live server, `https://plotspeaks.com/mcp`. The sign-in host (Google,
+OAuth 2.1) needs its own secrets and isn't part of a local run.
+
 ## Answer keys are not in this repo
 
 Each story has a private answer key (who did it, and how). It is never published: the connector serves only the one line needed when a player accuses someone. That is why `tools/` and `worker/` refer to `secrets.md` files you won't find here.
