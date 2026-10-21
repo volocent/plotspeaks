@@ -1,7 +1,7 @@
 // The trivia engine (worker/src/games.ts) off the server: sizing a game to a drive, and a streak.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { newTrivia, dealtBoard, sizeGame, askQuestion, answerQuestion, seeded, learnable, type TriviaBoard, type TriviaState } from "../src/games.ts";
+import { newTrivia, dealtBoard, sizeGame, askQuestion, answerQuestion, seeded, learnable, timelineView, type TriviaBoard, type TriviaState } from "../src/games.ts";
 
 test('learnable: a taught name must be a short, non-numeric, unambiguous alternative', () => {
   const q = clue(100, "Czech Republic");
@@ -96,4 +96,24 @@ test('estimate: scored by closeness, needs a number, and cannot be challenged', 
   assert.match(nothing.text, /needs a number/);
   assert.equal(nothing.state.current?.cat, "Heights", 'the clue stays open');
   assert.equal(nothing.error, undefined);
+});
+
+test('timelineView: labels from an allow-list, choices before the ending, the campaign recap', () => {
+  const t0 = 1_000_000;
+  const v = timelineView({ startedAt: t0, events: [
+    { kind: 'ending', detail: 'The Long Walk', verdict: null, at: t0 + 90_000 },
+    { kind: 'cue', detail: 'S3b', verdict: null, at: t0 + 30_000 },
+    { kind: 'accusation', detail: 'Father Reyes', verdict: 'wrong', at: t0 + 40_000 },
+    { kind: 'accusation', detail: 'Colleen', verdict: 'correct', at: t0 + 50_000 },
+    { kind: 'reveal', detail: 'the whole solution text', verdict: null, at: t0 + 60_000 },
+    { kind: 'passenger', detail: 'secret', verdict: null, at: t0 + 70_000 },
+  ], path: ['Take the lantern', 'Wait in the dark'] });
+  assert.deepEqual(v.events.map((e) => e.label), ['Started', 'Scene 3b reached', 'Accused Father Reyes: innocent', 'Accused Colleen: correct', 'The solution was revealed', 'Chose: "Take the lantern"', 'Chose: "Wait in the dark"', 'Ending: The Long Walk']);
+  assert.equal(v.events[2].tone, 'warn'); assert.equal(v.events[3].tone, 'ok');
+  assert.ok(!JSON.stringify(v).includes('secret') && !JSON.stringify(v).includes('solution text'), 'unknown kinds and reveal text are dropped');
+  assert.equal(v.ended, true); assert.equal(v.summary, '2 choices so far');
+  const w = timelineView({ startedAt: t0, events: [], world: { day: 3, location: 'The Salt Road', party: [{ name: 'Ana' }, { name: 'Rook' }], log: ['Day 1: a', 'Day 2: b', 'Day 3: c'], npcs: [{ name: 'Hidden Villain', status: 'x', note: 'is the traitor' }] } as never });
+  assert.equal(w.summary, 'Day 3 · The Salt Road'); assert.equal(w.party, 'Party: Ana, Rook');
+  assert.deepEqual(w.events.map((e) => e.label), ['Started', 'Day 1: a', 'Day 2: b', 'Day 3: c']);
+  assert.ok(!JSON.stringify(w).includes('traitor') && !JSON.stringify(w).includes('Hidden Villain'), 'npcs never reach the view');
 });

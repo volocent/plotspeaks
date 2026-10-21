@@ -1112,6 +1112,24 @@ details.script pre{margin:0;padding:0 18px 18px;white-space:pre-wrap;word-break:
 .w-form{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:8px 0 12px}
 .w-form input{flex:1;min-width:12rem;padding:12px 14px;border-radius:14px;border:1.5px solid var(--line-2);background:var(--surface);color:var(--ink);font:600 1.15rem var(--sans)}
 .w-form label{font-weight:700}
+.watch-card p{margin:0 0 10px;color:var(--ink-2)}
+.watch-card .w-form{margin:0}
+.watch-card .w-form input{min-width:0;font-size:1rem;padding:10px 12px}
+.w-board{max-width:36rem}
+.t-head{display:flex;gap:16px;align-items:center;margin:8px 0 18px}
+.t-cover{width:96px;height:96px;border-radius:16px;object-fit:cover;flex:none}
+.t-meta{min-width:0}
+.t-sub{margin:0 0 4px;color:var(--ink-2);font-size:1.05rem}
+.t-list{list-style:none;padding:0;margin:0;display:grid;gap:8px}
+.t-line{display:flex;gap:14px;align-items:baseline;padding:10px 14px;border-radius:14px;background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--line-2);font-size:1.15rem}
+.t-at{flex:none;min-width:3.2em;color:var(--ink-2);font:600 .95rem var(--sans);font-variant-numeric:tabular-nums}
+.t-label{min-width:0;overflow-wrap:anywhere}
+.t-line.ok{border-left-color:var(--ok)}
+.t-line.ok .t-label{color:var(--ok-ink)}
+.t-line.warn{border-left-color:var(--orange)}
+.t-line.now{border-left-color:var(--orange);font-weight:700}
+.t-line.ok.now{border-left-color:var(--ok)}
+.t-note{margin:14px 0 0;color:var(--ink-2)}
 .w-scores{list-style:none;padding:0;margin:8px 0 16px;display:flex;flex-wrap:wrap;gap:10px}
 .w-scores li{display:flex;gap:12px;align-items:baseline;padding:10px 16px;border-radius:14px;background:var(--surface);border:1px solid var(--line);font-size:1.15rem}
 .w-scores strong{font:700 1.5rem var(--serif)}
@@ -1298,7 +1316,7 @@ dialog.cdlg::backdrop{background:rgba(6,14,26,.6);-webkit-backdrop-filter:blur(3
 type Shell = { title: string; description: string; body: string; origin: string; path: string; script?: string; section?: string };
 // The four pages, shown as tabs under the header on every page (Ben, 2026-10-17: separate pages
 // with tabs, not one long home page).
-const NAV: [string, string][] = [["/", "Home"], ["/stories", "Stories"], ["/games", "Games"], ["/connect", "Connect"], ["/how-it-works", "How it works"], ["/write", "Write"]];
+const NAV: [string, string][] = [["/", "Home"], ["/stories", "Stories"], ["/games", "Games"], ["/play", "Watch"], ["/connect", "Connect"], ["/how-it-works", "How it works"], ["/write", "Write"]];
 
 const FONTS = "https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT@0,9..144,400..700,0..100;1,9..144,400..700,0..100&family=Plus+Jakarta+Sans:wght@400..800&display=swap";
 
@@ -1720,6 +1738,11 @@ ${m.rating ? `<div><dt>Rating</dt><dd>${esc(m.rating)}</dd></div>` : ""}
 <div><dt>Written by</dt><dd>${esc(m.author || "Volocent Labs")}</dd></div>
 </dl>
 </div>
+<div class="glance watch-card">
+<h2>Watch along</h2>
+<p>On a second screen, type the two-word code the host reads out when the story starts.</p>
+<form class="w-form" action="/play" method="get"><input name="code" aria-label="Watch code" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="e.g. amber fox"><button class="btn btn-primary" type="submit">Watch</button></form>
+</div>
 <div class="block license">
 <h2>License</h2>
 <p>${esc(m.title)} by ${esc(m.author || "Volocent Labs")} is licensed under <a href="https://creativecommons.org/licenses/by-nc/4.0/">${esc(licenseName)}</a>: share and adapt it for non-commercial use, with credit.</p>
@@ -2085,7 +2108,7 @@ ${phrasesTable(null)}
 <p>A long game uses a lot of your assistant's allowance, because every turn re-reads the conversation so far. To make it go further:</p>
 <ul>
 <li><strong>Say how long you've got.</strong> Tell a trivia game &ldquo;I've got ten minutes&rdquo; and it is sized to fit: up to 10 minutes is a quick fire of 12 questions, up to 15 one of 20, up to 25 a four-category board, and more is the whole board. A whole board is about 40 turns on a small model; a quick fire is about one turn a question.</li>
-<li><strong>Watch the board on a phone.</strong> Every trivia game starts with a two-word code. A passenger opens <strong>plotspeaks.com/play</strong>, types it in, and sees the categories, the scores, the clue being read and each answer once it has been ruled.</li>
+<li><strong>Watch along on a phone.</strong> Every story and game starts with a two-word code. A passenger opens <strong>plotspeaks.com/play</strong> and types it in. In trivia they see the categories, the scores, the clue being read and each answer once it has been ruled; in a mystery, adventure, choose-your-path story or campaign they see its timeline as it unfolds: scenes reached, accusations and their verdicts, the choices made, the ending. Nothing secret is ever shown there.</li>
 <li><strong>Play a friend, on your own time.</strong> When a board ends, the host gives you a three-word code. A friend says &ldquo;Plot Speaks, play against code&hellip;&rdquo; and gets the same board dealt the same way; at the end they hear who scored more. Nothing is live, so you can each play whenever you like. Codes last 30 days.</li>
 <li><strong>Or pick quick fire, or a streak.</strong> Every trivia game offers the board (categories and points, like Jeopardy), quick fire (random questions one after another and a running tally) or a streak (quick fire until your first miss; one number to beat next time). Quick fire uses about a third fewer steps per question than the board.</li>
 <li><strong>Use the lightest model you have.</strong> Plot Speaks does the remembering, so a small, fast model (Claude Haiku, for example) is enough for most games. If your assistant has an effort or extended-thinking setting, leave it low or off: these are voice games, not essays.</li>
@@ -2257,23 +2280,36 @@ ${v.profile ? profileSection(v.profile, v.notice ?? null, origin) : ""}
 }
 
 // ============================================================================ WATCH
-// A trivia game's board on a passenger's phone (plan 2026-10-19, item 18): read-only, refreshed every few
-// seconds from /api/play/<code>. Built for a second screen: big type, no controls but the code box.
+// Any play on a passenger's phone (plan 2026-10-19 item 18; every kind since 2026-10-21): a trivia board, or
+// a timeline for every other kind. Read-only, refreshed every few seconds from /api/play/<code>. Built for a
+// second screen: big type, no controls but the code box.
 function watchPage(origin: string, code: string): string {
   const body = `<div class="wrap narrow watch">
-<header class="page-head"><p class="eyebrow">${icon("star", 18)} Watch the board</p><h1 data-w-title>Follow a trivia game.</h1>
-<p class="lead" data-w-lead>Type the two-word code the host gave you. The board, the scores and each clue show here as you play.</p></header>
+<header class="page-head"><p class="eyebrow">${icon("star", 18)} Watch along</p><h1 data-w-title>Follow a game or story.</h1>
+<p class="lead" data-w-lead>Type the two-word code the host reads out at the start. Trivia shows the board and the scores; a mystery, adventure or campaign shows its timeline as it unfolds. Nothing secret is ever shown here.</p></header>
 <form class="w-form" data-w-form><label for="wcode">Code</label><input id="wcode" name="code" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="e.g. amber fox" value="${esc(code.replace(/-/g, " "))}"><button class="btn btn-primary" type="submit">Watch</button></form>
 <p class="w-status" role="status" aria-live="polite" data-w-status></p>
 <div class="w-board" data-w-board hidden></div>
 </div>`;
-  return page({ title: "Watch the board · Plot Speaks", description: "Follow a Plot Speaks trivia game on a second screen.", body, origin, path: "/play", script: WATCH_JS });
+  return page({ title: "Watch · Plot Speaks", description: "Follow a Plot Speaks game or story on a second screen.", body, origin, path: "/play", script: WATCH_JS });
 }
 const WATCH_JS = `(function(){
   var form=document.querySelector("[data-w-form]"),input=document.getElementById("wcode"),status=document.querySelector("[data-w-status]"),boardEl=document.querySelector("[data-w-board]"),title=document.querySelector("[data-w-title]"),timer=null,code="";
   function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];});}
+  function off(t,s){var m=Math.max(0,Math.floor((t-s)/1000)),mm=Math.floor(m/60),ss=m%60;return mm+":"+(ss<10?"0":"")+ss;}
+  function ago(s){var m=Math.max(0,Math.round((Date.now()-s)/60000));return m<1?"Started just now":"Started "+m+" min ago";}
+  function drawT(d){
+    var h='<div class="t-head"><img class="t-cover" src="/covers/'+encodeURIComponent(d.slug)+'.jpg" alt="" width="96" height="96" onerror="this.remove()"><div class="t-meta">'+
+      '<p class="t-sub">'+esc(d.genre)+(d.minutes?' · '+d.minutes+' min':'')+'</p>'+
+      '<p class="t-sub">'+esc(d.summary||ago(d.startedAt))+'</p>'+(d.party?'<p class="t-sub">'+esc(d.party)+'</p>':'')+'</div></div>';
+    var ev=d.events||[];
+    h+='<ol class="t-list">'+ev.map(function(e,i){var c=(e.tone?' '+e.tone:'')+(i===ev.length-1?' now':'');return'<li class="t-line'+c+'"><span class="t-at">'+(e.at!=null?off(e.at,d.startedAt):'')+'</span><span class="t-label">'+esc(e.label)+'</span></li>';}).join("")+'</ol>';
+    if(d.thin&&!d.ended)h+='<p class="t-note">The narrator holds this one in the conversation; the ending shows here when it comes.</p>';
+    boardEl.innerHTML=h;status.textContent="";
+  }
   function draw(d){
     title.textContent=d.title;boardEl.hidden=false;var lead=document.querySelector("[data-w-lead]");if(lead)lead.hidden=true;
+    if(d.kind==="timeline"){drawT(d);return;}
     var h="";
     if(d.scores.length)h+='<ul class="w-scores">'+d.scores.map(function(s){return'<li><span>'+esc(s.name)+'</span><strong>'+s.score+'</strong></li>';}).join("")+'</ul>';
     if(d.last)h+='<div class="w-last '+(d.last.correct?'ok':'no')+'"><p class="w-k">'+esc(d.last.category)+(d.last.value?' · '+d.last.value:'')+' · '+esc(d.last.player)+(d.last.correct?' got it':' missed it')+'</p><p class="w-clue">'+esc(d.last.answer)+'</p></div>';
@@ -2283,10 +2319,11 @@ const WATCH_JS = `(function(){
     if(d.final)h+='<p class="w-final">Final: '+esc(d.final.name)+(d.final.played?' (played)':'')+'</p>';
     boardEl.innerHTML=h;status.textContent="";
   }
-  function poll(){fetch("/api/play/"+encodeURIComponent(code.replace(/ /g,"-")),{cache:"no-store"}).then(function(r){if(r.status===404){status.textContent="No game has that code (codes last a day). Check the two words with the host.";boardEl.hidden=true;stop();return null;}return r.ok?r.json():null;}).then(function(d){if(d)draw(d);}).catch(function(){status.textContent="Can't reach Plot Speaks right now; trying again.";});}
+  function poll(){fetch("/api/play/"+encodeURIComponent(code.replace(/ /g,"-")),{cache:"no-store"}).then(function(r){if(r.status===404){status.textContent="No game or story has that code (codes last a day). Check the two words with the host.";boardEl.hidden=true;stop();return null;}return r.ok?r.json():null;}).then(function(d){if(d)draw(d);}).catch(function(){status.textContent="Can't reach Plot Speaks right now; trying again.";});}
   function stop(){if(timer){clearInterval(timer);timer=null;}}
-  function start(c){code=c.trim().toLowerCase().replace(/[^a-z ]+/g," ").replace(/ +/g," ").trim();if(!/^[a-z]+ [a-z]+$/.test(code)){status.textContent="The code is two words, like amber fox.";return;}stop();status.textContent="Loading the board...";poll();timer=setInterval(poll,4000);try{history.replaceState(null,"","/play/"+code.replace(/ /g,"-"));}catch(e){}}
+  function start(c){code=c.trim().toLowerCase().replace(/[^a-z ]+/g," ").replace(/ +/g," ").trim();if(!/^[a-z]+ [a-z]+$/.test(code)){status.textContent="The code is two words, like amber fox.";return;}stop();status.textContent="Loading...";poll();timer=setInterval(poll,4000);try{history.replaceState(null,"","/play/"+code.replace(/ /g,"-"));}catch(e){}}
   form.addEventListener("submit",function(e){e.preventDefault();start(input.value);});
+  if(!input.value){try{var q=new URLSearchParams(location.search).get("code");if(q)input.value=q;}catch(e){}}
   if(input.value)start(input.value);
 })();`;
 

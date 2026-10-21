@@ -80,9 +80,9 @@ ok(toolList.every((t) => typeof t.title === 'string' && t.title.length > 0), 'ev
 // Claude's directory form reads the title from annotations.title (2026-10-16 submission).
 ok(toolList.every((t) => typeof t.annotations?.title === 'string' && t.annotations.title.length > 0), 'every tool has annotations.title');
 const ann = (n) => toolList.find((t) => t.name === n)?.annotations ?? {};
-ok(['start_story', 'choose', 'check_accusation', 'reveal_solution', 'rate_story'].every((n) => ann(n).readOnlyHint === false), 'tools that record a play event are not marked read-only');
-ok(['open_plot_speaks', 'list_stories', 'get_cue', 'write_story', 'review_story'].every((n) => ann(n).readOnlyHint === true && ann(n).idempotentHint === true && ann(n).destructiveHint === false),
-  'open_plot_speaks, list_stories, get_cue, write_story and review_story are read-only and idempotent');
+ok(['start_story', 'choose', 'check_accusation', 'reveal_solution', 'rate_story', 'get_cue'].every((n) => ann(n).readOnlyHint === false), 'tools that record a play event are not marked read-only');
+ok(['open_plot_speaks', 'list_stories', 'write_story', 'review_story'].every((n) => ann(n).readOnlyHint === true && ann(n).idempotentHint === true && ann(n).destructiveHint === false),
+  'open_plot_speaks, list_stories, write_story and review_story are read-only and idempotent');
 ok(ann('reveal_solution').title === 'Full reveal', 'reveal_solution is titled "Full reveal"');
 const prompts = (await rpc('prompts/list', {})).json?.result?.prompts?.map((p) => p.name) ?? [];
 ok(!prompts.includes('story_template'), `the story_template prompt is gone (prompts: ${prompts.join(', ') || 'none'})`);
@@ -739,6 +739,52 @@ if (!openServer && key) {
     ok(/"categories"/.test(wv) && !leaked, 'the watch view shows the board and no answer before a ruling');
   }
   ok((await fetch(`${base}/api/play/nope-never`)).status === 404, 'an unknown watch code is 404');
+
+  // Watch for every play (plan 2026-10-21): every start carries a code; the timeline shows what was said, never the key.
+  const wWatchOf = async (start) => {
+    const code = (/WATCH CODE: "([a-z]+ [a-z]+)"/.exec(start) || [])[1];
+    const pid = (/Play id: ([0-9a-f-]{36})/.exec(start) || [])[1];
+    return { code, pid, view: async () => code ? (await fetch(`${base}/api/play/${code.replace(' ', '-')}`)).json() : null };
+  };
+  const wLeaks = (v, s) => {
+    const t = JSON.stringify(v);
+    const bits = [s.full_reveal?.read_aloud, ...Object.values(s.cues ?? {}).map((c) => c.read_aloud), ...Object.values(s.cues ?? {}).map((c) => c.narrator_only)]
+      .filter(Boolean).map((x) => String(x).slice(0, 40)).filter((x) => x.length >= 20);
+    const correct = (s.endings ?? []).filter((e) => e.verdict === 'correct').map((e) => e.name);
+    return bits.some((b) => t.includes(b)) || correct.some((n) => t.includes(n));
+  };
+  const wMyst = genStories.find((s) => s.slug === 'example-dinner-party');
+  const wMy = await wWatchOf(await call('start_story', { slug: wMyst.slug }));
+  ok(Boolean(wMy.code), 'a mystery starts with a watch code');
+  if (wMy.code) {
+    await call('check_accusation', { slug: wMyst.slug, accused: 'Father Reyes', play_id: wMy.pid });
+    const v = await wMy.view();
+    ok(v?.kind === 'timeline' && v.events.some((e) => /^Accused Father Reyes: innocent$/.test(e.label)), 'the mystery timeline shows the accusation and its verdict');
+    ok(!wLeaks(v, wMyst), 'the mystery timeline carries no culprit, no reveal and no scene text');
+  }
+  const wGb = genStories.find((s) => s.kind === 'branching' && s.branches);
+  const wBr = await wWatchOf(await call('start_story', { slug: wGb.slug }));
+  ok(Boolean(wBr.code), 'a choose-your-path story starts with a watch code');
+  if (wBr.code) {
+    await call('choose', { slug: wGb.slug, play_id: wBr.pid, choice: '1' });
+    const v = await wBr.view();
+    ok(v?.kind === 'timeline' && v.events.some((e) => /^Chose: "/.test(e.label)) && /choice/.test(v.summary ?? ''), 'the path timeline shows the choice made');
+  }
+  const wAdv = genStories.find((s) => s.slug === 'keepers-bell');
+  const wAd = await wWatchOf(await call('start_story', { slug: wAdv.slug }));
+  ok(Boolean(wAd.code), 'an adventure starts with a watch code');
+  if (wAd.code) {
+    await call('get_cue', { slug: wAdv.slug, cue: 'S1', play_id: wAd.pid });
+    const v = await wAd.view();
+    ok(v?.events.some((e) => e.label === 'Scene 1 reached'), 'get_cue with the play id puts the scene on the timeline');
+    ok(!wLeaks(v, wAdv), 'the adventure timeline carries no cue text');
+  }
+  const wCamp = genStories.find((s) => s.kind === 'campaign');
+  const wCa = await wWatchOf(await call('start_story', { slug: wCamp.slug, new_campaign: true }));
+  ok(Boolean(wCa.code) && /^Day 1/.test((await wCa.view())?.summary ?? ''), 'a campaign starts with a watch code and its day on the timeline');
+  const wGm = genStories.find((s) => s.kind === 'game' && !s.trivia);
+  const wGa = await wWatchOf(await call('start_story', { slug: wGm.slug }));
+  ok(Boolean(wGa.code) && (await wGa.view())?.thin === true, 'a party game starts with a watch code and a thin timeline');
 
   // Your path (plan 2026-10-19, item 10): an unknown path code is refused plainly.
   const pathBad = await call('start_story', { slug: 'versus', path_code: 'nope never ever' });

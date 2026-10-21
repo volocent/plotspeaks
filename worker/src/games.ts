@@ -235,6 +235,36 @@ export function watchView(b: TriviaBoard, st: TriviaState) {
   };
 }
 
+/** A recorded play event, as the watch page may use it (play_events rows; nothing else is read). */
+export type WatchEvent = { kind: string; detail: string | null; verdict: string | null; at: number };
+export type TimelineLine = { at: number | null; label: string; tone: "ok" | "warn" | null };
+/**
+ * The timeline for the watch page, for every play that isn't a trivia board (plan 2026-10-21): built from an
+ * allow-list of event kinds plus the choices the player made and the campaign's own recap lines. Everything
+ * here has already been said aloud; scene text, cast, clues and answers are never read, so they can't leak.
+ */
+export function timelineView(o: { startedAt: number; events: WatchEvent[]; path?: string[]; ended?: boolean; world?: { day: number; location: string; party: { name: string }[]; log: string[] } | null }) {
+  const label = (e: WatchEvent): TimelineLine | null => {
+    const d = String(e.detail ?? "").trim().slice(0, 80);
+    if (e.kind === "cue" && /^S\d+[a-z]?$/i.test(d)) return { at: e.at, label: `Scene ${d.slice(1).toLowerCase()} reached`, tone: null };
+    if (e.kind === "accusation" && d) return { at: e.at, label: `Accused ${d}: ${e.verdict === "correct" ? "correct" : "innocent"}`, tone: e.verdict === "correct" ? "ok" : "warn" };
+    if (e.kind === "reveal") return { at: e.at, label: "The solution was revealed", tone: null };
+    if (e.kind === "ending") return { at: e.at, label: d ? `Ending: ${d}` : "The end", tone: "ok" };
+    return null;
+  };
+  const timed = o.events.slice().sort((a, b) => a.at - b.at).map(label).filter((x): x is TimelineLine => x !== null);
+  const chose: TimelineLine[] = (o.path ?? []).map((c) => ({ at: null, label: `Chose: "${String(c).slice(0, 120)}"`, tone: null }));
+  // Choices come before the ending they led to; a gamebook records nothing else.
+  const firstEnd = timed.findIndex((l) => l.label.startsWith("Ending"));
+  const body = firstEnd >= 0 ? [...timed.slice(0, firstEnd), ...chose, ...timed.slice(firstEnd)] : [...timed, ...chose];
+  const w = o.world;
+  const recap: TimelineLine[] = w ? w.log.slice(-5).map((l) => ({ at: null, label: String(l).slice(0, 240), tone: null })) : [];
+  const lines = [{ at: o.startedAt, label: "Started", tone: null } as TimelineLine, ...body, ...recap].slice(-40);
+  const summary = w ? [`Day ${w.day}`, w.location ? String(w.location).slice(0, 60) : ""].filter(Boolean).join(" · ") : o.path ? `${o.path.length} choice${o.path.length === 1 ? "" : "s"} so far` : null;
+  const party = w?.party.length ? `Party: ${w.party.map((m) => String(m.name).slice(0, 30)).join(", ")}` : null;
+  return { startedAt: o.startedAt, ended: Boolean(o.ended) || timed.some((l) => l.label.startsWith("Ending")), summary, party, events: lines };
+}
+
 export function renderBoard(b: TriviaBoard, st: TriviaState): string {
   const left = board(b).map((c) => {
     const vals = c.clues.filter((q) => !st.asked.includes(key(c.name, q.value))).map((q) => q.value);

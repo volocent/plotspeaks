@@ -28,7 +28,7 @@ import { assistantOf } from "./stats";
 import { matchStory, matchEnding, sortedNames } from "../../tools/worker-data/match.mjs";
 import { initialState, renderNode, matchChoice, advance, rewind, loadState, saveStateStatement, offered as branchOffered, type BranchState, pathSummary, followChoice } from "./branching";
 import { resolveTeam, teamBySlug, teamBoard, teamIntro, rosterCategory, rivalryBoard, type Team, teamLine, rosterText, LEAGUES_COVERED, TEAM_TRIVIA } from "./teams";
-import { newTrivia, dealtBoard, clueId, renderBoard, watchView, RATE_ASK, askQuestion, answerQuestion, challenge, loadTrivia, saveTrivia, sizeGame, seeded, todayUtc, type Step, type TriviaBoard } from "./games";
+import { newTrivia, dealtBoard, clueId, renderBoard, watchView, timelineView, type WatchEvent, RATE_ASK, askQuestion, answerQuestion, challenge, loadTrivia, saveTrivia, sizeGame, seeded, todayUtc, type Step, type TriviaBoard } from "./games";
 
 // The daily board (plan 2026-10-19, item 4): one of the general boards, by the day of the year, dealt
 // from the same seed for everyone, so the whole car and the next car get the same clues.
@@ -588,8 +588,9 @@ function createServer(ctx: Ctx) {
       if (kindOfStory(s) === "campaign" && (resume_code || (ctx.userId && !new_campaign))) {
         const c = await campaignPlay(s.slug, undefined, resume_code);
         if ("error" in c && resume_code) return fail(c.error);
+        const cWatch = "error" in c ? null : await watchCode(ctx.db, c.playId);
         if (!("error" in c)) return text(
-          `You are the narrator for "${s.title}", carrying on a campaign${resume_code ? "" : " (found on their account; if they'd rather start over, call start_story with new_campaign: true)"}. Story slug: ${s.slug}. Play id: ${c.playId} (pass it to world_update, world_recall and rate_story).${resume_code ? ` The resume code stays "${normCode(resume_code)}".` : ""}\n\n` +
+          `${watchNote(cWatch, FOLLOW)}You are the narrator for "${s.title}", carrying on a campaign${resume_code ? "" : " (found on their account; if they'd rather start over, call start_story with new_campaign: true)"}. Story slug: ${s.slug}. Play id: ${c.playId} (pass it to world_update, world_recall and rate_story).${resume_code ? ` The resume code stays "${normCode(resume_code)}".` : ""}\n\n` +
           `${prefaceFor(s)}${(s.story_connector?.[0]) ?? s.story}\n\n## Where the campaign stands\n${recall(c.w, { open: isOpenWorld(c.s) })}\n\nGive the players a short spoken recap of the story so far, then ask what they do.`,
         );
       }
@@ -616,6 +617,7 @@ function createServer(ctx: Ctx) {
         await noteStart(ctx.db, ctx.userId, { play_id: playId, story: s.slug, title: s.title, kind: kindOfStory(s) });
       }
       const more = n < parts.length ? `, and to start_story with chapter: ${n + 1} for the next chapter` : "";
+      const watch = await watchCode(ctx.db, playId);
       // A choose-your-path story starts its state here and hands out the opening node only.
       let opening = "";
       if (kindOfStory(s) === "campaign") {
@@ -643,7 +645,6 @@ function createServer(ctx: Ctx) {
         if (ctx.db) {
           try { await saveTrivia(ctx.db, playId, st).run(); } catch (e) { log("db_error", { message: String(e).slice(0, 200) }); }
         }
-        const watch = await watchCode(ctx.db, playId);
         const dailyNote = daily ? `TODAY'S BOARD (${daily}): everyone who plays today gets these same clues, and at the end the host hears how many have played and the top score. It's the board (not quick fire): don't ask which way to play.\n\n` : "";
         opening = `\n\n## The board\n${watchNote(watch)}${versusNote(st)}${dailyNote}${sized ? sized.text : renderBoard(dealtBoard(s.trivia, st), st)}`;
       } else if (s.picks?.length) {
@@ -664,10 +665,11 @@ function createServer(ctx: Ctx) {
         }
         opening = `\n\n## The opening\n${shared ? `A SHARED PATH: the player is following a friend's choices, which ended at "${shared.ending}". Tell them so in a sentence (not the ending's name). At each choice you'll be told what the friend chose; "next" takes the same turn, and any other choice goes their own way.\n\n` : ""}${renderNode(s.branches, st, { title: s.title })}`;
       }
-      const passTo = kindOfStory(s) === "campaign" ? "world_update, world_recall and rate_story" : s.branches ? `choose and rate_story` : s.trivia ? "game_board, game_question, game_answer, game_challenge and rate_story" : kindOfStory(s) === "game" ? "rate_story" : `check_accusation, reveal_solution and rate_story${more}`;
+      const cues = Object.keys(s.cues ?? {}).length ? ", get_cue" : "";
+      const passTo = kindOfStory(s) === "campaign" ? "world_update, world_recall and rate_story" : s.branches ? `choose and rate_story` : s.trivia ? "game_board, game_question, game_answer, game_challenge and rate_story" : kindOfStory(s) === "game" ? "rate_story" : `check_accusation, reveal_solution${cues} and rate_story${more}`;
       return text(
         `You are the narrator for "${s.title}". The user chose to play this through Plot Speaks; the script below is the game they asked for, and their own requests come first. ` +
-        `Story slug: ${s.slug}. Play id: ${playId} (pass it to ${passTo}).\n\n${prefaceFor(s)}${parts[n - 1]}${opening}`,
+        `Story slug: ${s.slug}. Play id: ${playId} (pass it to ${passTo}).\n\n${s.trivia ? "" : watchNote(watch, FOLLOW)}${prefaceFor(s)}${parts[n - 1]}${opening}`,
       );
     },
   );
@@ -1139,15 +1141,17 @@ function createServer(ctx: Ctx) {
     "get_cue",
     {
       title: "Get a scene cue",
-      // Read-only (review S7): it returns story data and records nothing.
-      annotations: { ...READ_ONLY, title: "Get a scene cue" },
-      description: "Returns a cue from a Plot Speaks adventure: the scene text to narrate, and the scene's notes for the narrator.",
+      // Records the scene reached when given the play id (plan 2026-10-21: the watch page's timeline), so it
+      // is no longer read-only (review S7 made it read-only while it recorded nothing).
+      annotations: { ...RECORDS, title: "Get a scene cue" },
+      description: "Returns a cue from a Plot Speaks adventure: the scene text to narrate, and the scene's notes for the narrator. Pass the play id so a passenger following along sees the scene reached.",
       inputSchema: {
         slug: SLUG.describe("The story slug"),
         cue: z.string().max(8).regex(/^S?\d+[a-z]?$/i).describe("The cue id, e.g. S1 or S3b"),
+        play_id: PLAY_ID.optional().describe("The play id from start_story"),
       },
     },
-    async ({ slug, cue }) => {
+    async ({ slug, cue, play_id }) => {
       const r = await resolveStory(ctx, slug);
       const id = cue.toUpperCase().startsWith("S") ? cue.toUpperCase() : `S${cue.toUpperCase()}`;
       const c = r.s?.cues[id];
@@ -1155,6 +1159,7 @@ function createServer(ctx: Ctx) {
       if (!r.s) return fail(r.error);
       const s = r.s;
       if (!c) return fail(`No cue ${id} in ${s.title}.${Object.keys(s.cues).length ? "" : " This story has no cues."}`);
+      if (play_id && ctx.db) await record(ctx, `INSERT INTO play_events (play_id, story, kind, detail, at) VALUES (${PLAY_OF}, ?, 'cue', ?, ?)`, play_id, s.slug, s.slug, id, Date.now());
       const notes = [c.narrator_only, id === "S1" && s.listen_for ? `Follow-up cues to listen for during this story:\n${s.listen_for}` : null].filter(Boolean).join("\n\n");
       return text(`READ ALOUD (in your own narrator voice):\n${c.read_aloud}` + (notes ? `\n\nNARRATOR NOTES (not read aloud: they would spoil the scene):\n${notes}` : ""));
     },
@@ -1426,8 +1431,13 @@ async function handlePassengerApi(request: Request, env: Env): Promise<Response 
 /** Trivia clues a signed-in player has heard on this board (empty for the open connector). */
 /** The user_seen key for a trivia play: a team's own key for Team Trivia, else the story slug. */
 // Watch codes (plan 2026-10-19, item 18): two words that open the read-only board at plotspeaks.com/play.
+// Every play gets one (plan 2026-10-21); a play that already has a code (chapter 2, a resumed campaign) keeps it.
 async function watchCode(db: D1Database | undefined, playId: string): Promise<string | null> {
   if (!db) return null;
+  try {
+    const had = await db.prepare("SELECT code FROM watch_codes WHERE play_id = ? AND created_at > ?").bind(playId, Date.now() - 86_400_000).first<{ code: string }>();
+    if (had) return had.code;
+  } catch { return null; }
   for (let tries = 0; tries < 4; tries++) {
     const code = newShortCode();
     try {
@@ -1437,10 +1447,12 @@ async function watchCode(db: D1Database | undefined, playId: string): Promise<st
   }
   return null;
 }
-const watchNote = (code: string | null) => code
-  ? `WATCH CODE: "${code}". Once, at the start and in one short sentence, mention that a passenger can watch the board on a phone at plotspeaks.com/play with the code ${code}. Don't repeat it unless asked.\n\n`
+const watchNote = (code: string | null, what = "watch the board") => code
+  ? `WATCH CODE: "${code}". Once, at the start and in one short sentence, mention that a passenger can ${what} on a phone at plotspeaks.com/play with the code ${code}. Don't repeat it unless asked.\n\n`
   : "";
-/** GET /api/play/<code>: the board as the watch page shows it (games.ts watchView), or 404. */
+const FOLLOW = "follow along";
+const WATCH_GENRE: Record<KindId, string> = { mystery: "Murder mystery", adventure: "Adventure", branching: "Choose your path", trivia: "Trivia", game: "Party game", campaign: "Campaign" };
+/** GET /api/play/<code>: the board (games.ts watchView) or, for any other play, its timeline (timelineView); else 404. */
 async function watchApi(env: Env, code: string): Promise<Response> {
   const db = env.DB;
   const c = normCode(decodeURIComponent(code).replace(/-/g, " "));
@@ -1448,12 +1460,26 @@ async function watchApi(env: Env, code: string): Promise<Response> {
   try {
     const row = await db.prepare("SELECT w.play_id, p.story FROM watch_codes w JOIN plays p ON p.id = w.play_id WHERE w.code = ? AND w.created_at > ?").bind(c, Date.now() - 86_400_000).first<{ play_id: string; story: string }>();
     if (!row) return apiJson({ error: "not_found" }, 404);
-    const st = await loadTrivia(db, row.play_id);
     const s = STORIES.find((x) => x.slug === row.story);
-    const b = s?.trivia ?? st?.board ?? (st?.team ? teamBoard(st.team) : null);
-    if (!st || !b || !s) return apiJson({ error: "not_found" }, 404);
-    const team = st.team ? teamBySlug(st.team)?.name ?? null : null;
-    return new Response(JSON.stringify({ title: team ? `${s.title}: ${team}` : s.title, ...watchView(dealtBoard(b, st), st) }), { headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-robots-tag": "noindex" } });
+    if (!s) return apiJson({ error: "not_found" }, 404);
+    const headers = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-robots-tag": "noindex" };
+    const st = await loadTrivia(db, row.play_id);
+    const b = s.trivia ?? st?.board ?? (st?.team ? teamBoard(st.team) : null);
+    if (st && b) {
+      const team = st.team ? teamBySlug(st.team)?.name ?? null : null;
+      return new Response(JSON.stringify({ kind: "trivia", title: team ? `${s.title}: ${team}` : s.title, ...watchView(dealtBoard(b, st), st) }), { headers });
+    }
+    // Every other play (plan 2026-10-21): only what has been said aloud, never the script or the key.
+    const play = await db.prepare("SELECT started_at FROM plays WHERE id = ?").bind(row.play_id).first<{ started_at: number }>();
+    const ev = await db.prepare("SELECT kind, detail, verdict, at FROM play_events WHERE play_id = ? AND kind IN ('cue', 'accusation', 'reveal', 'ending') ORDER BY at LIMIT 60").bind(row.play_id).all<WatchEvent>();
+    const k = kindOfStory(s);
+    const bs = s.branches ? await loadState(db, row.play_id) : null;
+    const w = k === "campaign" ? await loadWorld(db, row.play_id) : null;
+    const mins = s.duration_minutes || null;
+    const view = timelineView({ startedAt: play?.started_at ?? Date.now(), events: ev.results ?? [], path: bs ? bs.path.map((x) => x.choice) : undefined, ended: bs?.ended, world: w });
+    const genre = isWinddown(s) ? "Wind-down" : WATCH_GENRE[k];
+    const thin = k === "game" || (k === "adventure" && !Object.keys(s.cues ?? {}).length);
+    return new Response(JSON.stringify({ kind: "timeline", title: s.title, slug: s.slug, genre, minutes: mins, thin, ...view }), { headers });
   } catch (e) { log("db_error", { message: String(e).slice(0, 200) }); return apiJson({ error: "unavailable" }, 503); }
 }
 

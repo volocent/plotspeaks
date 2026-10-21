@@ -16,7 +16,7 @@ connects to Alexa+ unchanged, with the trivia watch page as the Echo Show game v
 
 **What's in the library:** 20 murder mysteries (one a six-chapter weekly season), gamebook adventures with
 shareable path codes, ten general trivia boards (1,800+ clues), Team Trivia for 356 teams with today's
-roster, Ballpark estimates, a daily board everyone plays with the same deal, head-to-head by code, Werewolf,
+roster, Ballpark estimates, a daily board everyone plays with the same deal, head-to-head by code, a Watch page that follows any play on a second screen, Werewolf,
 Twenty Questions, open worlds that remember you, six wind-downs. Every ending asks for a one-to-five star
 rating; a disputed trivia ruling goes to three independent AI judges and an upheld challenge teaches the
 board for everyone. Anyone can write and submit a story by voice in Story Studio; submissions are screened
