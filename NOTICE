@@ -1,3 +1,20 @@
+Plot Speaks is licensed in parts. Copyright (c) 2026 Volocent Labs LLC.
+
+| Path       | License            | Full text            |
+|------------|--------------------|----------------------|
+| worker/    | AGPL-3.0           | worker/LICENSE (and the root LICENSE) |
+| tools/     | MIT                | tools/LICENSE        |
+| docs/      | CC BY 4.0          | docs/LICENSE         |
+| stories/   | CC BY-NC 4.0       | stories/LICENSE      |
+
+The root LICENSE is the AGPL-3.0 text: it is the repository default and the
+server's license. Each folder's own LICENSE file governs that folder.
+
+Story license summary (not a substitute for stories/LICENSE): you may share
+and adapt the stories, for non-commercial purposes, if you give appropriate
+credit ("Plot Speaks, by Volocent Labs LLC"), link to the license, and say if
+you changed anything.
+
 Plot Speaks
 Copyright (c) 2026 Volocent Labs LLC
 

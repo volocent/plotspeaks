@@ -54,6 +54,6 @@ The lint needs Node 20+ and no installs. It checks the parts of the fair-play ru
 - **Tools** (`tools/`): MIT.
 - **Server** (`worker/`): AGPL-3.0.
 
-Details are in `LICENSE`. © 2026 Volocent Labs LLC.
+The root `LICENSE` is the AGPL-3.0 text (the repository default and the server's license); each folder's own `LICENSE` governs that folder, and `NOTICE` lists them. © 2026 Volocent Labs LLC.
 
 This repository is generated from a private working copy, so pull requests are read but changes land through the next export.

@@ -1,6 +1,6 @@
 // Plot Speaks website, served by the same Worker as the MCP endpoint.
 //
-//   GET /                        home: what it is, bring your own assistant, car rides, the stories
+//   GET /                        home: what it is, bring your own AI, car rides, the stories
 //   GET /stories/<slug>          one story: cover, pitch, connect (primary), copy-and-paste (fallback)
 //   GET /stories/<slug>/story.md the public story.md as plain text
 //   GET /stories/<slug>/passenger for the passenger: holds the answer key in paste play, fetched
@@ -410,12 +410,12 @@ function copyField(url: string, id: string, big = false): string {
 
 
 // ============================================================================ CONNECT BUTTONS
-// BYOA, the headline idea (Ben, 2026-10-16). One Connect button per assistant, text only (no
+// BYO-AI, the headline idea (Ben, 2026-10-16; "AI" over "assistant" 2026-10-21). One Connect button per assistant, text only (no
 // logos until each company's brand rules are checked; see Assistant.logo for the slot). Without
 // script each button is a link to that assistant's /connect section; DIALOG_JS turns it into a
 // button that opens the pop-up from connectDialogs(), which every page with buttons includes.
 function byoaBadge(): string {
-  return `<span class="byoa-badge"><span class="byoa-tag">BYOA</span><span class="byoa-name">Bring your own assistant</span></span>`;
+  return `<span class="byoa-badge"><span class="byoa-tag">BYO-AI</span><span class="byoa-name">Bring your own AI</span></span>`;
 }
 // `say` is the phrase that opens Plot Speaks or starts this page's story. Once the visitor has
 // marked an assistant as connected (localStorage, CONNECTED_JS), the Connect buttons give way to
@@ -442,7 +442,7 @@ ${CONNECT.assistants.map((a) => `<li><a class="ai-btn" href="/connect#${a.id}" d
 function connectPanel(opts: { id: string; heading?: string }): string {
   return `<section class="byoa" aria-labelledby="${opts.id}-h">
 ${byoaBadge()}
-${opts.heading ? `<h2 class="byoa-h" id="${opts.id}-h">${esc(opts.heading)}</h2>` : `<h2 class="byoa-h byoa-h-sm" id="${opts.id}-h">Connect your assistant once.</h2>`}
+${opts.heading ? `<h2 class="byoa-h" id="${opts.id}-h">${esc(opts.heading)}</h2>` : `<h2 class="byoa-h byoa-h-sm" id="${opts.id}-h">Connect your AI assistant once.</h2>`}
 ${aiButtons()}
 <p class="byoa-line">Then just say <strong>“${esc(OPEN_LINE)}”</strong> No new app, no subscription. On Claude, sign in with Google when you connect and Plot Speaks keeps your saved progress in stories and games.</p>
 </section>`;
@@ -875,7 +875,7 @@ p{margin:0 0 1em}
 .steps3 h3{margin:0 0 6px}
 .steps3 p{margin:0;color:var(--ink-2)}
 
-/* bring your own assistant */
+/* bring your own AI */
 .byo-grid{display:grid;gap:16px}
 @media (min-width:760px){.byo-grid{grid-template-columns:repeat(3,1fr)}}
 .pill-card{display:flex;gap:14px;align-items:flex-start;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:20px}
@@ -1073,7 +1073,7 @@ details.script pre{margin:0;padding:0 18px 18px;white-space:pre-wrap;word-break:
 .tool code{justify-self:start;font-size:.95rem}
 .tool p{margin:0;color:var(--ink-2)}
 
-/* BYOA: badge, assistant chips (names only, never logos), ways to play */
+/* BYO-AI: badge, assistant chips (names only, never logos), ways to play */
 .byoa{margin:0 0 26px;padding:18px 18px 20px;border-radius:var(--radius-lg);background:radial-gradient(120% 90% at 100% 0%,#1B4A7A,transparent 60%),linear-gradient(160deg,var(--navy),#0B2643);color:#F6F0E6;box-shadow:var(--shadow-lg);border:1px solid rgba(255,255,255,.06);position:relative;overflow:hidden;isolation:isolate}
 .byoa::after{content:"";position:absolute;z-index:-1;right:-70px;bottom:-90px;width:220px;height:220px;border-radius:50%;border:16px solid var(--orange);opacity:.16;box-shadow:0 0 0 30px rgba(63,184,232,.08)}
 @media (min-width:720px){.byoa{padding:24px 26px 26px}}
@@ -1086,7 +1086,7 @@ details.script pre{margin:0;padding:0 18px 18px;white-space:pre-wrap;word-break:
 .byoa-tag{display:inline-block;padding:8px 12px 7px;border-radius:999px;background:var(--ink);color:var(--bg);font:800 .82rem/1 var(--sans);letter-spacing:.16em;position:relative}
 .byoa-tag::after{content:"";position:absolute;right:-2px;top:-2px;width:10px;height:10px;border-radius:50%;background:var(--orange);box-shadow:0 0 0 2px var(--surface)}
 .byoa-h{font-size:clamp(1.4rem,4.4vw,1.8rem);color:#FFFDF9;margin:16px 0 0;max-width:24ch;text-wrap:balance}
-.byoa-h-sm{white-space:nowrap;max-width:none;font-size:min(1.6rem,calc((100vw - 96px) / 15))}
+.byoa-h-sm{white-space:nowrap;max-width:none;font-size:min(1.6rem,calc((100vw - 96px) / 17))}
 @media (min-width:900px){.byoa-h-sm{font-size:1.6rem}}
 .byoa .ai-btn{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.2);color:#FFFDF9;box-shadow:none}
 .byoa .ai-btn:hover{background:rgba(255,255,255,.14);border-color:var(--peach);color:#FFFDF9}
@@ -1575,7 +1575,7 @@ ${sections}
 </div>
 ${connectDialogs({ url: origin + "/mcp", story: example })}`;
     return page({ title: games ? "Games · Plot Speaks" : "Stories · Plot Speaks",
-      description: games ? "Trivia, twenty questions, story games, Werewolf for a car, open worlds and D&D-style campaigns, played by voice with your own assistant." : "Murder mysteries, fantasy adventures and choose-your-path stories you play by voice with your own assistant.",
+      description: games ? "Trivia, twenty questions, story games, Werewolf for a car, open worlds and D&D-style campaigns, played by voice with your own AI assistant." : "Murder mysteries, fantasy adventures and choose-your-path stories you play by voice with your own assistant.",
       body: listBody, origin, path: games ? "/games" : "/stories", script: FILTER_JS });
   }
   // Home: the counts behind the two doors.
@@ -1997,8 +1997,8 @@ function aboutSections(example: string): string {
 
 <section class="section" id="byoa" aria-labelledby="byo-h">
 <div class="wrap">
-<div class="section-head">${byoaBadge()}<h2 id="byo-h">Use the assistant you already have.</h2>
-<p class="lead">Plot Speaks isn't another app. It's a library of stories that Claude, ChatGPT, Gemini and others can play with you. Your assistant is the narrator; Plot Speaks brings the story and keeps the answer key.</p></div>
+<div class="section-head">${byoaBadge()}<h2 id="byo-h">Use the AI you already have.</h2>
+<p class="lead">Plot Speaks isn't another app or another AI. It's a library of stories and games that Claude, Gemini, ChatGPT and others play with you. Your AI assistant is the narrator; Plot Speaks brings the story and keeps the answer key.</p></div>
 <div class="byo-grid">
 <div class="pill-card"><span class="ic-wrap">${icon("app")}</span><div><h3>No new app</h3><p>Play in the assistant app already on your phone, in the car.</p></div></div>
 <div class="pill-card"><span class="ic-wrap">${icon("user")}</span><div><h3>Your progress, saved</h3><p>Sign in with Google once and Plot Speaks remembers what you've played, the trivia you've heard and your campaigns. No new password.</p></div></div>
@@ -2129,7 +2129,7 @@ export function writePage(origin: string): string {
 <p>Stories are published under <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a>, credited to the name you chose. The format is in <a href="https://github.com/volocent/plotspeaks/blob/main/docs/FORMAT.md">docs/FORMAT.md</a> on GitHub.</p>
 <p style="margin:36px 0 64px"><a class="link-arrow" href="/stories/example-dinner-party">See an example: The Last Toast ${icon("arrow", 18)}</a></p>
 </div>`;
-  return page({ title: "Write a story · Plot Speaks", description: "Write a Plot Speaks story with your own assistant: say \"Write a Plot Speaks story\", fix the gaps together, choose your credit name and submit. A person reviews every story.", body, origin, path: "/write" });
+  return page({ title: "Write a story · Plot Speaks", description: "Write a Plot Speaks story with your own AI assistant: say \"Write a Plot Speaks story\", fix the gaps together, choose your credit name and submit. A person reviews every story.", body, origin, path: "/write" });
 }
 
 // ============================================================================ PRIVACY, SUPPORT
