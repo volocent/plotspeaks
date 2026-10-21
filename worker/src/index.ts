@@ -20,6 +20,7 @@ import { handleSite, notFoundPage, siteOrigin, accountPage, publicProfilePage, t
 import { LENGTHS, WRITE_GENRES, writeStory, reviewStory, DENYLIST } from "./studio";
 import { submitStory, withdrawSubmission, hashIp, loadApprovedStories, handleAdmin, serveSubmissionCover, listApprovedSubmissions, sameKey, type SubEnv, type Builtins, type PlayStory, type Ending } from "./submissions";
 import { runRetention } from "./retention";
+import { alertOnce, routeOf } from "./alert";
 import { runGithubWatch } from "./github";
 import { profileOf, checkHandle, saveProfile, publicProfile, profileLine } from "./profile";
 import { countPage, countMcp, bump } from "./usage";
@@ -27,7 +28,7 @@ import { assistantOf } from "./stats";
 import { matchStory, matchEnding, sortedNames } from "../../tools/worker-data/match.mjs";
 import { initialState, renderNode, matchChoice, advance, rewind, loadState, saveStateStatement, offered as branchOffered, type BranchState, pathSummary, followChoice } from "./branching";
 import { resolveTeam, teamBySlug, teamBoard, teamIntro, rosterCategory, rivalryBoard, type Team, teamLine, rosterText, LEAGUES_COVERED, TEAM_TRIVIA } from "./teams";
-import { newTrivia, dealtBoard, clueId, renderBoard, watchView, askQuestion, answerQuestion, challenge, loadTrivia, saveTrivia, sizeGame, seeded, todayUtc, type Step, type TriviaBoard } from "./games";
+import { newTrivia, dealtBoard, clueId, renderBoard, watchView, RATE_ASK, askQuestion, answerQuestion, challenge, loadTrivia, saveTrivia, sizeGame, seeded, todayUtc, type Step, type TriviaBoard } from "./games";
 
 // The daily board (plan 2026-10-19, item 4): one of the general boards, by the day of the year, dealt
 // from the same seed for everyone, so the whole car and the next car get the same clues.
@@ -77,7 +78,7 @@ const INSTRUCTIONS = [
   "start_story returns a play id: pass it to check_accusation, reveal_solution and rate_story. If you no longer have it, call check_accusation without it. A two-chapter story arrives one chapter at a time: when chapter 1 ends, call start_story with chapter: 2 and the play id. To start a story the user named, call start_story directly; list_stories is for browsing.",
   "Call submit_story only when the writer has said they are ready to submit, and withdraw_submission only when they ask to withdraw. Ask the writer which name to credit.",
   "Writing: write_story returns a suggested step-by-step way to draft a story with the user, and the format template. review_story checks a draft (format rules, plus a fair-play checklist for you to go through). When the writer wants to share it, submit_story sends it, with the name they want credited, to a person who reviews every submission before it is published; withdraw_submission removes it again with the claim code from the receipt.",
-  "When a story ends (a correct accusation, the full reveal, a victory or defeat), ask once: \"Would you like to leave feedback? How many stars out of five would you give the story, did I give anything away too early, and is there anything you'd tell the people who make Plot Speaks?\" Then call rate_story with the stars, the spoiled answer, any comment about the story and any feedback about the experience, with the play id. If the player doesn't want to, drop it. Either way, end with: \"Thank you for choosing Plot Speaks. Would you like to go back to the main menu, or play this one again?\" Main menu is open_plot_speaks with skip_intro: true; again is start_story for the same story (a new play).",
+  "When a story or game ends (a correct accusation, the full reveal, a victory or defeat, a choose-your-path ending, the last trivia question, a game's last round, or a campaign session the players stop), ask once: \"Would you like to leave feedback? How many stars out of five would you give the story, did I give anything away too early, and is there anything you'd tell the people who make Plot Speaks?\" Then call rate_story with the stars, the spoiled answer, any comment about the story and any feedback about the experience, with the play id. If the player doesn't want to, drop it. (Wind-downs are the one exception: they end quietly, with no questions.) Either way, end with: \"Thank you for choosing Plot Speaks. Would you like to go back to the main menu, or play this one again?\" Main menu is open_plot_speaks with skip_intro: true; again is start_story for the same story (a new play).",
 ].join("\n");
 
 const text = (t: string) => ({ content: [{ type: "text" as const, text: t }] });
@@ -193,7 +194,7 @@ const prefaceFor = (s: Story) =>
     ? "This is a choose-your-path story. The story itself stays on the Plot Speaks server and arrives one moment at a time: the opening is below, and after each choice the player makes, call choose with the play id and their answer to get what happens next. You don't know what lies behind any choice, so never guess or hint at it. \"Plot Speaks, resume\" is choose with no answer: it returns where they are.\n\n"
     : isMystery(s)
     ? "The answer key stays on the Plot Speaks server, so you don't know the solution. When the player formally accuses someone, call check_accusation and give the verdict it returns. When they give up or ask for the full reveal, call reveal_solution.\n\n"
-    : kindOfStory(s) === "game" ? "The rules below are the whole game; you run it as written.\n\n"
+    : kindOfStory(s) === "game" ? (isWinddown(s) ? "The script below is the whole piece; read it as written, and end it quietly with no questions.\n\n" : `The rules below are the whole game; you run it as written. When it ends, ${RATE_ASK.replace(/^Then a/, "a")}\n\n`)
     : kindOfStory(s) === "campaign" ? "This is a campaign: you improvise from the world seed below, and Plot Speaks keeps the books. Roll every check, attack and save with roll and say the result as rolled. Record what happens with world_update the moment it happens, and obey what it refuses. In a later session the players give their resume code: call start_story with it as resume_code.\n\n"
     : kindOfStory(s) === "trivia" ? "This is a trivia game: you host it, and Plot Speaks holds every clue and answer. These rules come first, over anything below.\n- MODE: before the first question, ask once which way they want to play: the board (categories and points, like Jeopardy), quick fire (random questions one after another, no points, just a tally; good for driving), a streak (quick fire until the first miss), or they can just say how long they've got and the game is sized to fit. If the board below says SIZED FOR, the choice is made: don't ask. A time (\"ten minutes\"): call game_question with category \"10 minutes\" (or pass minutes to start_story if they said it up front). A streak: call game_question with category \"streak\". Quick fire: call game_question with category \"random\" for the first question; every game_answer reply then carries the next question, so keep calling game_answer and never call game_question or game_board again until the game is over. The board: when a player names a category and value, call game_question at once. A player stays in their category until they name another: the game_answer reply already carries the next clue in that category (Capitals 100 done, then Capitals 200), so read the ruling and then that clue at once. Never ask whether they want the next one or which value. Only when a category is cleared do you ask which category next, and if they name another category any time, call game_question with it. Every game_answer reply lists what is left, so don't call game_board between turns, only after a pause or resume.\n- NEVER say you're checking, looking something up, fetching or calling anything, and never mention tools: just read the clue or the ruling.\n- A short reply (\"yes\", \"continue\", \"next\", \"go on\", \"another\") is a complete answer: carry on at once; never ask the player to say it again in a full sentence.\n- SOUNDS: a ruling opens with a sound word, \"Ding!\" for a right answer and \"Bzzt.\" for a wrong one. Say it as a short, bright (or flat) sound in your own voice, never spelled out or explained, then the ruling. This is the one exception to any rule below about sound effects. If the player says \"no sounds\" or finds them annoying, drop them for the rest of the game.\n- Keep each turn to a few words of patter and the clue or ruling.\n\n"
     : "The hidden scenes stay on the Plot Speaks server. When the script calls for a cue, call get_cue and narrate its read-aloud part.\n\n") +
@@ -1783,6 +1784,11 @@ const accountOptions = (origin: string): OAuthProviderOptions<Env> => ({
 /** The OAuth helpers (grants, tokens) for an account host, usable from the site host too. */
 const accountApi = (host: string, env: Env) => getOAuthApi(accountFor(host).options, env);
 
+function serverAlert(env: Env, request: Request, what: string): Promise<boolean> {
+  const route = routeOf(new URL(request.url).pathname);
+  return alertOnce(env, `5xx:${route}`, { title: "Plot Speaks: server error", message: `${request.method} ${route} failed (${what}). The worker logs have the details.` });
+}
+
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
     const host = new URL(request.url).hostname;
@@ -1792,7 +1798,18 @@ export default {
       if (!env.OAUTH_KV) return new Response("The account connector is unavailable right now.\n", { status: 503, headers: { "content-type": "text/plain" } });
       return accountProviderFor(host).fetch(request, env, ctx);
     }
-    return mainFetch(request, env, ctx);
+    // A request that threw, or a server error answered: one alert per area of the site per hour, naming
+    // only the first path segment (/mcp, /admin), never the full address, a player's words or an id.
+    let res: Response;
+    try {
+      res = await mainFetch(request, env, ctx);
+    } catch (e) {
+      log("unhandled_error", { route: routeOf(new URL(request.url).pathname), message: String(e).slice(0, 200) });
+      ctx.waitUntil(serverAlert(env, request, (e as Error)?.name || "Error"));
+      return new Response("Something went wrong on our side. Please try again in a moment.\n", { status: 500, headers: { "content-type": "text/plain; charset=utf-8" } });
+    }
+    if (res.status >= 500) ctx.waitUntil(serverAlert(env, request, `HTTP ${res.status}`));
+    return res;
   },
 
   // Daily Cron Trigger (wrangler.jsonc "triggers"): 90-day log retention, see src/retention.ts.
@@ -1800,9 +1817,16 @@ export default {
     ctx.waitUntil(
       runRetention(env.DB)
         .then(async (counts) => { log("retention", counts); await bump(env.DB, [["job", "retention"]]); })
-        .catch(async (e) => { log("retention_error", { message: String(e).slice(0, 200) }); await bump(env.DB, [["job", "retention_error"]]); }),
+        .catch(async (e) => {
+          log("retention_error", { message: String(e).slice(0, 200) });
+          await bump(env.DB, [["job", "retention_error"]]);
+          await alertOnce(env, "retention", { title: "Plot Speaks: nightly job failed", message: `The 90-day retention job stopped with ${(e as Error)?.name || "an error"}; old logs weren't removed tonight. The worker logs have the details.` });
+        }),
     );
     // Who follows the GitHub organisation or has starred, watched or forked the repo (src/github.ts).
-    ctx.waitUntil(runGithubWatch(env.DB).then((r) => log("github_watch", r)).catch((e) => log("github_watch_error", { message: String(e).slice(0, 200) })));
+    ctx.waitUntil(runGithubWatch(env.DB).then((r) => log("github_watch", r)).catch(async (e) => {
+      log("github_watch_error", { message: String(e).slice(0, 200) });
+      await alertOnce(env, "github-watch", { title: "Plot Speaks: GitHub watch failed", message: `Tonight's check of GitHub followers and stars stopped with ${(e as Error)?.name || "an error"}.`, level: "info" });
+    }));
   },
 } satisfies ExportedHandler<Env>;

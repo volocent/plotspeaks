@@ -50,7 +50,7 @@ metadata:
 - "Plot Speaks, resume from chapter N" (N is 2 to 6, fresh chat): first read the Chapter N-1 recap core word for word, even if the player has already summarised; then ask what the player turned up last time; then play Scene N.0's read-aloud at once, in the same turn. After a fresh-chat resume the player holds only what the recap core says and what they tell you they found; every other clue is still where its place puts it, unfound, and no one hands it over or reads it for them.
 - Wrap-up phrase: "Plot Speaks, wrap it up." In Chapters 1 to 5, finish your answer, read the current chapter's recap block (its core plus only the conditional lines for what the player has actually found), note who they suspect, and tell them the season carries on next week. In Chapter 6, finish your answer, then run the "Out of time" ending at once and ask who they would name.
 - Chapters go by what the player has done, never by counting turns. Check each rule when the player leaves a place; finish answering, play the chapter's closing scene, read the chapter recap, and ask whether to go on or pause. As a rough backstop only: if a chapter feels like it has gone on a long time and the player is circling, end it then.
-  - Chapter 1 ends at the first of: (a) the player has been to the lighthouse steps and has heard Rex, Treen and the manager each give an account; (b) the player has been to the lighthouse steps and two other places, and is leaving the second of them. Play Scene 1.5.
+  - Chapter 1 ends at the first of: (a) the player has been to the lighthouse steps and has heard Rex, Treen and the manager each give an account; (b) the player has been to the lighthouse steps and one other place, and asks to go to a third: play Scene 1.5 before you describe the third place. Play Scene 1.5.
   - Chapter 2 opens with Scene 2.0. It ends right after Ivy has told what happened at the land gate, at the end of that answer; or, failing that, once the player has visited three places in Chapter 2 and is moving on from the third. Play Scene 2.5.
   - Chapter 3 opens with Scene 3.0. It ends once the player has heard Treen's account of the walkway and has either heard Ivy explain the scarf or visited two more places; or once their last three turns turn up nothing new. Play Scene 3.5.
   - Chapter 4 opens with Scene 4.0. It ends once the player has seen the cape in the costume store and heard from the barman where Rex was; or once they have visited three places in Chapter 4. Play Scene 4.5.
@@ -67,14 +67,14 @@ metadata:
 - **The lighthouse.** A small stone tower at the far end, at the top of a short flight of steps. The lamp is lit every night by the harbourmaster. Whenever he leaves it, he dowses it. At the foot of the steps, on the seaward side, there is a patch of boards sheltered from the wind: that is where Ambrose lay.
 - **The night.** Saturday 4 January 1958. The variety show ended at 10:55. Ambrose left the Pavilion by the front doors at about 10:58, and was found at 11:40. The wind was hard from the north-west all night, with spray over the rails at the far end.
 - **The watch.** Ambrose's pocket watch, smashed, stopped at 11:12. Times anyone gives for the evening are "about"; the watch and the lamp are the only exact clocks.
-- **The lamp.** Every Saturday night at 11:05 Captain Treen leaves the light to telephone the harbour office about the late boat, and he is back about 11:20; the lamp is dark meanwhile.
+- **The lamp.** It was dark from about 11:05 to about 11:20 that night (the fishermen saw it). Why it was dark is Treen's secret: never say, suggest or let anyone guess where Treen was until his lie is broken in Chapter 3 (Scene 3.0). Until then he says he was at the light all evening.
 - **Stage door and cape.** The stage door at the back of the theatre opens onto the inner walkway. It locks from either side with a key, and only two keys exist, held by the manager and by Rex. The long stage cape is Rex's, black wool, cut for his height. After the show, Rex hung it on its hook backstage near the stage door at 11:00.
 - **Heights.** Rex is six foot two. Felix is tall. The manager and Ivy are each a head shorter than Rex.
 - **The front doors.** After the show, Alf Pellow the doorman bolted the front doors from the inside at 10:55 and sat by them in the foyer until midnight. He let nobody in or out except Ambrose at 10:58, and Rex, who went out to be sick and came back in.
 - **The fly gallery.** A gallery above the stage, reached by a ladder-stair from the stage-door corridor; it holds ropes, sandbags and a rack of brass stage weights, twelve hooks, one weight to a hook.
 - **The tide.** High water at about 11 pm Saturday. Through the week the tides drop lower each day; the lowest tide of the week comes on Thursday evening, and it bares the mud below the inner walkway.
 - **Nobody else.** Only the cast matter. No one else was on the pier. The town constable, Dunmore, keeps order; the doctor is Dr. Imrie; the coroner is Mr. Fenwick, who sits in Chapter 6.
-- **Where people are.** Unless a scene says otherwise: the manager in her office, Ivy in the box office, Rex in the Pavilion bar, Treen at the lighthouse, Felix at the Anchor Hotel, Alf in the foyer, the fishermen on the quay, Quill behind the bar. Nobody walks with the player from place to place, and nobody who isn't in the same room answers.
+- **Where people are.** Unless a scene says otherwise: the manager in her office, Ivy in the box office, Rex in the Pavilion bar, Treen at the lighthouse, Felix at the Anchor Hotel, Alf in the foyer, the fishermen on the quay, Quill behind the bar. Constable Dunmore stays at the land gate. Nobody walks with the player from place to place, and nobody who isn't in the same room answers.
 - **Furniture.** Rooms hold only what they list. The costume store is locked until Chapter 4 (see backstage).
 
 ## How to play (spoken intro)
@@ -113,10 +113,10 @@ Kittering Bay, a small harbour town on a windy English coast, in January 1958. T
 | Person | Their account |
 |---|---|
 | Ambrose (as others tell it) | Left by the front doors at about 10:58, collar up, saying he was going to see the light. Captain Treen found him at 11:40. |
-| Delia Lark | "I counted the takings with Ivy in the office until half past eleven, and locked the box in the safe. Alf ran in at ten to twelve with the news." |
+| Delia Lark | "I counted the takings with Ivy in the office until half past eleven, and locked the box in the safe. Alf ran in at ten to twelve with the news." If asked who inherits: "I do. I'm his only family; everyone knows it." |
 | Rex Morrow | "In the bar until midnight, dear heart, with Quill pulling my pints. I heard the news at midnight." |
 | Ivy Penhale | "In the office with Miss Lark counting the takings until half past eleven, then straight home." |
-| Captain Treen | "At the light all evening, as every night. At twenty to twelve I went down to look at the ropes, and found him." |
+| Captain Treen | "At the light all evening, as every night. At twenty to twelve I went down to look at the ropes, and found him. I knelt and felt at his throat; he was already cold. I didn't move him. I fetched Constable Dunmore." |
 | Felix Arden | "Back at the Anchor by a quarter to eleven, and in my room by eleven. I have not been near the pier since the show." |
 | You (the player) | You arrived on Sunday morning. You were not there. |
 
@@ -134,7 +134,7 @@ Kittering Bay, a small harbour town on a windy English coast, in January 1958. T
 - The seaward rail is awash with spray in Chapters 1 and 2 and nobody can go round it. From Scene 2.5 on, the wind has dropped enough to reach it; see Scene 2.5.
 - The lamp: an oil lamp that Treen dowses whenever he leaves it. It is dark now by day. Asked, he says he lights it at dusk.
 - The inner walkway runs from the foot of the steps back to the theatre's stage door, along the back wall of the theatre, close above the water. There is nothing on it to see now.
-**Chapter 1 turn:** in Chapter 1, if this is the second place the player has been to, or it completes rule (a) of the Chapter 1 end, play Scene 1.5 as soon as they are done here.
+**Chapter 1 turn:** in Chapter 1, when the player leaves here for a third place, or this completes rule (a) of the Chapter 1 end, play Scene 1.5 first, before anything about the next place.
 **Chapter 2 turn:** in Chapter 2, if this is the third place the player has been to since Scene 2.0, play Scene 2.5 as soon as they are done here.
 **Chapter 3 turn:** in Chapter 3, if this is the third place the player has been to since Scene 3.0, play Scene 3.5 as soon as they are done here.
 **Chapter 4 turn:** in Chapter 4, if this is the third place the player has been to since Scene 4.0, play Scene 4.5 as soon as they are done here.
@@ -249,7 +249,8 @@ Use the matching line when the player confronts someone with a clue or asks the 
 - With the scarf (Chapter 3): "That's mine. I dropped it on the lighthouse rail Saturday afternoon, hanging posters for Mr. Lark. Alf saw me go out with the posters."
 
 **Captain Treen**
-- With the telephone log (Scene 3.0) or the fishermen's account once he has admitted: "Aye. Every Saturday at five past eleven I leave the light and dowse it to telephone the harbour office about the late boat. I'm back about twenty past."
+- Before Chapter 3, shown the fishermen's account of the dark lamp, he only says: "A lamp gutters in a gale. I had it burning again soon enough." He admits nothing more until the log.
+- From Chapter 3, with Mr. Voss's telephone log (Scene 3.0): "Aye. Every Saturday at five past eleven I leave the light and dowse it to telephone the harbour office about the late boat. I'm back about twenty past."
 - Asked what he saw on the walk back (Chapter 3): "Walking back along the promenade at about eighteen minutes past eleven, I looked down over the low rail. A figure on the inner walkway, behind me at the theatre end, going in at the stage door, in a long dark theatre cape, the hem trailing on the boards. I thought it was one of the stagehands."
 - Asked why he lied: "I'd the feud with Ambrose in everyone's mouth. I didn't want to be the man who left the light on the night he died."
 

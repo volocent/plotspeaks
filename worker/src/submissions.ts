@@ -29,6 +29,7 @@ import type { BranchGraph } from "./branching";
 import type { TriviaBoard } from "./games";
 import { compileTrivia } from "../../tools/check-story/trivia.mjs";
 import { adminStats } from "./stats";
+import { alertOnce, sendAlert } from "./alert";
 
 export const GUARD_MODEL = "@cf/meta/llama-guard-3-8b";
 export const PER_IP_DAILY = 3;
@@ -40,7 +41,7 @@ const DAY = 24 * 60 * 60 * 1000;
 type Ai = { run: (model: string, input: Record<string, unknown>) => Promise<any> };
 export type SubEnv = {
   ENVIRONMENT?: string; DEV_ACCESS_KEY?: string; ADMIN_KEY?: string; IP_SALT?: string; SUBMIT_DAILY_CAP?: string;
-  DB?: D1Database; AI?: Ai;
+  DB?: D1Database; AI?: Ai; PUSHOVER_APP_TOKEN?: string; PUSHOVER_USER_KEY?: string;
 };
 export type Ending = { name: string; verdict: string; text: string };
 type Cue = { read_aloud: string; narrator_only: string | null };
@@ -360,6 +361,8 @@ export async function submitStory(
       null, null, null, author.name, replacing.id).run();
     await attempt("stored", replacing.id);
     log("submit_story", { outcome: "replaced", id: replacing.id, was: replacing.status, story_chars: story.length, warnings: lint.warnings });
+    // Ben's phone: that something waits, never what (no title, text, name or contact).
+    if (!replacing.slug?.startsWith("smoke-test")) await sendAlert(env, { title: "Plot Speaks: story waiting for review", message: `A writer sent a new version of a story. ${"Review it at plotspeaks.com/admin/submissions."}` });
     return [
       `Thank you! The new version of "${m.title}" replaced submission ${replacing.id}, credited to ${author.name}.`,
       replacing.status === "approved"
@@ -385,6 +388,7 @@ export async function submitStory(
     author.name, await claimHash(id, code)).run();
   await attempt("stored", id);
   log("submit_story", { outcome: "stored", id, story_chars: story.length, secrets_chars: secrets?.length ?? 0, warnings: lint.warnings });
+  if (!devMarker) await sendAlert(env, { title: "Plot Speaks: story waiting for review", message: `A new story was submitted. ${"Review it at plotspeaks.com/admin/submissions."}` });
 
   return [
     `Thank you! "${m.title}" was received, credited to ${author.name}. Submission id: ${id}.`,
@@ -624,6 +628,7 @@ export async function handleAdmin(request: Request, env: SubEnv, builtins: Built
             await db.prepare("UPDATE submissions SET cover = ?, cover_type = ?, cover_prompt = ? WHERE id = ?").bind(c.bytes, c.contentType, c.prompt, id).run();
           } catch (e) {
             log("cover_error", { id, message: String(e).slice(0, 200) });
+            await alertOnce(env, "cover", { title: "Plot Speaks: cover not drawn", message: "Approving a story didn't draw its cover (Workers AI failed). Draw it again from the admin page.", level: "info" });
           }
         }
       }

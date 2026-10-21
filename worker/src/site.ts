@@ -431,11 +431,11 @@ ${CONNECT.assistants.map((a) => `<li><a class="ai-btn" href="/connect#${a.id}" d
 <ul class="byoa-on-list">
 <li data-on="claude" hidden><span class="status status-ok">Connected</span><strong>Claude</strong><a class="btn btn-primary btn-sm" href="https://claude.ai/new?q=${q}" rel="noopener">${icon("plug", 18)}Open in Claude</a><button class="linkish" type="button" data-on-remove="claude">Remove</button></li>
 <li data-on="chatgpt" hidden><span class="status status-ok">Connected</span><strong>ChatGPT</strong><a class="btn btn-primary btn-sm" href="https://chatgpt.com/?q=${q}" rel="noopener">${icon("plug", 18)}Open in ChatGPT</a><button class="linkish" type="button" data-on-remove="chatgpt">Remove</button></li>
-<li data-on="gemini" hidden><span class="status status-ok">Connected</span><strong>Gemini</strong><button class="btn btn-primary btn-sm" type="button" data-copy-phrase="${esc(geminiSay)}">${icon("copy", 18)}Copy the phrase</button><button class="linkish" type="button" data-on-remove="gemini">Remove</button></li>
+<li data-on="gemini" hidden><span class="status status-ok">Connected</span><strong>Gemini</strong><a class="btn btn-primary btn-sm" href="https://gemini.google.com/app" target="_blank" rel="noopener" data-copy-phrase="${esc(geminiSay)}">${icon("plug", 18)}Copy &amp; open Gemini</a><button class="linkish" type="button" data-on-remove="gemini">Remove</button></li>
 <li data-on="other" hidden><span class="status status-ok">Connected</span><strong>Your assistant</strong><button class="btn btn-primary btn-sm" type="button" data-copy-phrase="${esc(say)}">${icon("copy", 18)}Copy the phrase</button><button class="linkish" type="button" data-on-remove="other">Remove</button></li>
 </ul>
 <span class="copied" role="status" aria-live="polite"></span>
-<p class="byoa-on-say">Claude and ChatGPT open a new chat with <strong>“${esc(say)}”</strong> ready to send; Gemini takes the phrase pasted in. Or just say it in voice mode.</p>
+<p class="byoa-on-say">Claude and ChatGPT open a new chat with <strong>“${esc(say)}”</strong> ready to send; Gemini opens with the phrase copied, so paste it in. Or just say it in voice mode.</p>
 </div>`;
 }
 // The home page's call to action, in the hero and again at the bottom: badge, buttons, the line.
@@ -642,7 +642,7 @@ const CONNECTED_JS = `(function(){
     if(t.hasAttribute("data-connected")){var cid=t.getAttribute("data-connected");if(t.tagName==="A"&&window.psConnectCheck){setTimeout(function(){window.psConnectCheck(cid);},300);return;}add(cid);apply();var d=t.closest("dialog");if(d&&t.tagName!=="A")d.close();return;}
     if(t.hasAttribute("data-on-remove")){e.preventDefault();remove(t.getAttribute("data-on-remove"));apply();return;}
     var p=t.getAttribute("data-copy-phrase"),s=t.closest(".byoa-on").querySelector(".copied");
-    function done(ok){if(s){s.textContent=ok?"Copied. Paste it into a new chat, or just say it.":"Copy failed; say it instead: "+p;}}
+    function done(ok){if(s){s.textContent=ok?(t.tagName==="A"?"Copied. Paste it into the new Gemini chat, or just say it.":"Copied. Paste it into a new chat, or just say it."):"Copy failed; say it instead: "+p;}}
     if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(p).then(function(){done(true);},function(){done(false);});}else done(false);
   });
   window.psConnectedAdd=function(id){add(id);apply();};

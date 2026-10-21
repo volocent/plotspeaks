@@ -48,6 +48,8 @@ const finalWaiting = (st: TriviaState, tried: string[]) =>
 // Spoken sound words (Ben, 2026-10-19): a voice assistant can't play audio clips, so the ruling opens
 // with a short word the host says as a sound: bright for a right answer, flat for a wrong one. The
 // player can ask for "no sounds" and the host drops them (the trivia preface says so).
+// Every game ends with the rating question (Ben, 2026-10-21: stars on every story and game).
+export const RATE_ASK = "Then ask once: \"How many stars out of five would you give it? Anything you'd like to say about it?\" and call rate_story with the play id, the stars and their words as the comment (and the tester verdict too, if this one is being tested). If they'd rather not, drop it.";
 const DING = "Ding!";
 const BZZT = "Bzzt.";
 type Ai = { run: (model: string, input: Record<string, unknown>) => Promise<any> };
@@ -182,7 +184,7 @@ function afterRuling(b: TriviaBoard, st: TriviaState): { text: string; state: Tr
     }
   }
   return {
-    text: left ? `${lastCat && !lastCat.final ? `${lastCat.name} is cleared. ` : ""}Ask which category next (and the value, or take the lowest). LEFT: ${left}. Don't call game_board.` : fin && !finalDone ? `The board is clear. Now the final, in the category "${fin.name}": call game_question with category "final".` : "That's every clue. Read out the final scores and congratulate the winner.",
+    text: left ? `${lastCat && !lastCat.final ? `${lastCat.name} is cleared. ` : ""}Ask which category next (and the value, or take the lowest). LEFT: ${left}. Don't call game_board.` : fin && !finalDone ? `The board is clear. Now the final, in the category "${fin.name}": call game_question with category "final".` : `That's every clue. Read out the final scores and congratulate the winner. ${RATE_ASK}`,
     state: st,
   };
 }
@@ -202,8 +204,8 @@ export function quickQuestion(b: TriviaBoard, st: TriviaState): Step {
   const capped = st.quickMax !== undefined && (st.quickN ?? 0) >= st.quickMax;
   if (!slots.length || capped) {
     return streak
-      ? { text: `That's every question: the streak stands at ${streakOf(st)}. Say so warmly; that's the game.`, state: { ...st, streakOver: true } }
-      : { text: `That's ${capped ? `the last of the ${st.quickMax}` : "every question"}. Read the final tally of right answers, name who got the most, and say something kind.`, state: st };
+      ? { text: `That's every question: the streak stands at ${streakOf(st)}. Say so warmly; that's the game. ${RATE_ASK}`, state: { ...st, streakOver: true } }
+      : { text: `That's ${capped ? `the last of the ${st.quickMax}` : "every question"}. Read the final tally of right answers, name who got the most, and say something kind. ${RATE_ASK}`, state: st };
   }
   const pick = slots[Math.floor(Math.random() * slots.length)];
   const n = (st.quickN ?? 0) + 1;
@@ -315,7 +317,7 @@ export function answerQuestion(b: TriviaBoard, st: TriviaState, said: string, wh
   if (st.mode === "streak" && !right) {
     const over: TriviaState = { ...st, asked: [...st.asked, key(c.name, q.value)], current: null, streakOver: true, last: { cat: c.name, value: q.value, player: name, answer: said.slice(0, 200), correct: false, worth, challenged: false } };
     const n = streakOf(over);
-    return { text: `${BZZT} NOT QUITE. It's ${q.answer}.\nSTREAK OVER at ${n} in a row. Say the number like it matters, and that a challenge is open if they disagree; then offer another go (start_story) or the main menu.`, state: over, event: { kind: "trivia", detail: `${c.name}|${q.value}|streak ${n}`, verdict: "wrong" } };
+    return { text: `${BZZT} NOT QUITE. It's ${q.answer}.\nSTREAK OVER at ${n} in a row. Say the number like it matters, and that a challenge is open if they disagree. ${RATE_ASK} Then offer another go (start_story) or the main menu.`, state: over, event: { kind: "trivia", detail: `${c.name}|${q.value}|streak ${n}`, verdict: "wrong" } };
   }
   // The final (2026-10-17 QA): every player answers it once, and the answer is said only when all
   // of them have. The players are everyone on the scoreboard plus whoever answers. A stepped final
@@ -337,7 +339,7 @@ export function answerQuestion(b: TriviaBoard, st: TriviaState, said: string, wh
       return { text: `${ruling} Nobody has it yet. Next part of the final (read it aloud; now worth ${worthAt(q.value, step + 1, q.steps.length)}):\n${q.steps[step + 1]}\n\nEveryone answers again.`, state: { ...st, scores, current: { ...st.current, step: step + 1, tried: [], anyRight: false } }, event };
     }
     const done: TriviaState = { ...st, asked: [...st.asked, key(c.name, q.value)], current: null, scores, last: { cat: c.name, value: q.value, player: name, answer: said.slice(0, 200), correct: right, worth, challenged: false } };
-    return { text: `${ruling} Everyone has answered the final. The answer is ${q.answer}.\n\nFINAL SCORES: ${scoreLine(done)}.\n\nThen call game_board.`, state: done, event };
+    return { text: `${ruling} Everyone has answered the final. The answer is ${q.answer}.\n\nFINAL SCORES: ${scoreLine(done)}. Congratulate the winner; ${RATE_ASK.replace(/^Then a/, "a")}\n\nThen call game_board.`, state: done, event };
   }
   if (!right && !band && step + 1 < q.steps.length && st.mode !== "streak") {
     // A stepped clue: the next step, for less.
