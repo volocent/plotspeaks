@@ -1,5 +1,7 @@
 # Answer keys never go in this repository
 stories/**/secrets.md
+# ...except the sample pack, whose keys are invented so the server runs end to end
+!stories/sample-*/secrets.md
 stories/**/secrets.json
 worker/src/generated/
 
