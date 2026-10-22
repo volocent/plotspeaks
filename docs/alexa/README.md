@@ -20,6 +20,6 @@ What happens when access arrives:
 3. Export the icon set (72, 64, 88, 126, 180, 241 px) and the 600×900 carousel image from the existing
    mark; fill the media URLs above.
 4. `alexa-ai deploy`, test on an Echo, then `alexa-ai submit` for certification.
-5. Echo Show: the trivia watch page (`https://plotspeaks.com/play`) becomes the on-screen board.
+5. Echo Show: the Watch page (`https://plotspeaks.com/watch`) becomes the on-screen game view.
 
 Plot Speaks already runs, unchanged, in Claude and Gemini; the same server will serve Alexa+.

@@ -1430,7 +1430,7 @@ async function handlePassengerApi(request: Request, env: Env): Promise<Response 
 
 /** Trivia clues a signed-in player has heard on this board (empty for the open connector). */
 /** The user_seen key for a trivia play: a team's own key for Team Trivia, else the story slug. */
-// Watch codes (plan 2026-10-19, item 18): two words that open the read-only board at plotspeaks.com/play.
+// Watch codes (plan 2026-10-19, item 18): two words that open the read-only view at plotspeaks.com/watch.
 // Every play gets one (plan 2026-10-21); a play that already has a code (chapter 2, a resumed campaign) keeps it.
 async function watchCode(db: D1Database | undefined, playId: string): Promise<string | null> {
   if (!db) return null;
@@ -1448,7 +1448,7 @@ async function watchCode(db: D1Database | undefined, playId: string): Promise<st
   return null;
 }
 const watchNote = (code: string | null, what = "watch the board") => code
-  ? `WATCH CODE: "${code}". Once, at the start and in one short sentence, mention that a passenger can ${what} on a phone at plotspeaks.com/play with the code ${code}. Don't repeat it unless asked.\n\n`
+  ? `WATCH CODE: "${code}". Once, at the start and in one short sentence, mention that a passenger can ${what} on a phone at plotspeaks.com/watch with the code ${code}. Don't repeat it unless asked.\n\n`
   : "";
 const FOLLOW = "follow along";
 const WATCH_GENRE: Record<KindId, string> = { mystery: "Murder mystery", adventure: "Adventure", branching: "Choose your path", trivia: "Trivia", game: "Party game", campaign: "Campaign" };

@@ -201,17 +201,17 @@ const CONNECT: { headline: string; short: string; assistants: Assistant[] } = {
       },
     },
     {
-      id: "gemini", name: "Gemini", tab: "Gemini", btn: "Gemini", title: "Works with Gemini", status: "US, 18+, personal accounts",
+      id: "gemini", name: "Gemini", tab: "Gemini", btn: "Gemini", title: "Works with Gemini", status: "Typed chat · US, 18+",
       plan: "Gemini can add custom apps for people in the US who are 18 or older, on a personal Google account with Keep Activity turned on. Not on work or school accounts.",
       steps: [
         "In your phone's browser, open <strong>gemini.google.com/customize/connectors</strong> (or <strong>Menu → Settings → Connected Apps</strong>; it may sit under Personal Intelligence).",
         "Tap <strong>+ Custom</strong> (or <strong>Add a custom app</strong>), paste <code>{url}</code>, tap <strong>Next</strong> and sign in with Google when it asks.",
-        "It then works in the Gemini app too. Type <strong>@Plot Speaks open</strong> for the intro, or <strong>@Plot Speaks</strong> and the story's name.",
+        "It then works in the Gemini app too. In a chat, type <strong>@</strong>, pick <strong>Plot Speaks</strong> from the list, and add <strong>open</strong> for the intro or the story's name. Don't say \"open Plot Speaks\" without the @: Gemini takes that as opening a phone app.",
       ],
       button: { href: "https://gemini.google.com/customize/connectors", label: "Open Gemini" },
       open: "@Plot Speaks open.",
       say: "@Plot Speaks start {story}.",
-      notes: ["Signing in works in Gemini (checked 2026-10-20), so your progress is saved there too.", "We haven't tested voice (Gemini Live) with Plot Speaks yet."],
+      notes: ["Signing in works in Gemini (checked 2026-10-20), so your progress is saved there too.", "Gemini Live, the voice-conversation mode, can't use custom apps yet (Google lists only its own apps and a few partners there), so Plot Speaks plays in a regular Gemini chat: tap the microphone in the chat box to speak each turn."],
       pop: {
         lead: "For people in the <strong>US</strong>, <strong>18 or older</strong>, on a <strong>personal</strong> Google account with Keep Activity on. Not on work or school accounts.",
         steps: [
@@ -219,7 +219,7 @@ const CONNECT: { headline: string; short: string; assistants: Assistant[] } = {
           "Tap <strong>+ Custom</strong> (or <strong>Add a custom app</strong>), paste the address, tap <strong>Next</strong> and sign in with Google when it asks.",
           "It then works in the Gemini app too.",
         ],
-        notes: ["Signing in works in Gemini (checked 2026-10-20), so your progress is saved there too.", "We haven't tested voice (Gemini Live) with Plot Speaks yet."],
+        notes: ["Signing in works in Gemini (checked 2026-10-20), so your progress is saved there too.", "Gemini Live, the voice-conversation mode, can't use custom apps yet (Google lists only its own apps and a few partners there), so Plot Speaks plays in a regular Gemini chat: tap the microphone in the chat box to speak each turn."],
       },
     },
     {
@@ -435,7 +435,7 @@ ${CONNECT.assistants.map((a) => `<li><a class="ai-btn" href="/connect#${a.id}" d
 <li data-on="other" hidden><span class="status status-ok">Connected</span><strong>Your assistant</strong><button class="btn btn-primary btn-sm" type="button" data-copy-phrase="${esc(say)}">${icon("copy", 18)}Copy the phrase</button><button class="linkish" type="button" data-on-remove="other">Remove</button></li>
 </ul>
 <span class="copied" role="status" aria-live="polite"></span>
-<p class="byoa-on-say">Claude and ChatGPT open a new chat with <strong>“${esc(say)}”</strong> ready to send; Gemini opens with the phrase copied, so paste it in. Or just say it in voice mode.</p>
+<p class="byoa-on-say">Claude and ChatGPT open a new chat with <strong>“${esc(say)}”</strong> ready to send; Gemini opens with the phrase copied: type @, pick Plot Speaks, then paste the rest. In Claude you can just say it in voice mode.</p>
 </div>`;
 }
 // The home page's call to action, in the hero and again at the bottom: badge, buttons, the line.
@@ -544,7 +544,8 @@ const CONNECT_ISSUES: Record<"claude" | "gemini", { id: string; label: string; t
     { id: "no-menu", label: "I can't find Connected Apps or Add a custom app", tip: "Custom apps need a <strong>personal</strong> Google account in the <strong>US</strong>, 18 or older, with Keep Activity on (not a work or school account). Open <strong>gemini.google.com/customize/connectors</strong> in a browser; it may sit under Personal Intelligence." },
     { id: "credentials", label: "It asked for credentials or Advanced features", tip: "Leave Advanced features empty and tap Next: Plot Speaks registers itself. If it still asks, use the address without an account: <code>{plainurl}</code>." },
     { id: "signin", label: "Signing in didn't work", tip: "Use the address that needs no account: <code>{plainurl}</code>. Everything plays; nothing is saved between chats." },
-    { id: "no-answer", label: "It's added, but Gemini doesn't use Plot Speaks", tip: "In a new chat type <strong>@Plot Speaks open</strong> (the @ matters). Voice (Gemini Live) hasn't been tested with Plot Speaks yet, so try typing first." },
+    { id: "no-answer", label: "It's added, but Gemini doesn't use Plot Speaks", tip: "In a new chat type <strong>@</strong> and pick <strong>Plot Speaks</strong> from the list, then <strong>open</strong>. Without the @, \"open Plot Speaks\" makes Gemini look for a phone app. Gemini Live (voice conversation) can't use custom apps yet; use the microphone in a regular chat instead." },
+    { id: "no-voice", label: "It works when I type, but not in Gemini Live", tip: "That's Gemini, not your setup: Gemini Live can only use Google's own apps and a few partners for now. Play in a regular chat and tap the microphone in the chat box for each turn. For hands-free voice, Claude's voice mode plays Plot Speaks today." },
     { id: "other", label: "Something else", tip: "Tell us above what happened and we'll look into it. You can also write to <strong>contact@plotspeaks.com</strong>." },
   ],
 };
@@ -1113,6 +1114,9 @@ details.script pre{margin:0;padding:0 18px 18px;white-space:pre-wrap;word-break:
 .w-form input{flex:1;min-width:12rem;padding:12px 14px;border-radius:14px;border:1.5px solid var(--line-2);background:var(--surface);color:var(--ink);font:600 1.15rem var(--sans)}
 .w-form label{font-weight:700}
 .watch-card p{margin:0 0 10px;color:var(--ink-2)}
+.w-example{margin:28px 0 0;max-width:36rem}
+.w-example img{display:block;width:100%;height:auto;border-radius:18px;border:1px solid var(--line);margin:8px 0 10px}
+.w-example figcaption{color:var(--ink-2)}
 .watch-card .w-form{margin:0}
 .watch-card .w-form input{min-width:0;font-size:1rem;padding:10px 12px}
 .w-board{max-width:36rem}
@@ -1316,7 +1320,7 @@ dialog.cdlg::backdrop{background:rgba(6,14,26,.6);-webkit-backdrop-filter:blur(3
 type Shell = { title: string; description: string; body: string; origin: string; path: string; script?: string; section?: string };
 // The four pages, shown as tabs under the header on every page (Ben, 2026-10-17: separate pages
 // with tabs, not one long home page).
-const NAV: [string, string][] = [["/", "Home"], ["/stories", "Stories"], ["/games", "Games"], ["/play", "Watch"], ["/connect", "Connect"], ["/how-it-works", "How it works"], ["/write", "Write"]];
+const NAV: [string, string][] = [["/", "Home"], ["/stories", "Stories"], ["/games", "Games"], ["/watch", "Watch"], ["/connect", "Connect"], ["/how-it-works", "How it works"], ["/write", "Write"]];
 
 const FONTS = "https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT@0,9..144,400..700,0..100;1,9..144,400..700,0..100&family=Plus+Jakarta+Sans:wght@400..800&display=swap";
 
@@ -1741,7 +1745,7 @@ ${m.rating ? `<div><dt>Rating</dt><dd>${esc(m.rating)}</dd></div>` : ""}
 <div class="glance watch-card">
 <h2>Watch along</h2>
 <p>On a second screen, type the two-word code the host reads out when the story starts.</p>
-<form class="w-form" action="/play" method="get"><input name="code" aria-label="Watch code" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="e.g. amber fox"><button class="btn btn-primary" type="submit">Watch</button></form>
+<form class="w-form" action="/watch" method="get"><input name="code" aria-label="Watch code" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="e.g. amber fox"><button class="btn btn-primary" type="submit">Watch</button></form>
 </div>
 <div class="block license">
 <h2>License</h2>
@@ -2030,7 +2034,7 @@ function aboutSections(example: string): string {
 <ul class="ways" aria-label="How each assistant plays">
 <li><h3>Claude <span class="status status-ok">Free plan works</span></h3><p>One tap to add. Voice tested: the connector loads the story and checks your accusation.</p></li>
 <li><h3>ChatGPT <span class="status">Free and Plus: paste</span></h3><p>Paste the story, and a passenger holds the answer key. Connectors need Business, Enterprise or Edu; an app listing is planned.</p></li>
-<li><h3>Gemini <span class="status">US, 18+</span></h3><p>A custom app on a personal Google account in the US. Voice not tested yet.</p></li>
+<li><h3>Gemini <span class="status">Typed chat · US, 18+</span></h3><p>A custom app on a personal Google account in the US. Type @ and pick Plot Speaks; tap the microphone to speak each turn. Gemini Live (voice conversation) can't use custom apps yet.</p></li>
 <li><h3>And more <span class="status">Voice untested</span></h3><p>Vibe (formerly Le Chat, free plan too), Perplexity and Grok can add it by its address.</p></li>
 </ul>
 <p style="margin-top:18px"><a class="link-arrow" href="/connect">Step-by-step for each assistant ${icon("arrow", 18)}</a></p>
@@ -2108,7 +2112,7 @@ ${phrasesTable(null)}
 <p>A long game uses a lot of your assistant's allowance, because every turn re-reads the conversation so far. To make it go further:</p>
 <ul>
 <li><strong>Say how long you've got.</strong> Tell a trivia game &ldquo;I've got ten minutes&rdquo; and it is sized to fit: up to 10 minutes is a quick fire of 12 questions, up to 15 one of 20, up to 25 a four-category board, and more is the whole board. A whole board is about 40 turns on a small model; a quick fire is about one turn a question.</li>
-<li><strong>Watch along on a phone.</strong> Every story and game starts with a two-word code. A passenger opens <strong>plotspeaks.com/play</strong> and types it in. In trivia they see the categories, the scores, the clue being read and each answer once it has been ruled; in a mystery, adventure, choose-your-path story or campaign they see its timeline as it unfolds: scenes reached, accusations and their verdicts, the choices made, the ending. Nothing secret is ever shown there.</li>
+<li><strong>Watch along on a phone.</strong> Every story and game starts with a two-word code. A passenger opens <strong>plotspeaks.com/watch</strong> and types it in. In trivia they see the categories, the scores, the clue being read and each answer once it has been ruled; in a mystery, adventure, choose-your-path story or campaign they see its timeline as it unfolds: scenes reached, accusations and their verdicts, the choices made, the ending. Nothing secret is ever shown there.</li>
 <li><strong>Play a friend, on your own time.</strong> When a board ends, the host gives you a three-word code. A friend says &ldquo;Plot Speaks, play against code&hellip;&rdquo; and gets the same board dealt the same way; at the end they hear who scored more. Nothing is live, so you can each play whenever you like. Codes last 30 days.</li>
 <li><strong>Or pick quick fire, or a streak.</strong> Every trivia game offers the board (categories and points, like Jeopardy), quick fire (random questions one after another and a running tally) or a streak (quick fire until your first miss; one number to beat next time). Quick fire uses about a third fewer steps per question than the board.</li>
 <li><strong>Use the lightest model you have.</strong> Plot Speaks does the remembering, so a small, fast model (Claude Haiku, for example) is enough for most games. If your assistant has an effort or extended-thinking setting, leave it low or off: these are voice games, not essays.</li>
@@ -2290,8 +2294,9 @@ function watchPage(origin: string, code: string): string {
 <form class="w-form" data-w-form><label for="wcode">Code</label><input id="wcode" name="code" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="e.g. amber fox" value="${esc(code.replace(/-/g, " "))}"><button class="btn btn-primary" type="submit">Watch</button></form>
 <p class="w-status" role="status" aria-live="polite" data-w-status></p>
 <div class="w-board" data-w-board hidden></div>
+<figure class="w-example" data-w-example><p class="w-k">What it looks like: a trivia game in progress</p><img src="/watch-example.png" alt="An example trivia board on the watch page: two players' scores, the last answer ruled correct, the clue being read now, and the categories with the values already played struck through." width="576" height="653" loading="lazy"><figcaption>A mystery, adventure or campaign shows its timeline here instead: scenes reached, accusations and their verdicts, the choices made.</figcaption></figure>
 </div>`;
-  return page({ title: "Watch · Plot Speaks", description: "Follow a Plot Speaks game or story on a second screen.", body, origin, path: "/play", script: WATCH_JS });
+  return page({ title: "Watch · Plot Speaks", description: "Follow a Plot Speaks game or story on a second screen.", body, origin, path: "/watch", script: WATCH_JS });
 }
 const WATCH_JS = `(function(){
   var form=document.querySelector("[data-w-form]"),input=document.getElementById("wcode"),status=document.querySelector("[data-w-status]"),boardEl=document.querySelector("[data-w-board]"),title=document.querySelector("[data-w-title]"),timer=null,code="";
@@ -2308,7 +2313,7 @@ const WATCH_JS = `(function(){
     boardEl.innerHTML=h;status.textContent="";
   }
   function draw(d){
-    title.textContent=d.title;boardEl.hidden=false;var lead=document.querySelector("[data-w-lead]");if(lead)lead.hidden=true;
+    title.textContent=d.title;boardEl.hidden=false;var lead=document.querySelector("[data-w-lead]");if(lead)lead.hidden=true;var ex=document.querySelector("[data-w-example]");if(ex)ex.hidden=true;
     if(d.kind==="timeline"){drawT(d);return;}
     var h="";
     if(d.scores.length)h+='<ul class="w-scores">'+d.scores.map(function(s){return'<li><span>'+esc(s.name)+'</span><strong>'+s.score+'</strong></li>';}).join("")+'</ul>';
@@ -2321,7 +2326,7 @@ const WATCH_JS = `(function(){
   }
   function poll(){fetch("/api/play/"+encodeURIComponent(code.replace(/ /g,"-")),{cache:"no-store"}).then(function(r){if(r.status===404){status.textContent="No game or story has that code (codes last a day). Check the two words with the host.";boardEl.hidden=true;stop();return null;}return r.ok?r.json():null;}).then(function(d){if(d)draw(d);}).catch(function(){status.textContent="Can't reach Plot Speaks right now; trying again.";});}
   function stop(){if(timer){clearInterval(timer);timer=null;}}
-  function start(c){code=c.trim().toLowerCase().replace(/[^a-z ]+/g," ").replace(/ +/g," ").trim();if(!/^[a-z]+ [a-z]+$/.test(code)){status.textContent="The code is two words, like amber fox.";return;}stop();status.textContent="Loading...";poll();timer=setInterval(poll,4000);try{history.replaceState(null,"","/play/"+code.replace(/ /g,"-"));}catch(e){}}
+  function start(c){code=c.trim().toLowerCase().replace(/[^a-z ]+/g," ").replace(/ +/g," ").trim();if(!/^[a-z]+ [a-z]+$/.test(code)){status.textContent="The code is two words, like amber fox.";return;}stop();status.textContent="Loading...";poll();timer=setInterval(poll,4000);try{history.replaceState(null,"","/watch/"+code.replace(/ /g,"-"));}catch(e){}}
   form.addEventListener("submit",function(e){e.preventDefault();start(input.value);});
   if(!input.value){try{var q=new URLSearchParams(location.search).get("code");if(q)input.value=q;}catch(e){}}
   if(input.value)start(input.value);
@@ -2578,7 +2583,9 @@ export async function handleSite(request: Request, stories: PublicStory[], db: D
   if (path === "/games") {
     return new Response(catalogPage(stories, await loadRatings(db), origin, previews, "games"), { headers: HTML });
   }
-  if (path === "/play" || /^\/play\/[a-z-]{3,60}$/.test(path)) return new Response(watchPage(origin, path.length > 6 ? path.slice(6) : ""), { headers: { ...HTML, "x-robots-tag": "noindex", "cache-control": "no-store" } });
+  // The watch page moved from /play to /watch (Ben, 2026-10-21); hosts in earlier plays read out /play.
+  if (path === "/play" || /^\/play\/[a-z-]{3,60}$/.test(path)) return Response.redirect(`${origin}/watch${path.slice(5)}${url.search}`, 301);
+  if (path === "/watch" || /^\/watch\/[a-z-]{3,60}$/.test(path)) return new Response(watchPage(origin, path.length > 7 ? path.slice(7) : ""), { headers: { ...HTML, "x-robots-tag": "noindex", "cache-control": "no-store" } });
   if (path === "/connect") return new Response(connectPage(stories, origin), { headers: HTML });
   if (path === "/how-it-works") return new Response(howPage(stories, origin), { headers: HTML });
   if (path === "/write") return new Response(writePage(origin), { headers: HTML });

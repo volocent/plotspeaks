@@ -215,7 +215,7 @@ export function quickQuestion(b: TriviaBoard, st: TriviaState): Step {
 }
 
 /**
- * The board for the watch page (plotspeaks.com/play): categories and which values are left, scores, the
+ * The board for the watch page (plotspeaks.com/watch): categories and which values are left, scores, the
  * clue now open (it has been read aloud) and the last ruling's answer (it has been said). Never an
  * unplayed clue or answer. b is the dealt board.
  */

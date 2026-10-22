@@ -215,7 +215,7 @@ const pickWord = (): string => {
   for (;;) { const n = crypto.getRandomValues(new Uint32Array(1))[0]; if (n < lim) return CODE_WORDS[n % CODE_WORDS.length]; }
 };
 export const newCode = () => [pickWord(), pickWord(), pickWord()].join(" ");
-/** Two words, for a watch code a passenger types (plotspeaks.com/play). */
+/** Two words, for a watch code a passenger types (plotspeaks.com/watch). */
 export const newShortCode = () => [pickWord(), pickWord()].join(" ");
 export const normCode = (s: string) => (s.toLowerCase().match(/[a-z]+/g) ?? []).join(" ");
 export async function codeHash(code: string): Promise<string> {

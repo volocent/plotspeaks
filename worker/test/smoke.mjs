@@ -739,6 +739,9 @@ if (!openServer && key) {
     ok(/"categories"/.test(wv) && !leaked, 'the watch view shows the board and no answer before a ruling');
   }
   ok((await fetch(`${base}/api/play/nope-never`)).status === 404, 'an unknown watch code is 404');
+  const oldWatch = await fetch(`${base}/play/amber-fox?x=1`, { redirect: 'manual' });
+  ok(oldWatch.status === 301 && /\/watch\/amber-fox\?x=1$/.test(oldWatch.headers.get('location') ?? ''), 'the old /play address redirects to /watch (301)');
+  ok((await fetch(`${base}/watch`)).status === 200, 'the watch page is at /watch');
 
   // Watch for every play (plan 2026-10-21): every start carries a code; the timeline shows what was said, never the key.
   const wWatchOf = async (start) => {
