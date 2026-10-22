@@ -206,18 +206,18 @@ const CONNECT: { headline: string; short: string; assistants: Assistant[] } = {
       steps: [
         "In your phone's browser, open <strong>gemini.google.com/customize/connectors</strong> (or <strong>Menu → Settings → Connected Apps</strong>; it may sit under Personal Intelligence).",
         "Tap <strong>+ Custom</strong> (or <strong>Add a custom app</strong>), paste <code>{url}</code>, tap <strong>Next</strong> and sign in with Google when it asks.",
-        "It then works in the Gemini app too (close and reopen the app first, or it won't list Plot Speaks yet). In a chat, type <strong>@</strong>, pick <strong>Plot Speaks</strong> from the list, and add <strong>open</strong> for the intro or the story's name. Don't say \"open Plot Speaks\" without the @: Gemini takes that as opening a phone app.",
+        "It then works in the Gemini app too In a chat, type <strong>@</strong> and tap <strong>Plot Speaks</strong> in the list (saying it doesn't pick it), and add <strong>open</strong> for the intro or the story's name. Don't say \"open Plot Speaks\" without the @: Gemini takes that as opening a phone app. Not in the list? Close the Gemini app completely and reopen it.",
       ],
       button: { href: "https://gemini.google.com/customize/connectors", label: "Open Gemini" },
-      open: "@Plot Speaks open.",
-      say: "@Plot Speaks start {story}.",
+      open: "@ → Plot Speaks → open",
+      say: "@ → Plot Speaks → start {story}",
       notes: ["Signing in works in Gemini (checked 2026-10-20), so your progress is saved there too.", "Gemini Live, the voice-conversation mode, can't use custom apps yet (Google lists only its own apps and a few partners there), so Plot Speaks plays in a regular Gemini chat: tap the microphone in the chat box to speak each turn."],
       pop: {
         lead: "For people in the <strong>US</strong>, <strong>18 or older</strong>, on a <strong>personal</strong> Google account with Keep Activity on. Not on work or school accounts.",
         steps: [
           "Add it on the web: in your phone's browser, open <strong>gemini.google.com/customize/connectors</strong> (or <strong>Menu → Settings → Connected Apps</strong>; it may sit under Personal Intelligence).",
           "Tap <strong>+ Custom</strong> (or <strong>Add a custom app</strong>), paste the address, tap <strong>Next</strong> and sign in with Google when it asks.",
-          "It then works in the Gemini app too.",
+          "It then works in the Gemini app too. In a chat, type <strong>@</strong> and tap <strong>Plot Speaks</strong> in the list (saying it doesn't pick it), then <strong>open</strong>. Not in the list? Close the Gemini app completely and reopen it.",
         ],
         notes: ["Signing in works in Gemini (checked 2026-10-20), so your progress is saved there too.", "Gemini Live, the voice-conversation mode, can't use custom apps yet (Google lists only its own apps and a few partners there), so Plot Speaks plays in a regular Gemini chat: tap the microphone in the chat box to speak each turn."],
       },
@@ -436,7 +436,7 @@ ${CONNECT.assistants.map((a) => `<li><a class="ai-btn" href="/connect#${a.id}" d
 <li data-on="other" hidden><span class="status status-ok">Connected</span><strong>Your assistant</strong><button class="btn btn-primary btn-sm" type="button" data-copy-phrase="${esc(say)}">${icon("copy", 18)}Copy the phrase</button><button class="linkish" type="button" data-on-remove="other">Remove</button></li>
 </ul>
 <span class="copied" role="status" aria-live="polite"></span>
-<p class="byoa-on-say">Claude and ChatGPT open a new chat with <strong>“${esc(say)}”</strong> ready to send; Gemini opens with <strong>“${esc(geminiSay)}”</strong> copied: type <strong>@</strong>, tap <strong>Plot Speaks</strong> in the list, then paste. In Claude you can just say it in voice mode.</p>
+<p class="byoa-on-say">Claude and ChatGPT open a new chat with <strong>“${esc(say)}”</strong> ready to send; Gemini opens with <strong>“${esc(geminiSay)}”</strong> copied: type <strong>@</strong>, tap <strong>Plot Speaks</strong> in the list, then paste. Not in the list? Close the Gemini app completely and reopen it. In Claude you can just say it in voice mode.</p>
 </div>`;
 }
 // The home page's call to action, in the hero and again at the bottom: badge, buttons, the line.
@@ -461,7 +461,7 @@ function connectDialogs(ctx: DialogCtx): string {
   const f = (s: string) => fill(s, url, story, extra);
   const sayStory = `Start ${story} with Plot Speaks.`;
   const thenSay = (a: Assistant) => {
-    if (a.id === "gemini") return `<p class="saybox"><b>Then type</b>@ → Plot Speaks → “${esc(storyPage ? `start ${story}` : "open")}”<span class="saybox-sub">Type @ and tap Plot Speaks in the list (saying it doesn't pick it), then the rest. ${storyPage ? "Or “open” for the intro." : `Or name a story: “start ${esc(story)}”.`}</span></p>`;
+    if (a.id === "gemini") return `<p class="saybox"><b>Then type</b>@ → Plot Speaks → “${esc(storyPage ? `start ${story}` : "open")}”<span class="saybox-sub">Type @ and tap Plot Speaks in the list (saying it doesn't pick it), then the rest. Not in the list? Close the Gemini app completely and reopen it. ${storyPage ? "Or “open” for the intro." : `Or name a story: “start ${esc(story)}”.`}</span></p>`;
     const sub = a.id === "chatgpt" ? "With the connector. Pasted a story? Say “Plot Speaks, start the story.”"
       : storyPage ? `Or “${esc(OPEN_LINE)}” for a quick intro and the other stories.` : `Or name a story: “${esc(sayStory)}”`;
     return `<p class="saybox"><b>Then say</b>“${esc(storyPage && a.id !== "chatgpt" ? sayStory : OPEN_LINE)}”<span class="saybox-sub">${sub}</span></p>`;
@@ -545,7 +545,7 @@ const CONNECT_ISSUES: Record<"claude" | "gemini", { id: string; label: string; t
     { id: "no-menu", label: "I can't find Connected Apps or Add a custom app", tip: "Custom apps need a <strong>personal</strong> Google account in the <strong>US</strong>, 18 or older, with Keep Activity on (not a work or school account). Open <strong>gemini.google.com/customize/connectors</strong> in a browser; it may sit under Personal Intelligence." },
     { id: "credentials", label: "It asked for credentials or Advanced features", tip: "Leave Advanced features empty and tap Next: Plot Speaks registers itself. If it still asks, use the address without an account: <code>{plainurl}</code>." },
     { id: "signin", label: "Signing in didn't work", tip: "Use the address that needs no account: <code>{plainurl}</code>. Everything plays; nothing is saved between chats." },
-    { id: "no-answer", label: "It's added, but Gemini doesn't use Plot Speaks", tip: "In a new chat type <strong>@</strong> and pick <strong>Plot Speaks</strong> from the list, then <strong>open</strong>. Without the @, \"open Plot Speaks\" makes Gemini look for a phone app. Gemini Live (voice conversation) can't use custom apps yet; use the microphone in a regular chat instead." },
+    { id: "no-answer", label: "It's added, but Gemini doesn't use Plot Speaks", tip: "In a new chat type <strong>@</strong> and pick <strong>Plot Speaks</strong> from the list, then <strong>open</strong>. Without the @, \"open Plot Speaks\" makes Gemini look for a phone app. Not in the list? Close the Gemini app completely and reopen it. Gemini Live (voice conversation) can't use custom apps yet; use the microphone in a regular chat instead." },
     { id: "not-in-app", label: "It works on the web, but the Gemini app doesn't list Plot Speaks", tip: "Close the Gemini app completely (swipe it away) and open it again: the app only picks up a custom app added on the web after a restart. Then type <strong>@</strong> and it's in the list. Still missing? Update the app, and check it's signed in to the same personal Google account." },
     { id: "no-voice", label: "It works when I type, but not in Gemini Live", tip: "That's Gemini, not your setup: Gemini Live can only use Google's own apps and a few partners for now. Play in a regular chat and tap the microphone in the chat box for each turn. For hands-free voice, Claude's voice mode plays Plot Speaks today." },
     { id: "other", label: "Something else", tip: "Tell us above what happened and we'll look into it. You can also write to <strong>contact@plotspeaks.com</strong>." },
@@ -584,7 +584,7 @@ ${tips}
 </div>
 <div data-step="done" hidden>
 <p class="dlg-lead" data-done-for="claude">You're set. Open a new chat in Claude and say <strong>“Open Plot Speaks.”</strong></p>
-<p class="dlg-lead" data-done-for="gemini" hidden>You're set. Open a new chat in Gemini and type <strong>@Plot Speaks open</strong>.</p>
+<p class="dlg-lead" data-done-for="gemini" hidden>You're set. Open a new chat in Gemini, type <strong>@</strong>, tap <strong>Plot Speaks</strong> in the list, then type <strong>open</strong>. Not in the list? Close the Gemini app completely and reopen it.</p>
 <p class="cc-row"><button class="btn btn-primary" type="button" data-cc="close">Done</button></p>
 </div>
 </div>
@@ -1986,7 +1986,7 @@ ${a.id === "gemini" ? `<p class="muted" style="margin:14px 0 6px">The button cop
 ${a.button ? `<p><a class="btn btn-primary btn-big" href="${fill(a.button.href, url, example)}"${a.button.href.startsWith("{") || a.button.href.startsWith("https://") ? ` target="_blank" rel="noopener"` : ""}${["claude", "gemini"].includes(a.id) ? ` data-connected="${a.id}"` : ""}${a.id === "gemini" ? ` data-copy-url="${esc(accountUrlFor(url))}"` : ""}>${icon(["claude", "gemini"].includes(a.id) ? "plug" : "book", 20)}${esc(a.button.label)}</a></p>` : ""}
 ${a.steps.length ? `<ol class="steps">${a.steps.map((s) => `<li>${fill(s, url, example)}</li>`).join("")}</ol>` : ""}
 ${a.others ? `<ul class="others">${OTHERS.map((o) => `<li id="${o.id}"><h3>${esc(o.name)} <span class="status">${esc(o.status)}</span></h3><p>${fill(o.line, url, example)}</p>${o.how ? `<p class="how">${fill(o.how, url, example)}</p>` : ""}</li>`).join("")}</ul>` : ""}
-${a.open ? `<p class="saybox"><b>Then say</b>“${fill(a.open, url, example)}”<span class="saybox-sub">A quick intro, then browse, start or write a story.</span></p>` : ""}
+${a.open ? `<p class="saybox"><b>${a.id === "gemini" ? "Then type" : "Then say"}</b>“${fill(a.open, url, example)}”<span class="saybox-sub">${a.id === "gemini" ? "Type @ and tap Plot Speaks in the list (saying it doesn't pick it), then open: a quick intro, then browse, start or write a story." : "A quick intro, then browse, start or write a story."}</span></p>` : ""}
 ${a.id === "claude" ? "<!--ACCOUNT-CONNECT-->" : ""}
 ${a.say ? `<p class="saybox${a.open ? " saybox-alt" : ""}"><b>${a.open ? "Or name a story" : "Then say"}</b>“${fill(a.say, url, example)}”</p>` : ""}
 <ul class="notes">${a.notes.map((n) => `<li class="note${/^Rather not sign in\?/.test(n) ? " if-out" : ""}">${icon("check", 20)}<span>${fill(n, url, example)}</span></li>`).join("")}</ul>
@@ -2036,7 +2036,7 @@ function aboutSections(example: string): string {
 <ul class="ways" aria-label="How each assistant plays">
 <li><h3>Claude <span class="status status-ok">Free plan works</span></h3><p>One tap to add. Voice tested: the connector loads the story and checks your accusation.</p></li>
 <li><h3>ChatGPT <span class="status">Free and Plus: paste</span></h3><p>Paste the story, and a passenger holds the answer key. Connectors need Business, Enterprise or Edu; an app listing is planned.</p></li>
-<li><h3>Gemini <span class="status">Typed chat · US, 18+</span></h3><p>A custom app on a personal Google account in the US. Type @ and pick Plot Speaks; tap the microphone to speak each turn. Gemini Live (voice conversation) can't use custom apps yet.</p></li>
+<li><h3>Gemini <span class="status">Typed chat · US, 18+</span></h3><p>A custom app on a personal Google account in the US. Type @ and tap Plot Speaks in the list (saying it doesn't pick it); tap the microphone to speak each turn. Not in the list? Close the Gemini app completely and reopen it. Gemini Live (voice conversation) can't use custom apps yet.</p></li>
 <li><h3>And more <span class="status">Voice untested</span></h3><p>Vibe (formerly Le Chat, free plan too), Perplexity and Grok can add it by its address.</p></li>
 </ul>
 <p style="margin-top:18px"><a class="link-arrow" href="/connect">Step-by-step for each assistant ${icon("arrow", 18)}</a></p>
