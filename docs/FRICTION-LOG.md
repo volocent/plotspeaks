@@ -21,7 +21,9 @@ happened when we tried.
   to partners in phases", AccessDenied is expected, interest recorded. On the hackathon forum Amazon's
   developer relations team had already said it plainly: "Access to the Alexa+ developer tools will not be
   granted to hackathon participants… you are not expected to use those tools with your hackathon
-  submission" (https://amazonappdev2026.devpost.com/forum_topics/45262-is-the-alexa-mcp-toolkit-alexa-ai-cli-available-to-hackathon-participants).
+  submission" (https://amazonappdev2026.devpost.com/forum_topics/45262-is-the-alexa-mcp-toolkit-alexa-ai-cli-available-to-hackathon-participants). Developer support
+  confirmed the same on a second case (47956363): no way for participants to apply, and a working MCP server
+  does not need preview access.
 - **Suggestion:** state on the setup page that the role is allow-listed and link the request form;
   or allow hackathon entrants in the Alexa+ track to assume it for the window.
 

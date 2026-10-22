@@ -206,7 +206,7 @@ const CONNECT: { headline: string; short: string; assistants: Assistant[] } = {
       steps: [
         "In your phone's browser, open <strong>gemini.google.com/customize/connectors</strong> (or <strong>Menu → Settings → Connected Apps</strong>; it may sit under Personal Intelligence).",
         "Tap <strong>+ Custom</strong> (or <strong>Add a custom app</strong>), paste <code>{url}</code>, tap <strong>Next</strong> and sign in with Google when it asks.",
-        "It then works in the Gemini app too. In a chat, type <strong>@</strong>, pick <strong>Plot Speaks</strong> from the list, and add <strong>open</strong> for the intro or the story's name. Don't say \"open Plot Speaks\" without the @: Gemini takes that as opening a phone app.",
+        "It then works in the Gemini app too (close and reopen the app first, or it won't list Plot Speaks yet). In a chat, type <strong>@</strong>, pick <strong>Plot Speaks</strong> from the list, and add <strong>open</strong> for the intro or the story's name. Don't say \"open Plot Speaks\" without the @: Gemini takes that as opening a phone app.",
       ],
       button: { href: "https://gemini.google.com/customize/connectors", label: "Open Gemini" },
       open: "@Plot Speaks open.",
@@ -423,7 +423,8 @@ function byoaBadge(): string {
 // and ChatGPT take a q= parameter), or a copy button where no such link exists (Gemini, others).
 function aiButtons(label = "Connect your assistant", say = OPEN_LINE): string {
   const q = encodeURIComponent(say);
-  const geminiSay = say === OPEN_LINE ? "@Plot Speaks open." : `@Plot Speaks ${say.replace(/ with Plot Speaks\.?$/i, "").replace(/^Start/, "start")}.`;
+  // Only the words after the @: Gemini binds the app when it is picked from the @ list, never from pasted text.
+  const geminiSay = say === OPEN_LINE ? "open" : `${say.replace(/ with Plot Speaks\.?$/i, "").replace(/^Start/, "start")}`;
   return `<ul class="ai-btns" aria-label="${esc(label)}">
 ${CONNECT.assistants.map((a) => `<li><a class="ai-btn" href="/connect#${a.id}" data-dialog="dlg-${a.id}">${a.logo ? `<span class="ai-btn-logo" aria-hidden="true">${a.logo}</span>` : ""}<span class="ai-btn-name">${esc(a.btn)}</span><span class="ai-btn-act"><span class="act-off">${icon("plug", 16)}Connect</span><span class="act-on">${icon("check", 16)}Connected</span></span></a></li>`).join("\n")}
 </ul>
@@ -435,7 +436,7 @@ ${CONNECT.assistants.map((a) => `<li><a class="ai-btn" href="/connect#${a.id}" d
 <li data-on="other" hidden><span class="status status-ok">Connected</span><strong>Your assistant</strong><button class="btn btn-primary btn-sm" type="button" data-copy-phrase="${esc(say)}">${icon("copy", 18)}Copy the phrase</button><button class="linkish" type="button" data-on-remove="other">Remove</button></li>
 </ul>
 <span class="copied" role="status" aria-live="polite"></span>
-<p class="byoa-on-say">Claude and ChatGPT open a new chat with <strong>“${esc(say)}”</strong> ready to send; Gemini opens with the phrase copied: type @, pick Plot Speaks, then paste the rest. In Claude you can just say it in voice mode.</p>
+<p class="byoa-on-say">Claude and ChatGPT open a new chat with <strong>“${esc(say)}”</strong> ready to send; Gemini opens with <strong>“${esc(geminiSay)}”</strong> copied: type <strong>@</strong>, tap <strong>Plot Speaks</strong> in the list, then paste. In Claude you can just say it in voice mode.</p>
 </div>`;
 }
 // The home page's call to action, in the hero and again at the bottom: badge, buttons, the line.
@@ -460,7 +461,7 @@ function connectDialogs(ctx: DialogCtx): string {
   const f = (s: string) => fill(s, url, story, extra);
   const sayStory = `Start ${story} with Plot Speaks.`;
   const thenSay = (a: Assistant) => {
-    if (a.id === "gemini") return `<p class="saybox"><b>Then say</b>“${esc(storyPage ? `@Plot Speaks start ${story}.` : "@Plot Speaks open.")}”<span class="saybox-sub">${storyPage ? "Or “@Plot Speaks open” for the intro." : `Or name a story: “@Plot Speaks start ${esc(story)}.”`}</span></p>`;
+    if (a.id === "gemini") return `<p class="saybox"><b>Then type</b>@ → Plot Speaks → “${esc(storyPage ? `start ${story}` : "open")}”<span class="saybox-sub">Type @ and tap Plot Speaks in the list (saying it doesn't pick it), then the rest. ${storyPage ? "Or “open” for the intro." : `Or name a story: “start ${esc(story)}”.`}</span></p>`;
     const sub = a.id === "chatgpt" ? "With the connector. Pasted a story? Say “Plot Speaks, start the story.”"
       : storyPage ? `Or “${esc(OPEN_LINE)}” for a quick intro and the other stories.` : `Or name a story: “${esc(sayStory)}”`;
     return `<p class="saybox"><b>Then say</b>“${esc(storyPage && a.id !== "chatgpt" ? sayStory : OPEN_LINE)}”<span class="saybox-sub">${sub}</span></p>`;
@@ -545,6 +546,7 @@ const CONNECT_ISSUES: Record<"claude" | "gemini", { id: string; label: string; t
     { id: "credentials", label: "It asked for credentials or Advanced features", tip: "Leave Advanced features empty and tap Next: Plot Speaks registers itself. If it still asks, use the address without an account: <code>{plainurl}</code>." },
     { id: "signin", label: "Signing in didn't work", tip: "Use the address that needs no account: <code>{plainurl}</code>. Everything plays; nothing is saved between chats." },
     { id: "no-answer", label: "It's added, but Gemini doesn't use Plot Speaks", tip: "In a new chat type <strong>@</strong> and pick <strong>Plot Speaks</strong> from the list, then <strong>open</strong>. Without the @, \"open Plot Speaks\" makes Gemini look for a phone app. Gemini Live (voice conversation) can't use custom apps yet; use the microphone in a regular chat instead." },
+    { id: "not-in-app", label: "It works on the web, but the Gemini app doesn't list Plot Speaks", tip: "Close the Gemini app completely (swipe it away) and open it again: the app only picks up a custom app added on the web after a restart. Then type <strong>@</strong> and it's in the list. Still missing? Update the app, and check it's signed in to the same personal Google account." },
     { id: "no-voice", label: "It works when I type, but not in Gemini Live", tip: "That's Gemini, not your setup: Gemini Live can only use Google's own apps and a few partners for now. Play in a regular chat and tap the microphone in the chat box for each turn. For hands-free voice, Claude's voice mode plays Plot Speaks today." },
     { id: "other", label: "Something else", tip: "Tell us above what happened and we'll look into it. You can also write to <strong>contact@plotspeaks.com</strong>." },
   ],
@@ -643,7 +645,7 @@ const CONNECTED_JS = `(function(){
     if(t.hasAttribute("data-connected")){var cid=t.getAttribute("data-connected");if(t.tagName==="A"&&window.psConnectCheck){setTimeout(function(){window.psConnectCheck(cid);},300);return;}add(cid);apply();var d=t.closest("dialog");if(d&&t.tagName!=="A")d.close();return;}
     if(t.hasAttribute("data-on-remove")){e.preventDefault();remove(t.getAttribute("data-on-remove"));apply();return;}
     var p=t.getAttribute("data-copy-phrase"),s=t.closest(".byoa-on").querySelector(".copied");
-    function done(ok){if(s){s.textContent=ok?(t.tagName==="A"?"Copied. Paste it into the new Gemini chat, or just say it.":"Copied. Paste it into a new chat, or just say it."):"Copy failed; say it instead: "+p;}}
+    function done(ok){if(s){s.textContent=ok?(t.tagName==="A"?"Copied. In Gemini, type @, tap Plot Speaks in the list, then paste.":"Copied. Paste it into a new chat, or just say it."):"Copy failed; say it instead: "+p;}}
     if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(p).then(function(){done(true);},function(){done(false);});}else done(false);
   });
   window.psConnectedAdd=function(id){add(id);apply();};
