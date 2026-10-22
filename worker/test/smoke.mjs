@@ -415,8 +415,10 @@ ok(/isn't signed in/.test(await call('my_history', {})), 'my_history without an 
 const claimOpen = await result('claim_plays', { play_ids: [playId] });
 ok(isErr(claimOpen) && /isn't signed in/.test(claimOpen?.content?.[0]?.text ?? ''), 'claim_plays without an account claims nothing');
 // Accounts: optional; the open connector's host serves no OAuth metadata, the account host does.
-const acctPage = await get('/account');
-ok(acctPage.status === 200 && /Sign in|Accounts are coming|Hi/.test(acctPage.body), `GET /account answers (${acctPage.status})`);
+const acctPage = await get('/account?why=1');
+ok(acctPage.status === 200 && /Sign in|Accounts are coming|Hi/.test(acctPage.body), `GET /account?why=1 explains accounts (${acctPage.status})`);
+const acctGo = await fetch(`${base}/account`, { redirect: 'manual' });
+ok(acctGo.status === 200 || (acctGo.status === 302 && /\/auth\/google\/start\?next=%2Faccount|\/auth\/google\/start\?next=\/account/.test(acctGo.headers.get('location') ?? '')), `GET /account signed out goes straight to Google sign-in (${acctGo.status})`);
 ok((await fetch(`${base}/.well-known/oauth-authorization-server`)).status === 404, 'the open connector host serves no OAuth metadata (it has no sign-in)');
 const accountHost = base.includes('plotspeaks.com') ? 'https://account.plotspeaks.com' : 'https://account-dev.plotspeaks.com';
 try {

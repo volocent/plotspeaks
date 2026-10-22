@@ -1510,6 +1510,40 @@ function versusResult(top: [string, number], vs: { name: string; score: number }
 
 // The answers the connect check accepts (site.ts CONNECT_ISSUES holds the wording and the tips).
 const FEEDBACK_ASSISTANTS = new Set(["claude", "gemini", "chatgpt", "other"]);
+// Connected assistants follow the account (migration 0023, Ben 2026-10-22). A missing table reads as none.
+async function assistantsOf(db: D1Database | undefined, userId: string): Promise<string[]> {
+  if (!db) return [];
+  try { return ((await db.prepare("SELECT assistant FROM user_assistants WHERE user_id = ? AND removed = 0 ORDER BY at").bind(userId).all<{ assistant: string }>()).results ?? []).map((r) => r.assistant); } catch { return []; }
+}
+async function noteAssistants(db: D1Database | undefined, userId: string, ids: string[], removed = false): Promise<void> {
+  const ok = ids.filter((x) => FEEDBACK_ASSISTANTS.has(x)).slice(0, 4);
+  if (!db || !ok.length) return;
+  const now = Date.now();
+  try {
+    await db.batch(ok.map((a) => db.prepare("INSERT INTO user_assistants (user_id, assistant, at, removed) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, assistant) DO UPDATE SET at = excluded.at, removed = excluded.removed").bind(userId, a, now, removed ? 1 : 0)));
+  } catch (e) { log("db_error", { message: String(e).slice(0, 200) }); }
+}
+/** The account connector in use: the assistant calling it is connected for that person (one write an hour at most). */
+async function seenAssistant(db: D1Database | undefined, userId: string, client: string | null): Promise<void> {
+  const a = ({ Claude: "claude", Gemini: "gemini", ChatGPT: "chatgpt" } as Record<string, string>)[assistantOf(client)];
+  if (!db || !a) return;
+  try {
+    await db.prepare("INSERT INTO user_assistants (user_id, assistant, at, removed) VALUES (?, ?, ?, 0) ON CONFLICT(user_id, assistant) DO UPDATE SET at = excluded.at, removed = 0 WHERE user_assistants.removed = 1 OR user_assistants.at < excluded.at - 3600000").bind(userId, a, Date.now()).run();
+  } catch (e) { log("db_error", { message: String(e).slice(0, 200) }); }
+}
+/** POST /api/assistants {add?: [], remove?: []}: a signed-in visitor's badges, kept on the account. */
+async function assistantsApi(request: Request, env: Env, url: URL): Promise<Response> {
+  const origin = request.headers.get("origin");
+  if (origin && origin !== url.origin) return apiJson({ error: "forbidden" }, 403);
+  const user = signInConfigured(env) ? await currentUser(request, env) : null;
+  if (!user) return apiJson({ error: "sign in first" }, 401);
+  let body: { add?: unknown; remove?: unknown };
+  try { body = await request.json(); } catch { return apiJson({ error: "send JSON" }, 400); }
+  const list = (v: unknown) => (Array.isArray(v) ? v : []).map(String);
+  await noteAssistants(env.DB, user.id, list(body.add));
+  await noteAssistants(env.DB, user.id, list(body.remove), true);
+  return apiJson({ ok: true, assistants: await assistantsOf(env.DB, user.id) });
+}
 const FEEDBACK_ISSUES = /^[a-z][a-z-]{1,30}$/;
 async function connectFeedback(request: Request, env: Env, url: URL): Promise<Response> {
   const origin = request.headers.get("origin");
@@ -1518,6 +1552,7 @@ async function connectFeedback(request: Request, env: Env, url: URL): Promise<Re
   try { body = await request.json(); } catch { return apiJson({ error: "send JSON" }, 400); }
   const assistant = String(body.assistant ?? ""), outcome = String(body.outcome ?? "");
   if (!FEEDBACK_ASSISTANTS.has(assistant) || !["yes", "no"].includes(outcome)) return apiJson({ error: "bad request" }, 400);
+  if (outcome === "yes" && signInConfigured(env)) { const u = await currentUser(request, env); if (u) await noteAssistants(env.DB, u.id, [assistant]); }
   const issue = typeof body.issue === "string" && FEEDBACK_ISSUES.test(body.issue) ? body.issue : null;
   const note = typeof body.note === "string" ? body.note.replace(/\s+/g, " ").trim().slice(0, 800) || null : null;
   const pageName = typeof body.page === "string" ? body.page.replace(/[^a-z0-9/#-]/gi, "").slice(0, 40) || null : null;
@@ -1614,6 +1649,8 @@ async function handleAccountPages(request: Request, env: Env): Promise<Response 
     return signOut(request, env);
   }
   if (p !== "/account" || request.method !== "GET") return null;
+  // Signed out: straight to Google sign-in, back here after. The page explaining accounts is /account?why=1.
+  if (!user && signInConfigured(env) && !url.searchParams.has("why")) return Response.redirect(`${origin}/auth/google/start?next=/account`, 302);
   const history = user ? await historyOf(env.DB, user.id) : [];
   const profile = user ? await profileOf(env.DB, user.id) : null;
   const resp = new Response(accountPage({ profile, notice: url.searchParams.get("profile"), user, history, configured: signInConfigured(env), accountMcp: env.ACCOUNT_HOST ? `https://${env.ACCOUNT_HOST}/mcp` : null }, origin), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-robots-tag": "noindex" } });
@@ -1627,14 +1664,16 @@ async function withAccountLink(request: Request, env: Env, res: Response): Promi
   if (!body.includes("<!--ACCOUNT-->")) return new Response(body, res);
   const user = signInConfigured(env) ? await currentUser(request, env) : null;
   const label = user ? esc((user.name ?? "").split(" ")[0] || "Account") : "Sign in";
-  const link = signInConfigured(env) ? `<a class="acct" href="/account">${label}</a>` : "";
+  // Signed out, "Sign in" goes straight to Google and back to this page (Ben, 2026-10-22).
+  const here = new URL(request.url);
+  const link = signInConfigured(env) ? `<a class="acct" href="${user ? "/account" : `/auth/google/start?next=${encodeURIComponent(here.pathname + here.search)}`}">${label}</a>` : "";
   const headers = new Headers(res.headers);
   if (user) headers.set("cache-control", "private, no-store");
   // The Connect page's account note: the Claude button itself now adds the account connector, so a
   // short pointer to what signing in keeps is enough.
-  const connectNote = signInConfigured(env) ? `<p class="muted">Signing in keeps your saved progress: what you've played, trivia you've heard, and your campaigns. <a href="/account">About accounts</a></p>` : "";
+  const connectNote = signInConfigured(env) ? `<p class="muted">Signing in keeps your saved progress: what you've played, trivia you've heard, and your campaigns. <a href="/account?why=1">About accounts</a></p>` : "";
   // The connect boxes show only the account address to a signed-in visitor (site.ts addressBlock).
-  return new Response(body.replace("<!--ACCOUNT-->", link).replace("<!--ACCOUNT-CONNECT-->", connectNote).replace("<body>", `<body data-signed="${user ? "in" : "out"}">`), { status: res.status, headers });
+  return new Response(body.replace("<!--ACCOUNT-->", link).replace("<!--ACCOUNT-CONNECT-->", connectNote).replace("<body>", `<body data-signed="${user ? "in" : "out"}"${user ? ` data-assistants="${esc((await assistantsOf(env.DB, user.id)).join(","))}"` : ""}>`), { status: res.status, headers });
 }
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
@@ -1683,6 +1722,7 @@ async function mainFetch(request: Request, env: Env, ctx: ExecutionContext): Pro
     }
     // "Did it connect?" (site.ts CHECK_JS): a yes or a no with the problem picked and an optional note.
     if (url.pathname === "/api/connect-feedback" && request.method === "POST") return connectFeedback(request, env, url);
+    if (url.pathname === "/api/assistants" && request.method === "POST") return assistantsApi(request, env, url);
     const watchM = /^\/api\/play\/([a-z%20+-]{3,60})$/i.exec(url.pathname);
     if (watchM && request.method === "GET") return watchApi(env, watchM[1]);
     // The passenger page's answer-key endpoints (public, one answer at a time, like the MCP tools).
@@ -1765,6 +1805,7 @@ async function serveMcp(request: Request, env: Env, ctx: ExecutionContext, userI
     // MCP requests, tool calls and errors are tallied for the admin stats (src/usage.ts), from a
     // clone of the reply read after it has gone out. Only POSTs carry JSON-RPC messages. The
     // handler catches its own exceptions and answers 500, which the tally records as http_5xx.
+    if (userId && request.method === "POST") ctx.waitUntil(seenAssistant(env.DB, userId, client));
     const res = await createMcpHandler(() => createServer({ db: env.DB, tester, client, chatgpt, env, ip, userId }), { route: "/mcp" })(request, env, ctx);
     if (request.method === "POST") ctx.waitUntil(countMcp(env.DB, msgs, res.clone(), tester));
     return res;

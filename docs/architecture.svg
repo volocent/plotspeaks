@@ -1,21 +1,21 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 900" width="1280" height="900" font-family="Segoe UI, Helvetica, Arial, sans-serif" role="img" aria-labelledby="t d">
-<title id="t">Plot Speaks technical design</title><desc id="d">Players talk to their own AI assistant. The assistant calls the Plot Speaks MCP server, a Cloudflare Worker that holds every answer key and runs the game engines, with D1, KV, Workers AI and static assets behind it. Stories are linted and built into the Worker; the public repository holds the stories without their answer keys.</desc>
+<title id="t">Plot Speaks technical design</title><desc id="d">Players use their own AI assistant (Claude, Gemini and others). The assistant calls the Plot Speaks MCP server, a Cloudflare Worker that holds every answer key and runs the game engines, with D1, KV, Workers AI and static assets behind it. Stories are linted and built into the Worker; the public repository holds the stories without their answer keys.</desc>
 <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#0B2643"/></marker></defs>
 <rect width="1280" height="900" fill="#FBF8F3"/>
 <text x="40" y="52" font-size="28" font-weight="800" fill="#14233D" text-anchor="start">Plot Speaks: how it works</text>
 <text x="40" y="78" font-size="14.5" font-weight="400" fill="#4B5B73" text-anchor="start">Voice games and stories played with your own AI assistant. The assistant narrates; the server keeps every answer.</text>
 <rect x="40" y="110" width="250" height="470" rx="14" fill="#EEF3F9" stroke="#C9D2DE" stroke-width="1.5"/>
 <text x="58" y="138" font-size="16" font-weight="800" fill="#14233D" text-anchor="start">1. Players</text>
-<text x="58" y="160" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">In the car, by voice</text>
+<text x="58" y="160" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">By voice or chat</text>
 <rect x="58" y="180" width="214" height="64" rx="14" fill="#FFFFFF" stroke="#C9D2DE" stroke-width="1.5"/>
 <text x="72" y="206" font-size="15" font-weight="700" fill="#14233D" text-anchor="start">Claude</text>
 <text x="72" y="226" font-size="12" font-weight="400" fill="#4B5B73" text-anchor="start">connector · OAuth + Google</text>
 <rect x="58" y="258" width="214" height="64" rx="14" fill="#FFFFFF" stroke="#C9D2DE" stroke-width="1.5"/>
 <text x="72" y="284" font-size="15" font-weight="700" fill="#14233D" text-anchor="start">ChatGPT</text>
-<text x="72" y="304" font-size="12" font-weight="400" fill="#4B5B73" text-anchor="start">connector, or paste a story</text>
+<text x="72" y="304" font-size="12" font-weight="400" fill="#4B5B73" text-anchor="start">paste a story; connector on Business</text>
 <rect x="58" y="336" width="214" height="64" rx="14" fill="#FFFFFF" stroke="#C9D2DE" stroke-width="1.5"/>
 <text x="72" y="362" font-size="15" font-weight="700" fill="#14233D" text-anchor="start">Gemini</text>
-<text x="72" y="382" font-size="12" font-weight="400" fill="#4B5B73" text-anchor="start">custom app (US, personal)</text>
+<text x="72" y="382" font-size="12" font-weight="400" fill="#4B5B73" text-anchor="start">custom app, typed with @</text>
 <rect x="58" y="414" width="214" height="64" rx="14" fill="#FFFFFF" stroke="#F28C38" stroke-width="1.5" stroke-dasharray="6 5"/>
 <text x="72" y="440" font-size="15" font-weight="700" fill="#14233D" text-anchor="start">Alexa+</text>
 <text x="72" y="460" font-size="12" font-weight="400" fill="#4B5B73" text-anchor="start">MCP add-on (planned)</text>
@@ -43,10 +43,10 @@
 <text x="566" y="263" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">unseen clues</text>
 <rect x="742" y="184" width="186" height="92" rx="14" fill="#FFFFFF" stroke="#C9D2DE" stroke-width="1.5"/>
 <text x="756" y="208" font-size="14.5" font-weight="700" fill="#14233D" text-anchor="start">Website + admin</text>
-<text x="756" y="229" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">stories, games, how it works</text>
+<text x="756" y="229" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">stories, games, Watch page</text>
 <text x="756" y="246" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">account page, review queue</text>
 <text x="756" y="263" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">key-gated /admin</text>
-<text x="362" y="304" font-size="13" font-weight="700" fill="#4B5B73" text-anchor="start">MCP tools</text>
+<text x="362" y="304" font-size="13" font-weight="700" fill="#4B5B73" text-anchor="start">24 MCP tools, among them</text>
 <rect x="362" y="312" width="566" height="58" rx="14" fill="#EEF3F9" stroke="#C9D2DE" stroke-width="1.5"/>
 <text x="376" y="335" font-size="12.2" font-weight="400" fill="#14233D" text-anchor="start">open_plot_speaks · list_stories · start_story · choose · game_question / answer / challenge</text>
 <text x="376" y="353" font-size="12.2" font-weight="400" fill="#14233D" text-anchor="start">check_accusation · reveal_solution · get_cue · world_update · roll · team_roster · rate_story</text>
@@ -79,7 +79,7 @@
 <rect x="1003" y="160" width="219" height="62" rx="14" fill="#FFFFFF" stroke="#C9D2DE" stroke-width="1.5"/>
 <text x="1015" y="184" font-size="14" font-weight="700" fill="#14233D" text-anchor="start">D1 (SQLite)</text>
 <text x="1015" y="203" font-size="11.5" font-weight="400" fill="#4B5B73" text-anchor="start">plays, play state, history, scores,</text>
-<text x="1015" y="217" font-size="11.5" font-weight="400" fill="#4B5B73" text-anchor="start">codes, learned names</text>
+<text x="1015" y="217" font-size="11.5" font-weight="400" fill="#4B5B73" text-anchor="start">codes, ratings, your connected AIs</text>
 <rect x="1003" y="234" width="219" height="62" rx="14" fill="#FFFFFF" stroke="#C9D2DE" stroke-width="1.5"/>
 <text x="1015" y="258" font-size="14" font-weight="700" fill="#14233D" text-anchor="start">KV</text>
 <text x="1015" y="277" font-size="11.5" font-weight="400" fill="#4B5B73" text-anchor="start">OAuth tokens, abuse counters</text>
@@ -101,7 +101,7 @@
 <text x="1003" y="684" font-size="12" font-weight="400" fill="#4B5B73" text-anchor="start">GitHub API: followers and stars</text>
 <path d="M1112 600 L1112 582" stroke="#0B2643" stroke-width="2" fill="none" marker-end="url(#ah)" stroke-dasharray="6 5"/>
 <rect x="40" y="600" width="905" height="270" rx="14" fill="#FFFFFF" stroke="#C9D2DE" stroke-width="1.5"/>
-<text x="58" y="628" font-size="16" font-weight="800" fill="#14233D" text-anchor="start">4. Write, check, build, ship</text>
+<text x="58" y="628" font-size="16" font-weight="800" fill="#14233D" text-anchor="start">4. From a story file to production</text>
 <rect x="58" y="650" width="160" height="100" rx="14" fill="#FDEBD9" stroke="#F28C38" stroke-width="1.5"/>
 <text x="72" y="674" font-size="14.5" font-weight="700" fill="#14233D" text-anchor="start">stories/ + teams/</text>
 <text x="72" y="695" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">story.md (public)</text>
@@ -112,7 +112,7 @@
 <text x="248" y="674" font-size="14.5" font-weight="700" fill="#14233D" text-anchor="start">check-story lint</text>
 <text x="248" y="695" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">format, fair play,</text>
 <text x="248" y="712" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">trivia and branch rules,</text>
-<text x="248" y="729" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">unit tests</text>
+<text x="248" y="729" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">playtests, unit tests</text>
 <path d="M394 700 L410 700" stroke="#0B2643" stroke-width="2" fill="none" marker-end="url(#ah)"/>
 <rect x="410" y="650" width="160" height="100" rx="14" fill="#FFFFFF" stroke="#C9D2DE" stroke-width="1.5"/>
 <text x="424" y="674" font-size="14.5" font-weight="700" fill="#14233D" text-anchor="start">worker-data build</text>
@@ -123,8 +123,8 @@
 <rect x="586" y="650" width="160" height="100" rx="14" fill="#FFFFFF" stroke="#C9D2DE" stroke-width="1.5"/>
 <text x="600" y="674" font-size="14.5" font-weight="700" fill="#14233D" text-anchor="start">dev deploy + smoke</text>
 <text x="600" y="695" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">same code, dev data,</text>
-<text x="600" y="712" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">real tool calls</text>
-<text x="600" y="729" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">against the server</text>
+<text x="600" y="712" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">real tool calls and</text>
+<text x="600" y="729" font-size="12.5" font-weight="400" fill="#4B5B73" text-anchor="start">Playwright page checks</text>
 <path d="M746 700 L762 700" stroke="#0B2643" stroke-width="2" fill="none" marker-end="url(#ah)"/>
 <rect x="762" y="650" width="160" height="100" rx="14" fill="#FFFFFF" stroke="#C9D2DE" stroke-width="1.5"/>
 <text x="776" y="674" font-size="14.5" font-weight="700" fill="#14233D" text-anchor="start">prod deploy</text>

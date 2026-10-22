@@ -156,6 +156,7 @@ const CONNECT: { headline: string; short: string; assistants: Assistant[] } = {
         "Adding it works best in a browser, so on a phone open the link there. Once added, the connector shows up in the Claude phone app on its own.",
         "Voice works: in our test, Claude's voice mode loaded the story and checked an accusation through the connector.",
         "Say “Open Plot Speaks” or the story's name. A vague “play something” can send Claude on a detour.",
+        "<strong>Asked to allow Plot Speaks?</strong> Choose <strong>Always allow</strong> each time it asks (a game uses a handful of tools), or set them all at once under <strong>Settings → Connectors → Plot Speaks</strong>. Then it stops asking.",
         "Doing it by hand: <strong>Customize → Connectors → + Add → Add custom connector</strong>, name it Plot Speaks and paste <code>{url}</code>.",
         "Rather not sign in? <a href=\"{claudeplain}\" rel=\"noopener\">Connect without an account</a> (or paste <code>{url}</code>). Every story and game still plays, but nothing is saved between chats.",
       ],
@@ -165,6 +166,7 @@ const CONNECT: { headline: string; short: string; assistants: Assistant[] } = {
           "Rather not sign in? <a href=\"{claudeplain}\" rel=\"noopener\">Connect without an account</a>. Everything plays, but nothing is saved between chats.",
           "<strong>On a phone</strong>, open the link in your browser. Once it's added, Plot Speaks appears in the Claude app and works in voice mode.",
           "In a new chat, tap <strong>+ → Connectors</strong> and make sure Plot Speaks is on.",
+          "<strong>Asked to allow Plot Speaks?</strong> Choose <strong>Always allow</strong> each time it asks (a game uses a handful of tools), or set them all at once under <strong>Settings → Connectors → Plot Speaks</strong>. Then it stops asking.",
           "<strong>Free plan:</strong> one custom connector is included, and Plot Speaks can be it. On Team or Enterprise, your admin adds it first.",
         ],
       },
@@ -211,7 +213,7 @@ const CONNECT: { headline: string; short: string; assistants: Assistant[] } = {
       button: { href: "https://gemini.google.com/customize/connectors", label: "Open Gemini" },
       open: "@ → Plot Speaks → open",
       say: "@ → Plot Speaks → start {story}",
-      notes: ["Signing in works in Gemini (checked 2026-10-20), so your progress is saved there too.", "Gemini Live, the voice-conversation mode, can't use custom apps yet (Google lists only its own apps and a few partners there), so Plot Speaks plays in a regular Gemini chat: tap the microphone in the chat box to speak each turn."],
+      notes: ["Signing in works in Gemini (checked 2026-10-20), so your progress is saved there too.", "<strong>Gemini asks you to confirm each answer.</strong> That's Gemini's rule for any app that saves something (your score, your place in a story), and it can't be turned off yet. Claude can be set to Always allow.", "Gemini Live, the voice-conversation mode, can't use custom apps yet (Google lists only its own apps and a few partners there), so Plot Speaks plays in a regular Gemini chat: tap the microphone in the chat box to speak each turn."],
       pop: {
         lead: "For people in the <strong>US</strong>, <strong>18 or older</strong>, on a <strong>personal</strong> Google account with Keep Activity on. Not on work or school accounts.",
         steps: [
@@ -219,7 +221,7 @@ const CONNECT: { headline: string; short: string; assistants: Assistant[] } = {
           "Tap <strong>+ Custom</strong> (or <strong>Add a custom app</strong>), paste the address, tap <strong>Next</strong> and sign in with Google when it asks.",
           "It then works in the Gemini app too. In a chat, type <strong>@</strong> and tap <strong>Plot Speaks</strong> in the list (saying it doesn't pick it), then <strong>open</strong>. Not in the list? Close the Gemini app completely and reopen it.",
         ],
-        notes: ["Signing in works in Gemini (checked 2026-10-20), so your progress is saved there too.", "Gemini Live, the voice-conversation mode, can't use custom apps yet (Google lists only its own apps and a few partners there), so Plot Speaks plays in a regular Gemini chat: tap the microphone in the chat box to speak each turn."],
+        notes: ["Signing in works in Gemini (checked 2026-10-20), so your progress is saved there too.", "<strong>Gemini asks you to confirm each answer.</strong> That's Gemini's rule for any app that saves something (your score, your place in a story), and it can't be turned off yet. Claude can be set to Always allow.", "Gemini Live, the voice-conversation mode, can't use custom apps yet (Google lists only its own apps and a few partners there), so Plot Speaks plays in a regular Gemini chat: tap the microphone in the chat box to speak each turn."],
       },
     },
     {
@@ -539,6 +541,7 @@ const CONNECT_ISSUES: Record<"claude" | "gemini", { id: string; label: string; t
     { id: "signin", label: "Signing in with Google didn't work", tip: "Try once more in your browser, and allow the Google window if it is blocked. Or connect without an account: add <code>{plainurl}</code> instead. Everything plays; nothing is saved between chats." },
     { id: "workspace", label: "I'm on a Team or Enterprise plan and can't add it", tip: "On Team and Enterprise plans an admin adds custom connectors first. Send them the address: <code>{url}</code>." },
     { id: "no-answer", label: "It's added, but Claude doesn't use Plot Speaks", tip: "In a new chat, tap <strong>+ → Connectors</strong> and make sure Plot Speaks is switched on. Then say <strong>“Open Plot Speaks.”</strong>" },
+    { id: "allow", label: "It keeps asking me to allow Plot Speaks", tip: "Choose <strong>Always allow</strong> when it asks, once for each tool, or set them all under <strong>Settings → Connectors → Plot Speaks</strong>. After that Claude stops asking." },
     { id: "other", label: "Something else", tip: "Tell us above what happened and we'll look into it. You can also write to <strong>contact@plotspeaks.com</strong>." },
   ],
   gemini: [
@@ -547,6 +550,7 @@ const CONNECT_ISSUES: Record<"claude" | "gemini", { id: string; label: string; t
     { id: "signin", label: "Signing in didn't work", tip: "Use the address that needs no account: <code>{plainurl}</code>. Everything plays; nothing is saved between chats." },
     { id: "no-answer", label: "It's added, but Gemini doesn't use Plot Speaks", tip: "In a new chat type <strong>@</strong> and pick <strong>Plot Speaks</strong> from the list, then <strong>open</strong>. Without the @, \"open Plot Speaks\" makes Gemini look for a phone app. Not in the list? Close the Gemini app completely and reopen it. Gemini Live (voice conversation) can't use custom apps yet; use the microphone in a regular chat instead." },
     { id: "not-in-app", label: "It works on the web, but the Gemini app doesn't list Plot Speaks", tip: "Close the Gemini app completely (swipe it away) and open it again: the app only picks up a custom app added on the web after a restart. Then type <strong>@</strong> and it's in the list. Still missing? Update the app, and check it's signed in to the same personal Google account." },
+    { id: "confirm", label: "It asks me to confirm every answer", tip: "That's Gemini's rule: it asks before any app saves something, and checking an answer saves your score. There's no setting to turn it off yet. For play without prompts, Claude can be set to Always allow." },
     { id: "no-voice", label: "It works when I type, but not in Gemini Live", tip: "That's Gemini, not your setup: Gemini Live can only use Google's own apps and a few partners for now. Play in a regular chat and tap the microphone in the chat box for each turn. For hands-free voice, Claude's voice mode plays Plot Speaks today." },
     { id: "other", label: "Something else", tip: "Tell us above what happened and we'll look into it. You can also write to <strong>contact@plotspeaks.com</strong>." },
   ],
@@ -624,12 +628,34 @@ const CHECK_JS = `(function(){
 // The visitor's connected assistant, remembered in this browser only (localStorage "ps.assistant";
 // a private window or cleared data just shows the Connect buttons again). Set by the Connect to
 // Claude link and the "I've connected" buttons; cleared by Change.
+// The header's Connect button: the account's assistants (data-assistants, signed in) or this browser's.
+const HEADER_JS = `(function(){
+  var OPEN={claude:["Claude","https://claude.ai/new"],gemini:["Gemini","https://gemini.google.com/app"],chatgpt:["ChatGPT","https://chatgpt.com/"],other:["Your assistant",""]};
+  var box=document.querySelector("[data-cmenu]");if(!box)return;
+  var btn=box.querySelector("[data-cmenu-btn]"),pop=box.querySelector("[data-cmenu-pop]"),list=box.querySelector("[data-cmenu-list]");
+  function ids(){var b=document.body,a=b.getAttribute("data-assistants");if(b.getAttribute("data-signed")==="in"&&a)return a.split(",").filter(function(x){return OPEN[x];});
+    try{var v=JSON.parse(localStorage.getItem("ps.assistants")||"null");return Array.isArray(v)?v.filter(function(x){return OPEN[x];}):[];}catch(e){return [];}}
+  function draw(){var a=ids();btn.classList.toggle("is-on",a.length>0);
+    list.innerHTML=a.map(function(x){var o=OPEN[x];return o[1]?'<li><a href="'+o[1]+'" target="_blank" rel="noopener">Open in '+o[0]+'</a></li>':'<li><span>'+o[0]+'</span></li>';}).join("");
+    if(!a.length)close();}
+  function close(){pop.hidden=true;btn.setAttribute("aria-expanded","false");}
+  btn.addEventListener("click",function(e){if(!btn.classList.contains("is-on"))return;e.preventDefault();pop.hidden=!pop.hidden;btn.setAttribute("aria-expanded",String(!pop.hidden));});
+  document.addEventListener("click",function(e){if(!box.contains(e.target))close();});
+  document.addEventListener("keydown",function(e){if(e.key==="Escape")close();});
+  window.psHeader=draw;draw();
+})();`;
 const CONNECTED_JS = `(function(){
   var KEY="ps.assistants",OLD="ps.assistant",NAMES={claude:"Claude",chatgpt:"ChatGPT",gemini:"Gemini",other:"your assistant"};
   function get(){try{var v=JSON.parse(localStorage.getItem(KEY)||"null");if(Array.isArray(v))return v.filter(function(x){return NAMES[x];});var o=localStorage.getItem(OLD);return o&&NAMES[o]?[o]:[];}catch(e){return [];}}
-  function save(a){try{if(a.length)localStorage.setItem(KEY,JSON.stringify(a));else localStorage.removeItem(KEY);localStorage.removeItem(OLD);}catch(e){}}
-  function add(id){var a=get();if(a.indexOf(id)<0)a.push(id);save(a);}
-  function remove(id){save(get().filter(function(x){return x!==id;}));}
+  function save(a){try{if(a.length)localStorage.setItem(KEY,JSON.stringify(a));else localStorage.removeItem(KEY);localStorage.removeItem(OLD);}catch(e){}if(document.body.getAttribute("data-signed")==="in")document.body.setAttribute("data-assistants",a.join(","));if(window.psHeader)window.psHeader();}
+  // Signed in, the badges follow the account (Ben, 2026-10-22): the page carries the account's list, and
+  // adding or removing one here updates it there.
+  var signed=document.body.getAttribute("data-signed")==="in",acct=document.body.getAttribute("data-assistants");
+  function sync(k,ids){if(!signed||!ids.length)return;try{fetch("/api/assistants",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(k==="add"?{add:ids}:{remove:ids}),keepalive:true}).catch(function(){});}catch(e){}}
+  function add(id){var a=get();if(a.indexOf(id)<0)a.push(id);save(a);sync("add",[id]);}
+  function remove(id){save(get().filter(function(x){return x!==id;}));sync("remove",[id]);}
+  if(signed&&acct!==null){var srv=acct?acct.split(",").filter(function(x){return NAMES[x];}):[],loc=get(),up=srv.length?[]:loc;
+    save(srv.concat(up));if(up.length)sync("add",up);}
   function apply(){
     var ids=get();
     [].forEach.call(document.querySelectorAll(".ai-btn[data-dialog]"),function(b){b.classList.toggle("is-on",ids.indexOf(b.getAttribute("data-dialog").replace("dlg-",""))>=0);});
@@ -739,6 +765,17 @@ p{margin:0 0 1em}
 .nav a:hover{color:var(--ink);background:var(--accent-soft)}
 .nav a[aria-current=page]{color:var(--ink);background:var(--accent-soft)}
 .top .btn-connect{display:none}
+.cmenu{position:relative}
+.btn-connect .cm-on,.btn-connect.is-on .cm-off{display:none}
+.btn-connect.is-on .cm-on{display:inline-flex;align-items:center;gap:inherit}
+.btn-connect.is-on{background:#2E9E5B;border-color:#2E9E5B;color:#fff;box-shadow:none}
+.btn-connect.is-on:hover{background:#278A4F;border-color:#278A4F;color:#fff}
+.cmenu-pop{position:absolute;right:0;top:calc(100% + 8px);min-width:230px;padding:8px;border-radius:16px;background:var(--surface);border:1px solid var(--line-2);box-shadow:var(--shadow);z-index:60}
+.cmenu-h{margin:4px 10px 6px;font:700 .72rem/1 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--ink-2)}
+.cmenu-list{list-style:none;margin:0;padding:0}
+.cmenu-list a,.cmenu-list span,.cmenu-more{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:10px;color:var(--ink);text-decoration:none;font-weight:600}
+.cmenu-list a:hover,.cmenu-more:hover{background:var(--surface-2)}
+.cmenu-more{margin-top:4px;border-top:1px solid var(--line);border-radius:0 0 10px 10px;color:var(--ink-2)}
 .acct{font-weight:700;font-size:.95rem;text-decoration:none;color:var(--ink);padding:9px 14px;border-radius:999px;border:1.5px solid var(--line-2);white-space:nowrap}
 .acct:hover{border-color:var(--accent)}
 .why{display:grid;gap:12px;padding:0;list-style:none;margin:20px 0 28px}
@@ -1017,6 +1054,10 @@ ol.steps li{position:relative;padding:0 0 14px 44px;counter-increment:st}
 ol.steps li::before{content:counter(st);position:absolute;left:0;top:-1px;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font:700 .88rem/1 var(--sans);background:var(--accent-soft);color:var(--accent)}
 .note{display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-radius:14px;background:var(--surface);border:1px solid var(--line);font-size:.96rem}
 .note .ic{color:var(--sky-ink);margin-top:2px}
+.note.tip>span{flex:1;min-width:0}
+.tip-x{flex:none;margin:-4px -6px 0 0;padding:6px;border:0;border-radius:999px;background:transparent;color:var(--ink-2);cursor:pointer;line-height:0}
+.tip-x:hover{background:var(--surface-2);color:var(--ink)}
+.tip-x:focus-visible{outline:2px solid var(--sky);outline-offset:2px}
 .safety{display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-radius:14px;background:var(--accent-soft);border:1px solid color-mix(in srgb,var(--orange) 40%,transparent);font-weight:600;margin:20px 0}
 .safety .ic{color:var(--accent);margin-top:2px}
 .table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface)}
@@ -1367,7 +1408,8 @@ function page(s: Shell): string {
 <a class="brand" href="/" aria-label="Plot Speaks home"><img src="/mark-96.jpg" alt="" width="38" height="38"><span class="wordmark">Plot <span>Speaks</span></span></a>
 <nav class="nav" aria-label="Main">${links}</nav>
 <!--ACCOUNT-->
-<a class="btn btn-primary btn-sm btn-connect" href="/connect">${icon("plug", 18)}Connect</a>
+<div class="cmenu" data-cmenu><a class="btn btn-primary btn-sm btn-connect" href="/connect" data-cmenu-btn aria-haspopup="true" aria-expanded="false"><span class="cm-off">${icon("plug", 18)}Connect</span><span class="cm-on">${icon("check", 18)}Connected</span></a>
+<div class="cmenu-pop" data-cmenu-pop hidden><p class="cmenu-h">Your AI</p><ul class="cmenu-list" data-cmenu-list></ul><a class="cmenu-more" href="/connect">${icon("plug", 16)}Connect another</a></div></div>
 </div>
 <nav class="pagetabs" aria-label="Pages"><div class="wrap">${links}</div></nav>
 </header>
@@ -1409,6 +1451,7 @@ ${/<a[^>]+data-connected=/.test(s.body) ? checkDialog(s.origin + "/mcp") : ""}
 })();
 ${s.body.includes("data-dialog=") ? DIALOG_JS : ""}
 ${/data-(dialog|connected|conn|addr)\b/.test(s.body) ? CONNECTED_JS : ""}
+${HEADER_JS}
 ${/<a[^>]+data-connected=/.test(s.body) ? CHECK_JS : ""}
 ${s.script ?? ""}
 </script>
@@ -1980,7 +2023,7 @@ export function connectPage(stories: PublicStory[], origin: string): string {
     `<button type="button" role="tab" id="tab-${a.id}" aria-controls="${a.id}" aria-selected="${i === 0}">${esc(a.tab)}</button>`).join("")}</div>`;
   const panels = CONNECT.assistants.map((a) => `<section class="assistant" id="${a.id}" aria-labelledby="tab-${a.id} ${a.id}-h">
 <h2 id="${a.id}-h">${esc(a.name)} <span class="status${a.ok ? " status-ok" : ""}">${esc(a.status)}</span></h2>
-<p class="conn-state" data-conn="${a.id}"><span class="status status-ok conn-on">${icon("check", 16)} Connected on this device</span><button class="linkish conn-on" type="button" data-on-remove="${a.id}">Remove</button><button class="btn btn-ghost btn-sm conn-off" type="button" data-connected="${a.id}">${icon("check", 18)}I've connected ${esc(a.btn)}</button></p>
+<p class="conn-state" data-conn="${a.id}"><span class="status status-ok conn-on">${icon("check", 16)} Connected</span><button class="linkish conn-on" type="button" data-on-remove="${a.id}">Remove</button><button class="btn btn-ghost btn-sm conn-off" type="button" data-connected="${a.id}">${icon("check", 18)}I've connected ${esc(a.btn)}</button></p>
 <p class="plan">${fill(a.plan, url, example)}</p>
 ${a.id === "gemini" ? `<p class="muted" style="margin:14px 0 6px">The button copies the address and opens Gemini: tap <strong>+ Custom</strong> and paste it.</p>` : ""}
 ${a.button ? `<p><a class="btn btn-primary btn-big" href="${fill(a.button.href, url, example)}"${a.button.href.startsWith("{") || a.button.href.startsWith("https://") ? ` target="_blank" rel="noopener"` : ""}${["claude", "gemini"].includes(a.id) ? ` data-connected="${a.id}"` : ""}${a.id === "gemini" ? ` data-copy-url="${esc(accountUrlFor(url))}"` : ""}>${icon(["claude", "gemini"].includes(a.id) ? "plug" : "book", 20)}${esc(a.button.label)}</a></p>` : ""}
@@ -2271,7 +2314,7 @@ ${WHY_SIGN_IN}
 <p class="muted">We keep your Google account id, email and name, and what you play. Not your conversations: those stay with your assistant. Delete it all here any time. <a href="/privacy">Privacy</a></p></div>`
     : `<div class="wrap narrow prose"><header class="page-head"><p class="eyebrow">${icon("user", 18)} Account</p><h1>Hi${v.user.name ? `, ${esc(v.user.name.split(" ")[0])}` : ""}.</h1>
 <p class="lead">Signed in${v.user.email ? ` as ${esc(v.user.email)}` : ""}. Plot Speaks remembers what you play here and through the account connector.</p></header>
-${v.accountMcp ? `<div class="note">${icon("plug", 20)}<span><strong>Let your assistant remember too.</strong> Add the connector with your account: <code>${esc(v.accountMcp)}</code>. Your assistant asks you to sign in with Google once. (The usual address, <code>${esc(origin)}/mcp</code>, keeps working with no sign-in and no memory.)</span></div>` : ""}
+${v.accountMcp ? `<div class="note tip" data-tip="acct-mcp">${icon("plug", 20)}<span><strong>Let your assistant remember too.</strong> Add the connector with your account: <code>${esc(v.accountMcp)}</code>. Your assistant asks you to sign in with Google once. (The usual address, <code>${esc(origin)}/mcp</code>, keeps working with no sign-in and no memory.)</span><button class="tip-x" type="button" aria-label="Dismiss this tip" data-tip-x>${icon("close", 18)}</button></div>` : ""}
 <h2>What you've played</h2>
 ${v.history.length ? `<div class="table-wrap"><table class="phrases"><thead><tr><th scope="col">Story or game</th><th scope="col">Kind</th><th scope="col">Started</th><th scope="col">How it ended</th></tr></thead><tbody>
 ${v.history.map((h) => `<tr><td><a href="/stories/${encodeURIComponent(h.story)}">${esc(h.title)}</a></td><td>${esc(kindName(h.kind))}</td><td>${when(h.started_at)}</td><td>${esc(h.outcome ?? "not finished")}</td></tr>`).join("\n")}
@@ -2282,8 +2325,17 @@ ${v.profile ? profileSection(v.profile, v.notice ?? null, origin) : ""}
 <details class="script" style="margin-top:22px"><summary>Delete my account</summary>
 <p>This deletes your account, your history and the trivia questions you've heard. Plays already counted stay as anonymous numbers. It can't be undone.</p>
 <form method="post" action="/account/delete"><button class="btn btn-primary" type="submit">Delete my account and history</button></form></details></div>`;
-  return page({ title: "Account · Plot Speaks", description: "Optional sign-in with Google, so Plot Speaks remembers what you've played.", body, origin, path: "/account" });
+  return page({ title: "Account · Plot Speaks", description: "Optional sign-in with Google, so Plot Speaks remembers what you've played.", body, origin, path: "/account", script: TIP_JS });
 }
+
+// Dismissible tips: a tip's close button hides it and remembers that in this browser.
+const TIP_JS = `(function(){
+  function key(t){return "ps.tip."+t.getAttribute("data-tip");}
+  [].forEach.call(document.querySelectorAll("[data-tip]"),function(t){
+    try{if(localStorage.getItem(key(t))==="off"){t.hidden=true;return;}}catch(e){}
+    var x=t.querySelector("[data-tip-x]");if(x)x.addEventListener("click",function(){t.hidden=true;try{localStorage.setItem(key(t),"off");}catch(e){}});
+  });
+})();`;
 
 // ============================================================================ WATCH
 // Any play on a passenger's phone (plan 2026-10-19 item 18; every kind since 2026-10-21): a trivia board, or

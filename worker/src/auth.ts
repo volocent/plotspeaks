@@ -149,6 +149,7 @@ export async function deleteAccount(env: AuthEnv, userId: string): Promise<void>
   await db.batch([
     db.prepare("DELETE FROM user_history WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM user_seen WHERE user_id = ?").bind(userId),
+    db.prepare("DELETE FROM user_assistants WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM sessions WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM campaign_codes WHERE play_id IN (SELECT id FROM plays WHERE user_id = ?)").bind(userId),
     db.prepare("DELETE FROM play_state WHERE play_id IN (SELECT id FROM plays WHERE user_id = ?)").bind(userId),
