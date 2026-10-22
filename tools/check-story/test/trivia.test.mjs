@@ -113,3 +113,8 @@ test('a numeric final is an estimate only on a board that has estimate categorie
   const plain = parseTrivia(['## Category Dates', ...head, '| 100 | Which year? | 1492 | | |', ...final].join('\n'));
   assert.equal(plain.categories[1].estimate, false);
 });
+
+test('normAnswer: "Mt." and "Mount", and "&" and "and", compare equal', () => {
+  assert.equal(normAnswer('Mt. Everest'), normAnswer('Mount Everest'));
+  assert.equal(normAnswer('Moose & Juice'), normAnswer('Moose and Juice'));
+});

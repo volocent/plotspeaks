@@ -802,7 +802,10 @@ p{margin:0 0 1em}
 .pagetabs a{flex:1 1 auto;min-width:0;text-align:center;text-decoration:none;font-weight:650;font-size:clamp(.74rem,3.1vw,.92rem);letter-spacing:-.01em;padding:13px 2px 11px;color:var(--ink-2);border-bottom:3px solid transparent;white-space:nowrap}
 .pagetabs a[aria-current=page]{color:var(--ink);border-bottom-color:var(--accent)}
 .pagetabs a:hover{color:var(--ink)}
-@media (min-width:860px){.nav{display:flex}.pagetabs{display:none}.top .btn-connect{display:inline-flex}:root{--head-h:64px}}
+@media (min-width:860px){.top .btn-connect{display:inline-flex}}
+/* The full nav needs about 1100px since Watch and the Connected button joined it (2026-10-22); below that the links sit in the tab row. */
+@media (min-width:1100px){.nav{display:flex}.pagetabs{display:none}:root{--head-h:64px}}
+.nav a,.brand,.acct,.btn-connect{white-space:nowrap}
 
 /* buttons */
 .btn{appearance:none;border:0;display:inline-flex;align-items:center;justify-content:center;gap:9px;font:700 1rem/1 var(--sans);padding:14px 22px;min-height:50px;border-radius:999px;cursor:pointer;text-decoration:none;transition:transform .15s ease,background-color .15s ease,box-shadow .15s ease}
@@ -839,7 +842,7 @@ p{margin:0 0 1em}
 
 /* voice demo card */
 .voice{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);padding:22px;position:relative;max-width:30rem;justify-self:center;width:100%}
-@media (min-width:960px){.hero-grid{align-items:stretch}.hero .byoa{margin-bottom:0}.hero-grid>.voice{margin:0;max-width:none;display:flex;flex-direction:column;justify-content:center;padding:30px 30px}.hero-grid>.voice .voice-top{font-size:.9rem;margin-bottom:22px}.hero-grid>.voice .say{padding:16px 20px;margin-bottom:18px;max-width:96%}.hero-grid>.voice .say-you{font-size:1.12rem}.hero-grid>.voice .say-narrator{font-size:1.14rem}.hero-grid>.voice .bars{height:46px;margin:8px 0 4px}.hero-grid>.voice .sample{margin-top:20px}}
+@media (min-width:960px){.hero-grid{align-items:stretch}.hero .byoa{margin-bottom:0}.hero-grid>.voice{margin:0;max-width:none;display:flex;flex-direction:column;justify-content:flex-start;align-self:start;padding:30px 30px}.hero-grid>.voice .voice-top{font-size:.9rem;margin-bottom:22px}.hero-grid>.voice .say{padding:16px 20px;margin-bottom:18px;max-width:96%}.hero-grid>.voice .say-you{font-size:1.12rem}.hero-grid>.voice .say-narrator{font-size:1.14rem}.hero-grid>.voice .bars{height:46px;margin:8px 0 4px}.hero-grid>.voice .sample{margin-top:20px}}
 .voice-top{display:flex;align-items:center;gap:10px;margin:0 0 16px;font:700 .8rem/1 var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2)}
 .live{width:9px;height:9px;border-radius:50%;background:var(--orange);box-shadow:0 0 0 0 rgba(239,119,38,.6);animation:live 2s infinite}
 @keyframes live{0%{box-shadow:0 0 0 0 rgba(239,119,38,.55)}70%{box-shadow:0 0 0 10px rgba(239,119,38,0)}100%{box-shadow:0 0 0 0 rgba(239,119,38,0)}}

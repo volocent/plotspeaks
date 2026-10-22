@@ -398,7 +398,7 @@ export function answerQuestion(b: TriviaBoard, st: TriviaState, said: string, wh
   const verdict = estVerdict ?? (right
     ? (quick ? `${DING} CORRECT. It's ${q.answer}.` : `${DING} CORRECT. The answer is ${q.answer}. ${name} scores ${worth}.`)
     : (quick ? `${BZZT} NOT QUITE. It's ${q.answer}.` : `${BZZT} NOT RIGHT. The answer is ${q.answer}. No points. (A player who disagrees can call game_challenge.)`));
-  const tally = (st.mode === "streak" ? `STREAK: ${streakOf(next)} in a row.` : quick ? `TALLY (right answers): ${scoreLine(next)}.` : `SCORES: ${scoreLine(next)}.`) + altNote;
+  const tally = (st.mode === "streak" ? `STREAK: ${streakOf(next)} in a row.` : quick ? `TALLY (right answers): ${scoreLine(next)}.` : `SCORES: ${scoreLine(next)}.`) + altNote + (band ? "" : ` JUDGED CLUE (never read this aloud): "${q.steps[step]}". If it is not the question you asked, tell the player you mixed up the clues and re-ask the right one.`);
   const after = afterRuling(b, next);
   return { text: `${verdict}\n${tally}\n\n${after.text}`, state: after.state, event: { kind: "trivia", detail: `${c.name}|${q.value}`, verdict: right ? "correct" : "wrong" } };
 }

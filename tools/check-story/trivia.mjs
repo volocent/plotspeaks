@@ -63,7 +63,7 @@ const LEAD = /^(what|who|where|when)\s+(is|are|was|were)\s+|^(um+|uh+|er+|erm|hm
 /** Lower case, no lead-in, no leading article, no punctuation, single spaces. */
 export function normAnswer(s) {
   let t = String(s ?? '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '');
-  t = t.replace(/[’']/g, '').replace(/&/g, ' and ').replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  t = t.replace(/[’']/g, '').replace(/&/g, ' and ').replace(/\bmt\b\.?/g, 'mount').replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
   for (let i = 0; i < 5 && LEAD.test(t); i++) t = t.replace(LEAD, '');
   // A trailing hedge ("south I think", "Paris maybe") isn't part of the answer either.
   t = t.replace(/\s+(i think|i guess|i reckon|maybe|perhaps|probably|right)$/, '');
