@@ -31,6 +31,11 @@ export type TriviaState = {
   // A board built for this play (Team Trivia's live Roster category, a rivalry): used instead of the
   // team's stored board.
   board?: TriviaBoard;
+  // A trivia-off (Ben, 2026-10-23: no ties): the tied players answer the same clue, drawn from clues this play
+  // never dealt, until one is left. clue is the text only; the answer stays in the board (cat, idx). used
+  // lists the trivia-off clues already asked. tieWinner is who won it.
+  tie?: { players: string[]; cat: string; idx: number; clue: string; tried: { name: string; right: boolean }[]; used: string[]; round: number; spare: "own" | "general" };
+  tieWinner?: string;
   // Head-to-head: the top score and first name of the player whose code started this play.
   versus?: { name: string; score: number };
   // Team trivia: the team whose board this play uses (the board comes from the team database).
@@ -49,7 +54,7 @@ const finalWaiting = (st: TriviaState, tried: string[]) =>
 // with a short word the host says as a sound: bright for a right answer, flat for a wrong one. The
 // player can ask for "no sounds" and the host drops them (the trivia preface says so).
 // Every game ends with the rating question (Ben, 2026-10-21: stars on every story and game).
-export const RATE_ASK = "Then ask once: \"How many stars out of five would you give it? Anything you'd like to say about it?\" and call rate_story with the play id, the stars and their words as the comment (and the tester verdict too, if this one is being tested). If they'd rather not, drop it.";
+export const RATE_ASK = "Then ask once: \"How many stars out of five would you give it? Anything you'd like to say about it?\" and call rate_story with the play id, the stars and their words as the comment. If they'd rather not, drop it. (For you, not to say aloud: if this one is being tested, pass the tester verdict to rate_story too.)";
 const DING = "Ding!";
 const BZZT = "Bzzt.";
 type Ai = { run: (model: string, input: Record<string, unknown>) => Promise<any> };
@@ -59,6 +64,81 @@ type Ai = { run: (model: string, input: Record<string, unknown>) => Promise<any>
 export const JUDGES = ["@cf/meta/llama-3.3-70b-instruct-fp8-fast", "@cf/mistralai/mistral-small-3.1-24b-instruct", "@cf/meta/llama-3.1-8b-instruct-fp8"];
 
 const key = (cat: string, value: number) => `${cat.toLowerCase()}|${value}`;
+
+/** The players level at the top, when two or more are (a trivia-off settles it). */
+export function tiedTop(st: TriviaState): string[] {
+  const e = Object.entries(st.scores);
+  if (e.length < 2) return [];
+  const max = Math.max(...e.map((x) => x[1]));
+  const top = e.filter((x) => x[1] === max).map((x) => x[0]);
+  return top.length >= 2 ? top : [];
+}
+/**
+ * A trivia-off clue: one the play never dealt (so no answer of this game repeats), a single step, not an
+ * estimate, preferring the middle values. spare is this board's full pool, or the general board for a board
+ * that has no spare clues (Team Trivia).
+ */
+function tieClue(spare: TriviaBoard | undefined, st: TriviaState, used: string[]): { cat: string; idx: number; clue: string } | null {
+  if (!spare) return null;
+  const opts: { cat: string; idx: number; clue: string; v: number }[] = [];
+  for (const c of spare.categories) {
+    if (c.final || c.estimate) continue;
+    c.clues.forEach((q, i) => {
+      const id = `${c.name}#${i}`;
+      if (used.includes(id) || q.steps.length !== 1 || st.deal?.[key(c.name, q.value)] === i) return;
+      opts.push({ cat: c.name, idx: i, clue: q.steps[0], v: q.value });
+    });
+  }
+  if (!opts.length) return null;
+  const mid = opts.filter((o) => o.v >= 200 && o.v <= 400);
+  const from = mid.length ? mid : opts;
+  const o = from[Math.floor(Math.random() * from.length)];
+  return { cat: o.cat, idx: o.idx, clue: o.clue };
+}
+const names = (p: string[]) => (p.length === 2 ? `${p[0]} and ${p[1]}` : `${p.slice(0, -1).join(", ")} and ${p[p.length - 1]}`);
+/** Begins a trivia-off between the tied players, or (with no clue left to ask) calls it a shared win. */
+function startTie(spare: TriviaBoard | undefined, spareKind: "own" | "general", st: TriviaState, tied: string[], lead: string): { text: string; state: TriviaState } {
+  const pick = tieClue(spare, st, []);
+  if (!pick) return { text: `${lead}\n\nFINAL SCORES: ${scoreLine(st)}. ${names(tied)} are level, and there's no clue left for a trivia-off, so they share the win. Congratulate them both; ${RATE_ASK.replace(/^Then a/, "a")}`, state: st };
+  const tie = { players: tied, cat: pick.cat, idx: pick.idx, clue: pick.clue, tried: [], used: [`${pick.cat}#${pick.idx}`], round: 1, spare: spareKind } as NonNullable<TriviaState["tie"]>;
+  return {
+    text: `${lead}\n\nIT'S A TIE: ${names(tied)} on ${st.scores[tied[0]]}. No ties on Plot Speaks: it's a trivia-off. Say so with a little drama. Each of them answers the same question; whoever is right when the others aren't wins. Answers can't be challenged in a trivia-off.\nTRIVIA-OFF QUESTION 1 (read it aloud exactly):\n${pick.clue}\n\nThen call game_answer for each of ${names(tied)}, one at a time, with their name. Don't say the answer until all of them have answered.`,
+    state: { ...st, tie },
+  };
+}
+/** A trivia-off answer: rules when every tied player has answered; one left wins, otherwise another clue. */
+function tieAnswer(spare: TriviaBoard | undefined, st: TriviaState, said: string, who?: string): Step {
+  const t = st.tie!;
+  const c = spare?.categories.find((x) => x.name === t.cat);
+  const q = c?.clues[t.idx];
+  if (!q) return { text: "That trivia-off question couldn't be found; call game_board.", state: { ...st, tie: undefined }, error: true };
+  const name = t.players.find((p) => p.toLowerCase() === player(who).toLowerCase());
+  if (!name) return { text: `It's a trivia-off between ${names(t.players)}: only they answer. Which of them is this? Call game_answer with that name.`, state: st, error: true };
+  if (t.tried.some((x) => x.name === name)) return { text: `${name} has answered this one. Waiting for: ${t.players.filter((p) => !t.tried.some((x) => x.name === p)).join(", ")}.`, state: st, error: true };
+  const right = answerMatches(said, q);
+  const tried = [...t.tried, { name, right }];
+  const waiting = t.players.filter((p) => !tried.some((x) => x.name === p));
+  const event = { kind: "trivia", detail: `trivia-off|${t.round}`, verdict: right ? "correct" : "wrong" };
+  if (waiting.length) return { text: `${name} has answered. Don't say whether it's right yet. Waiting for: ${waiting.join(", ")}; call game_answer for each.`, state: { ...st, tie: { ...t, tried } }, event };
+  const rightOnes = tried.filter((x) => x.right).map((x) => x.name);
+  const left = rightOnes.length ? rightOnes : t.players;
+  const said2 = tried.map((x) => `${x.name} ${x.right ? "right" : "wrong"}`).join(", ");
+  if (left.length === 1) {
+    const done: TriviaState = { ...st, tie: undefined, tieWinner: left[0] };
+    return { text: `${DING} ${said2}. The answer was ${q.answer}.\n${left[0]} WINS THE TRIVIA-OFF, and the game.\nFINAL SCORES: ${scoreLine(done)}; ${left[0]} won the trivia-off. Crown the winner with a cheer; ${RATE_ASK.replace(/^Then a/, "a")}`, state: done, event };
+  }
+  const pick = tieClue(spare, st, t.used);
+  if (!pick) {
+    const done: TriviaState = { ...st, tie: undefined };
+    return { text: `${said2}. The answer was ${q.answer}. ${names(left)} are still level and there are no clues left, so they share the win. Congratulate them; ${RATE_ASK.replace(/^Then a/, "a")}`, state: done, event };
+  }
+  const round = t.round + 1;
+  return {
+    text: `${said2}. The answer was ${q.answer}. Still level: ${names(left)}.\nTRIVIA-OFF QUESTION ${round} (read it aloud exactly):\n${pick.clue}\n\nCall game_answer for each of ${names(left)}, one at a time.`,
+    state: { ...st, tie: { ...t, players: left, cat: pick.cat, idx: pick.idx, clue: pick.clue, tried: [], used: [...t.used, `${pick.cat}#${pick.idx}`], round } },
+    event,
+  };
+}
 /** A clue's identity for "seen before": its category and answer (stable when clues are added). */
 export const clueId = (cat: string, q: TriviaClue) => `${cat.toLowerCase()}|${q.answer.toLowerCase().trim()}`;
 
@@ -116,23 +196,27 @@ export function dealtBoard(b: TriviaBoard, st: TriviaState): TriviaBoard {
  * to 15 one of 20, up to 25 a four-category board, and more is the whole board. The text tells the
  * host what was chosen so it doesn't ask the mode question. The board is the full board, not the dealt one.
  */
-export function sizeGame(b: TriviaBoard, st: TriviaState, minutes: number, rand: () => number = Math.random): Step {
+export function sizeGame(b: TriviaBoard, st: TriviaState, minutes: number, rand: () => number = Math.random, isDealt = false): Step {
+  // Every clue shown comes from this play's deal (Ben, 2026-10-22: the first sized question came from the
+  // whole pool, so the ruling judged a different clue in the same slot). b is the full board unless isDealt.
+  const viewOf = (s: TriviaState): TriviaBoard => (isDealt ? { categories: b.categories.filter((c) => c.final || !s.cats || s.cats.includes(c.name)) } : dealtBoard(b, s));
   const m = Math.max(1, Math.min(600, Math.round(minutes)));
   const cats = b.categories.filter((c) => !c.final).map((c) => c.name);
   if (m <= 15) {
     const n = m <= 10 ? 12 : 20;
-    const q = quickQuestion(b, { ...st, mode: "quick", quickMax: n, minutes: m, cats: undefined });
+    const qs: TriviaState = { ...st, mode: "quick", quickMax: n, minutes: m, cats: undefined };
+    const q = quickQuestion(viewOf(qs), qs);
     return { ...q, text: `SIZED FOR ${m} MINUTES: quick fire of ${n} questions, no points, a tally. Don't ask which way to play; say it's a quick ${n} and read the first question.\n${q.text}` };
   }
   if (m <= 25 && cats.length > 4) {
     const keep = [...cats];
     while (keep.length > 4) keep.splice(Math.floor(rand() * keep.length), 1);
     const next: TriviaState = { ...st, cats: keep, minutes: m, mode: undefined, quickMax: undefined };
-    const view = dealtBoard(b, next);
+    const view = viewOf(next);
     return { text: `SIZED FOR ${m} MINUTES: four categories (${keep.join(", ")}) and the final. Don't ask which way to play; it's the board.\n\n${renderBoard(view, next)}`, state: next };
   }
   const next: TriviaState = { ...st, minutes: m, mode: undefined, quickMax: undefined, cats: undefined };
-  return { text: `SIZED FOR ${m} MINUTES: the whole board. Don't ask which way to play; it's the board.\n\n${renderBoard(dealtBoard(b, next), next)}`, state: next };
+  return { text: `SIZED FOR ${m} MINUTES: the whole board. Don't ask which way to play; it's the board.\n\n${renderBoard(viewOf(next), next)}`, state: next };
 }
 
 const board = (b: TriviaBoard) => b.categories.filter((c) => !c.final);
@@ -160,9 +244,12 @@ const leftLine = (b: TriviaBoard, st: TriviaState) => board(b).map((c) => {
 }).filter(Boolean).join("; ");
 
 /** What the host does after a ruling: in quick fire the next question comes with the ruling; on the board, what is left. */
-function afterRuling(b: TriviaBoard, st: TriviaState): { text: string; state: TriviaState } {
+function afterRuling(b: TriviaBoard, st: TriviaState, spare?: TriviaBoard, spareKind: "own" | "general" = "own"): { text: string; state: TriviaState } {
   if (st.mode === "quick" || st.mode === "streak") {
     const nq = quickQuestion(b, st);
+    // A quick fire with two or more players level at the end goes to a trivia-off.
+    const tied = st.mode === "quick" && !nq.state.current ? tiedTop(nq.state) : [];
+    if (tied.length) return startTie(spare, spareKind, nq.state, tied, `That's the last question. TALLY: ${scoreLine(nq.state)}.`);
     return { text: nq.text, state: nq.state };
   }
   const left = leftLine(b, st);
@@ -183,6 +270,8 @@ function afterRuling(b: TriviaBoard, st: TriviaState): { text: string; state: Tr
       }
     }
   }
+  // A board with no final, cleared with two or more players level, goes to a trivia-off.
+  if (!left && !(fin && !finalDone)) { const tied = tiedTop(st); if (tied.length) return startTie(spare, spareKind, st, tied, "That's every clue."); }
   return {
     text: left ? `${lastCat && !lastCat.final ? `${lastCat.name} is cleared. ` : ""}Ask which category next (and the value, or take the lowest). LEFT: ${left}. Don't call game_board.` : fin && !finalDone ? `The board is clear. Now the final, in the category "${fin.name}": call game_question with category "final".` : `That's every clue. Read out the final scores and congratulate the winner. ${RATE_ASK}`,
     state: st,
@@ -219,9 +308,13 @@ export function quickQuestion(b: TriviaBoard, st: TriviaState): Step {
  * clue now open (it has been read aloud) and the last ruling's answer (it has been said). Never an
  * unplayed clue or answer. b is the dealt board.
  */
-export function watchView(b: TriviaBoard, st: TriviaState) {
+/** images: the board's clue pictures by clue id (generated/clue-images.json); only the open clue's is sent. */
+export function watchView(b: TriviaBoard, st: TriviaState, images?: Record<string, string>) {
+  // A trivia-off shows its question (already read aloud), never its answer.
+  const tieNow = st.tie;
+  if (tieNow) st = { ...st, tie: undefined, current: null };
   const fin = finalCat(b);
-  const open = st.current ? (() => { const c = findCat(b, st.current!.cat); const q = c?.final ? c.clues[0] : c?.clues.find((x) => x.value === st.current!.value); return q ? { category: c!.final ? "Final" : c!.name, value: c!.final ? null : q.value, clue: q.steps[st.current!.step] ?? q.steps[0] } : null; })() : null;
+  const open = st.current ? (() => { const c = findCat(b, st.current!.cat); const q = c?.final ? c.clues[0] : c?.clues.find((x) => x.value === st.current!.value); const image = q && images ? images[clueId(c!.name, q)] ?? null : null; return q ? (st.mode === "quick" || st.mode === "streak" ? { category: "", value: null, clue: q.steps[st.current!.step] ?? q.steps[0], image } : { category: c!.final ? "Final" : c!.name, value: c!.final ? null : q.value, clue: q.steps[st.current!.step] ?? q.steps[0], image }) : null; })() : null;
   const last = st.last ? (() => { const c = findCat(b, st.last!.cat); const q = c?.final ? c.clues[0] : c?.clues.find((x) => x.value === st.last!.value); const closed = st.asked.includes(key(st.last!.cat, st.last!.value)); return closed && q ? { category: c!.final ? "Final" : c!.name, value: c!.final ? null : q.value, player: st.last!.player, correct: st.last!.correct, answer: q.answer } : null; })() : null;
   return {
     mode: st.mode ?? "board",
@@ -229,9 +322,11 @@ export function watchView(b: TriviaBoard, st: TriviaState) {
     final: fin ? { name: fin.name, played: st.asked.includes(key(fin.name, fin.clues[0]?.value ?? 0)) } : null,
     scores: Object.entries(st.scores).sort((x, y) => y[1] - x[1]).map(([name, score]) => ({ name, score })),
     asked: st.asked.length,
-    open,
+    open: tieNow ? { category: "Trivia-off", value: null, clue: tieNow.clue, image: null } : open,
     last,
     daily: st.daily ?? null,
+    tie: tieNow ? { players: tieNow.players, round: tieNow.round } : null,
+    tieWinner: st.tieWinner ?? null,
   };
 }
 
@@ -274,8 +369,9 @@ export function renderBoard(b: TriviaBoard, st: TriviaState): string {
   const finalDone = fin ? st.asked.includes(key(fin.name, fin.clues[0]?.value ?? 0)) : true;
   return [
     `SCORES: ${scoreLine(st)}.`,
-    left.length ? `LEFT ON THE BOARD (read the categories aloud, not every value, unless asked):\n${left.join("\n")}` : (fin && !finalDone ? `The board is clear. Only the final is left, in the category "${fin.name}": call game_question with category "final".` : "The game is over. Read out the final scores and congratulate the winner."),
-    "Ask the player (or whoever's turn it is) to pick a category and a value, then call game_question.",
+    left.length ? `LEFT ON THE BOARD (read the categories aloud, not every value, unless asked):\n${left.join("\n")}` : (fin && !finalDone ? `The board is clear. Only the final is left, in the category "${fin.name}": call game_question with category "final".` : st.tie ? `A trivia-off is on between ${names(st.tie.players)}. Read the question again:\n${st.tie.clue}` : st.tieWinner ? `The game is over: ${st.tieWinner} won the trivia-off. Read out the final scores and congratulate them.` : "The game is over. Read out the final scores and congratulate the winner."),
+    // Only while there is something left to pick.
+    ...(left.length ? ["Ask the player (or whoever's turn it is) to pick a category and a value, then call game_question."] : []),
   ].join("\n\n");
 }
 
@@ -285,10 +381,11 @@ export function askQuestion(b: TriviaBoard, st: TriviaState, category: string, v
   const word = category.trim().toLowerCase();
   // Quick fire: "random" (or any of these words) deals any unplayed clue; once a game is in quick
   // fire, "next" and the like do too.
+  if (st.tie) return { text: `A trivia-off is on between ${names(st.tie.players)}. Read the question again:\n${st.tie.clue}\n\nThen call game_answer for each of them who hasn't answered.`, state: st };
   if (st.streakOver) return { text: `The streak is over at ${streakOf(st)}. Offer a new game (start_story again) or the main menu.`, state: st, error: true };
   // "Ten minutes" sizes the game to the drive (sizeGame) instead of naming a category.
   const mins = /^(?:about |around |maybe |like )?(\d{1,3})\s*(?:min(?:ute)?s?|m)?(?: drive| left| or so)?$/.exec(word);
-  if (mins && !st.asked.length && !st.current) return sizeGame(b, st, Number(mins[1]));
+  if (mins && !st.asked.length && !st.current) return sizeGame(b, st, Number(mins[1]), Math.random, true);
   // Streak (Ben, 2026-10-19): quick fire until the first miss.
   if (/^(streak|streak mode|until i miss)$/.test(word) && !st.asked.length) return quickQuestion(b, { ...st, mode: "streak", quickMax: undefined });
   if (/^(random|any|anything|surprise( me)?|quick( ?fire)?|whatever)$/.test(word) || ((st.mode === "quick" || st.mode === "streak") && /^(next|another|continue|same|more|go on)$/.test(word))) return quickQuestion(b, st);
@@ -327,7 +424,8 @@ export function askQuestion(b: TriviaBoard, st: TriviaState, category: string, v
   };
 }
 
-export function answerQuestion(b: TriviaBoard, st: TriviaState, said: string, who?: string): Step {
+export function answerQuestion(b: TriviaBoard, st: TriviaState, said: string, who?: string, spare?: TriviaBoard, spareKind: "own" | "general" = "own"): Step {
+  if (st.tie) return tieAnswer(spare, st, said, who);
   if (!st.current) return { text: "No clue is open. Call game_board, then game_question for the category and value the player picks.", state: st, error: true };
   const c = findCat(b, st.current.cat);
   const q = c?.final ? c.clues[0] : c?.clues.find((x) => x.value === st.current!.value);
@@ -347,7 +445,7 @@ export function answerQuestion(b: TriviaBoard, st: TriviaState, said: string, wh
   if (st.mode === "streak" && !right) {
     const over: TriviaState = { ...st, asked: [...st.asked, key(c.name, q.value)], current: null, streakOver: true, last: { cat: c.name, value: q.value, player: name, answer: said.slice(0, 200), correct: false, worth, challenged: false } };
     const n = streakOf(over);
-    return { text: `${BZZT} NOT QUITE. It's ${q.answer}.\nSTREAK OVER at ${n} in a row. Say the number like it matters, and that a challenge is open if they disagree. ${RATE_ASK} Then offer another go (start_story) or the main menu.`, state: over, event: { kind: "trivia", detail: `${c.name}|${q.value}|streak ${n}`, verdict: "wrong" } };
+    return { text: `${BZZT} NOT QUITE. It's ${q.answer}.\nSTREAK OVER at ${n} in a row. JUDGED CLUE (never read this aloud): "${q.steps[step]}". If it is not the question you asked, tell the player you mixed up the clues. Say the number like it matters, and that a challenge is open if they disagree. ${RATE_ASK} Then offer another go (start_story) or the main menu.`, state: over, event: { kind: "trivia", detail: `${c.name}|${q.value}|streak ${n}`, verdict: "wrong" } };
   }
   // The final (2026-10-17 QA): every player answers it once, and the answer is said only when all
   // of them have. The players are everyone on the scoreboard plus whoever answers. A stepped final
@@ -369,6 +467,8 @@ export function answerQuestion(b: TriviaBoard, st: TriviaState, said: string, wh
       return { text: `${ruling} Nobody has it yet. Next part of the final (read it aloud; now worth ${worthAt(q.value, step + 1, q.steps.length)}):\n${q.steps[step + 1]}\n\nEveryone answers again.`, state: { ...st, scores, current: { ...st.current, step: step + 1, tried: [], anyRight: false } }, event };
     }
     const done: TriviaState = { ...st, asked: [...st.asked, key(c.name, q.value)], current: null, scores, last: { cat: c.name, value: q.value, player: name, answer: said.slice(0, 200), correct: right, worth, challenged: false } };
+    const tiedF = tiedTop(done);
+    if (tiedF.length) { const t = startTie(spare, spareKind, done, tiedF, `${ruling} Everyone has answered the final. The answer is ${q.answer}.`); return { text: t.text, state: t.state, event }; }
     return { text: `${ruling} Everyone has answered the final. The answer is ${q.answer}.\n\nFINAL SCORES: ${scoreLine(done)}. Congratulate the winner; ${RATE_ASK.replace(/^Then a/, "a")}\n\nThen call game_board.`, state: done, event };
   }
   if (!right && !band && step + 1 < q.steps.length && st.mode !== "streak") {
@@ -399,8 +499,28 @@ export function answerQuestion(b: TriviaBoard, st: TriviaState, said: string, wh
     ? (quick ? `${DING} CORRECT. It's ${q.answer}.` : `${DING} CORRECT. The answer is ${q.answer}. ${name} scores ${worth}.`)
     : (quick ? `${BZZT} NOT QUITE. It's ${q.answer}.` : `${BZZT} NOT RIGHT. The answer is ${q.answer}. No points. (A player who disagrees can call game_challenge.)`));
   const tally = (st.mode === "streak" ? `STREAK: ${streakOf(next)} in a row.` : quick ? `TALLY (right answers): ${scoreLine(next)}.` : `SCORES: ${scoreLine(next)}.`) + altNote + (band ? "" : ` JUDGED CLUE (never read this aloud): "${q.steps[step]}". If it is not the question you asked, tell the player you mixed up the clues and re-ask the right one.`);
-  const after = afterRuling(b, next);
+  const after = afterRuling(b, next, spare, spareKind);
   return { text: `${verdict}\n${tally}\n\n${after.text}`, state: after.state, event: { kind: "trivia", detail: `${c.name}|${q.value}`, verdict: right ? "correct" : "wrong" } };
+}
+
+/**
+ * The judges' votes, returned as soon as the ruling is settled (Alexa+ wants answers in under 500 ms; the
+ * slowest model was most of a challenge's 0.6 to 1.6 s). Upheld takes two YES votes, so two YES settle it
+ * one way, and two votes that aren't YES settle it the other. A vote still out when it settles counts as
+ * not cast (null), as a failed judge always has.
+ */
+export function majority(pending: Promise<boolean | null>[], need = 2): Promise<(boolean | null)[]> {
+  return new Promise((resolve) => {
+    const out: (boolean | null | undefined)[] = pending.map(() => undefined);
+    let done = false, yes = 0, notYes = 0, back = 0;
+    const finish = () => { if (!done) { done = true; resolve(out.map((v) => (v === undefined ? null : v))); } };
+    pending.forEach((p, i) => p.then((v) => v, () => null).then((v) => {
+      if (done) return;
+      out[i] = v; back++;
+      if (v === true) yes++; else notYes++;
+      if (yes >= need || notYes > pending.length - need || back === pending.length) finish();
+    }));
+  });
 }
 
 /** Three judges, each asked the same yes/no question. A judge that fails or answers unclearly abstains. */
@@ -436,7 +556,10 @@ export function learnable(b: TriviaBoard, cat: string, q: TriviaClue, said: stri
 
 export async function challenge(ai: Ai | undefined, b: TriviaBoard, st: TriviaState): Promise<Step> {
   const l = st.last;
+  if (st.tie) return { text: "Answers in a trivia-off can't be challenged: the next question settles it.", state: st, error: true };
   if (!l) return { text: "There's no ruling to challenge yet.", state: st, error: true };
+  // An estimate is scored by how close it is, so there is nothing for judges to rule on (Ben, 2026-10-23).
+  if (findCat(b, l.cat)?.estimate) return { text: "Estimates can't be challenged: they're scored by how close you get, and the ruling already gave the true figure. Tell the player kindly and carry on.", state: st, error: true };
   if (l.correct) return { text: "That answer was already ruled correct.", state: st, error: true };
   if (l.challenged) return { text: "That ruling has already been challenged once.", state: st, error: true };
   // A streak's last miss, if upheld, reopens the streak (the miss wasn't one).
@@ -447,7 +570,7 @@ export async function challenge(ai: Ai | undefined, b: TriviaBoard, st: TriviaSt
   if (!q) return { text: "That clue couldn't be found; the ruling stands.", state: st, error: true };
   const clue = q.steps.join(" / ");
   const keyText = [q.answer, ...q.also].join(" (also accepted: ") + (q.also.length ? ")" : "");
-  const votes = await Promise.all(JUDGES.map((m) => vote(ai, m, clue, keyText, l.answer)));
+  const votes = await majority(JUDGES.map((m) => vote(ai, m, clue, keyText, l.answer)));
   const yes = votes.filter((v) => v === true).length;
   const counted = votes.filter((v) => v !== null).length;
   const upheld = yes >= 2;

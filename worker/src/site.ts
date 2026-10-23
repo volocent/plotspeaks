@@ -815,6 +815,8 @@ p{margin:0 0 1em}
 .btn-ghost{background:transparent;color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--line-2)}
 .btn-ghost:hover{box-shadow:inset 0 0 0 1.5px var(--accent);color:var(--ink)}
 .btn-sm{min-height:42px;padding:10px 16px;font-size:.92rem}
+.hist-rm{margin:0}
+.hist-rm .btn-sm{min-height:34px;padding:6px 12px}
 .btn.is-done{background:var(--sky);color:#08223A;box-shadow:none}
 .link-arrow{display:inline;font-weight:700;text-decoration:none;color:var(--accent)}
 .link-arrow .ic{margin-left:4px;vertical-align:-3px}
@@ -1166,6 +1168,9 @@ details.script pre{margin:0;padding:0 18px 18px;white-space:pre-wrap;word-break:
 .watch-card .w-form{margin:0}
 .watch-card .w-form input{min-width:0;font-size:1rem;padding:10px 12px}
 .w-board{max-width:36rem}
+.w-board:has(.w-grid){max-width:64rem}
+.w-pic{margin-top:12px;display:flex;justify-content:center}
+.w-pic svg{width:100%;max-width:300px;max-height:22vh;height:auto;display:block;border-radius:6px}
 .t-head{display:flex;gap:16px;align-items:center;margin:8px 0 18px}
 .t-cover{width:96px;height:96px;border-radius:16px;object-fit:cover;flex:none}
 .t-meta{min-width:0}
@@ -1188,10 +1193,10 @@ details.script pre{margin:0;padding:0 18px 18px;white-space:pre-wrap;word-break:
 .w-open .w-k,.w-last .w-k{color:#C9D5E4}
 .w-k{margin:0 0 6px;font:700 .85rem/1.2 var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2)}
 .w-clue{margin:0;font:500 clamp(1.3rem,4.5vw,1.8rem)/1.35 var(--serif)}
-.w-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+.w-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:clamp(4px,1vw,10px)}
 .w-cat{display:grid;gap:6px}
-.w-cat-h{margin:0;font:750 .95rem/1.2 var(--sans);text-align:center;min-height:2.4em;display:grid;place-items:center}
-.w-cell{margin:0;padding:12px 0;border-radius:12px;background:var(--btn);color:var(--btn-ink);text-align:center;font:800 1.3rem var(--sans)}
+.w-cat-h{margin:0;font:750 clamp(.62rem,1.6vw,.95rem)/1.2 var(--sans);overflow-wrap:anywhere;text-align:center;min-height:3.7em;display:grid;place-items:end center}
+.w-cell{margin:0;padding:clamp(6px,1vw,10px) 0;border-radius:12px;background:var(--btn);color:var(--btn-ink);text-align:center;font:800 clamp(.85rem,2.4vw,1.3rem) var(--sans)}
 .w-cell.done{background:var(--surface-2);color:var(--ink-2);opacity:.55;text-decoration:line-through}
 .w-final{margin:16px 0 0;font-weight:700}
 .badges{list-style:none;padding:0;margin:12px 0;display:flex;flex-wrap:wrap;gap:10px}
@@ -1429,6 +1434,7 @@ ${/<a[^>]+data-connected=/.test(s.body) ? checkDialog(s.origin + "/mcp") : ""}
 <div>
 <nav aria-label="Footer">${links}<a href="/privacy"${cur("/privacy")}>Privacy</a><a href="/terms"${cur("/terms")}>Terms</a><a href="/support"${cur("/support")}>Support</a><a href="https://github.com/volocent/plotspeaks">GitHub</a></nav>
 <p>Stories are licensed <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a> unless a story page says otherwise. Fantasy adventures include rules material from the System Reference Document by Wizards of the Coast LLC, under <a href="https://creativecommons.org/licenses/by/4.0/legalcode">CC BY 4.0</a>, credited on each adventure&#39;s page.</p>
+<p>Trivia pictures: flags from <a href="https://github.com/lipis/flag-icons">flag-icons</a> (MIT); country outlines from <a href="https://github.com/VictorCazanave/svg-maps">SVG Maps</a> by Victor Cazanave, under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>, cropped to each country.</p>
 <p>Claude, ChatGPT, Gemini and the other assistant names are trademarks of their owners. Plot Speaks isn't affiliated with or endorsed by them.</p>
 <p>© ${new Date().getUTCFullYear()} Volocent Labs LLC</p>
 </div>
@@ -2297,7 +2303,7 @@ export function supportPage(origin: string): string {
 // terms URL. NOT LEGAL ADVICE: Ben should have a lawyer review this page before relying on it.
 // Keep it in step with privacyPage() and with what submissions.ts actually does (claim codes, review).
 // ============================================================================ ACCOUNT
-type AccountView = { profile?: Profile | null; notice?: string | null; user: { name: string | null; email: string | null } | null; history: { story: string; title: string; kind: string; started_at: number; outcome: string | null }[]; configured: boolean; accountMcp: string | null };
+type AccountView = { profile?: Profile | null; notice?: string | null; user: { name: string | null; email: string | null } | null; history: { story: string; title: string; kind: string; play_id: string; started_at: number; outcome: string | null }[]; configured: boolean; accountMcp: string | null };
 const WHY_SIGN_IN = `<ul class="why">
 <li><strong>No repeats.</strong> Ask for "a murder mystery I haven't played" and your assistant knows which ones you have. Trivia boards deal you questions you haven't heard yet.</li>
 <li><strong>Campaigns that wait for you.</strong> Pick up your D&amp;D-style campaign in any new chat, with no code to remember.</li>
@@ -2319,8 +2325,8 @@ ${WHY_SIGN_IN}
 <p class="lead">Signed in${v.user.email ? ` as ${esc(v.user.email)}` : ""}. Plot Speaks remembers what you play here and through the account connector.</p></header>
 ${v.accountMcp ? `<div class="note tip" data-tip="acct-mcp">${icon("plug", 20)}<span><strong>Let your assistant remember too.</strong> Add the connector with your account: <code>${esc(v.accountMcp)}</code>. Your assistant asks you to sign in with Google once. (The usual address, <code>${esc(origin)}/mcp</code>, keeps working with no sign-in and no memory.)</span><button class="tip-x" type="button" aria-label="Dismiss this tip" data-tip-x>${icon("close", 18)}</button></div>` : ""}
 <h2>What you've played</h2>
-${v.history.length ? `<div class="table-wrap"><table class="phrases"><thead><tr><th scope="col">Story or game</th><th scope="col">Kind</th><th scope="col">Started</th><th scope="col">How it ended</th></tr></thead><tbody>
-${v.history.map((h) => `<tr><td><a href="/stories/${encodeURIComponent(h.story)}">${esc(h.title)}</a></td><td>${esc(kindName(h.kind))}</td><td>${when(h.started_at)}</td><td>${esc(h.outcome ?? "not finished")}</td></tr>`).join("\n")}
+${v.history.length ? `<div class="table-wrap" id="history"><table class="phrases"><thead><tr><th scope="col">Story or game</th><th scope="col">Kind</th><th scope="col">Started</th><th scope="col">How it ended</th><th scope="col" aria-label="Remove"></th></tr></thead><tbody>
+${v.history.map((h) => `<tr><td><a href="/stories/${encodeURIComponent(h.story)}">${esc(h.title)}</a></td><td>${esc(kindName(h.kind))}</td><td>${when(h.started_at)}</td><td>${esc(h.outcome ?? "not finished")}</td><td><form method="post" action="/account/history/remove" class="hist-rm"><input type="hidden" name="play_id" value="${esc(h.play_id)}"><button type="submit" class="btn btn-ghost btn-sm" aria-label="Remove ${esc(h.title)} from your history">Remove</button></form></td></tr>`).join("\n")}
 </tbody></table></div>` : `<p>Nothing yet. Plays through the account connector show up here.</p>`}
 ${v.profile ? profileSection(v.profile, v.notice ?? null, origin) : ""}
 <h2>Your account</h2>
@@ -2375,8 +2381,8 @@ const WATCH_JS = `(function(){
     var h="";
     if(d.scores.length)h+='<ul class="w-scores">'+d.scores.map(function(s){return'<li><span>'+esc(s.name)+'</span><strong>'+s.score+'</strong></li>';}).join("")+'</ul>';
     if(d.last)h+='<div class="w-last '+(d.last.correct?'ok':'no')+'"><p class="w-k">'+esc(d.last.category)+(d.last.value?' · '+d.last.value:'')+' · '+esc(d.last.player)+(d.last.correct?' got it':' missed it')+'</p><p class="w-clue">'+esc(d.last.answer)+'</p></div>';
-    if(d.open)h+='<div class="w-open"><p class="w-k">'+esc(d.open.category)+(d.open.value?' · '+d.open.value:'')+'</p><p class="w-clue">'+esc(d.open.clue)+'</p></div>';
-    if(d.categories.length)h+='<div class="w-grid">'+d.categories.map(function(c){return'<div class="w-cat"><p class="w-cat-h">'+esc(c.name)+'</p>'+c.values.map(function(v){return'<p class="w-cell'+(v.played?' done':'')+'">'+v.value+'</p>';}).join("")+'</div>';}).join("")+'</div>';
+    if(d.open)h+='<div class="w-open"><p class="w-k">'+(d.open.category?esc(d.open.category)+(d.open.value?' · '+d.open.value:''):'Now')+'</p><p class="w-clue">'+esc(d.open.clue)+'</p>'+(d.open.image&&/^<svg[\\s>]/.test(d.open.image)?'<div class="w-pic">'+d.open.image+'</div>':'')+'</div>';
+    if(d.categories.length)h+='<div class="w-grid" style="grid-template-columns:repeat('+d.categories.length+',minmax(0,1fr))">'+d.categories.map(function(c){return'<div class="w-cat"><p class="w-cat-h">'+esc(c.name)+'</p>'+c.values.map(function(v){return'<p class="w-cell'+(v.played?' done':'')+'">'+v.value+'</p>';}).join("")+'</div>';}).join("")+'</div>';
     else h+='<p class="w-k">'+(d.mode==="streak"?"Streak":"Quick fire")+' · '+d.asked+' asked</p>';
     if(d.final)h+='<p class="w-final">Final: '+esc(d.final.name)+(d.final.played?' (played)':'')+'</p>';
     boardEl.innerHTML=h;status.textContent="";

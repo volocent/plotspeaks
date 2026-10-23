@@ -16,6 +16,8 @@ import { createMcpHandler } from "agents/mcp/server";
 import { z } from "zod";
 import stories from "./generated/stories.json";
 import news from "./generated/news.json";
+import clueImages from "./generated/clue-images.json";
+import qrcode from "qrcode-generator";
 import { handleSite, notFoundPage, siteOrigin, accountPage, publicProfilePage, type PublicStory } from "./site";
 import { LENGTHS, WRITE_GENRES, writeStory, reviewStory, DENYLIST } from "./studio";
 import { submitStory, withdrawSubmission, hashIp, loadApprovedStories, handleAdmin, serveSubmissionCover, listApprovedSubmissions, sameKey, type SubEnv, type Builtins, type PlayStory, type Ending } from "./submissions";
@@ -42,7 +44,8 @@ const dailySlug = (day: string) => {
 import { newWorld, applyChanges, recall, roll as rollDice, newCode, newShortCode, normCode, codeHash, loadWorld, saveWorld, type World, type WorldChanges } from "./world";
 import OAuthProvider, { getOAuthApi, type OAuthProviderOptions } from "@cloudflare/workers-oauth-provider";
 import { accountSite, type AccountEnv } from "./account";
-import { currentUser, userById, startSignIn, finishSignIn, signOut, deleteAccount, signInConfigured, noteStart, noteOutcome, historyOf, playedSlugs, claimPlays, type AuthEnv } from "./auth";
+import { SCREEN_URI, BOARD_APP_URI, BOARD_APP_MIME, BOARD_APP_HTML, SCREEN_META_KEY } from "./board-app";
+import { currentUser, userById, startSignIn, finishSignIn, signOut, deleteAccount, removeHistory, signInConfigured, noteStart, noteOutcome, historyOf, playedSlugs, claimPlays, type AuthEnv } from "./auth";
 
 type Story = PlayStory;
 const STORIES = stories as unknown as Story[]; // generated JSON: its inferred type is a union per story
@@ -321,6 +324,99 @@ async function record(ctx: Ctx, sql: string, ...args: unknown[]) {
 const SLUG = z.string().min(2).max(80);
 const PLAY_ID = z.string().min(1).max(40);
 
+// ------------------------------------------------------------ the screen (MCP Apps, board-app.ts)
+type ToolResult = { content?: { type: string; text?: string }[]; isError?: boolean; _meta?: Record<string, unknown> };
+/** Tools whose results draw on the host's screen. */
+const SCREEN_TOOLS = new Set(["open_plot_speaks", "list_stories", "pick_for_me", "start_story", "game_board", "game_question", "game_answer", "game_challenge", "choose", "check_accusation", "reveal_solution", "get_cue", "world_recall", "world_update", "roll"]);
+const PICKER_TOOLS = new Set(["open_plot_speaks", "list_stories", "pick_for_me"]);
+const screenOrigin = (env: Env) => ((env as { ENVIRONMENT?: string }).ENVIRONMENT === "dev" ? "https://dev.plotspeaks.com" : "https://plotspeaks.com");
+/** A story as a card: its cover from the site, its kind and length. Every story has a cover (worker/public/covers). */
+function storyCard(env: Env, st: Story) {
+  return { slug: st.slug, title: st.title, cover: `${screenOrigin(env)}/covers/${encodeURIComponent(st.slug)}.jpg`, genre: isWinddown(st) ? "Wind-down" : WATCH_GENRE[kindOfStory(st)], minutes: st.duration_minutes || null };
+}
+/**
+ * What a play shows: the trivia board (watchView) or the story timeline (timelineView). The watch page and the
+ * host's screen both use this, so they show the same thing: only what has been read or said aloud.
+ */
+async function playView(db: D1Database, st: Story, playId: string): Promise<Record<string, unknown>> {
+  const tr = await loadTrivia(db, playId);
+  const b = st.trivia ?? tr?.board ?? (tr?.team ? teamBoard(tr.team) : null);
+  if (tr && b) {
+    const team = tr.team ? teamBySlug(tr.team)?.name ?? null : null;
+    const v = watchView(dealtBoard(b, tr), tr, (clueImages as Record<string, Record<string, string>>)[st.slug]);
+    const ended = tr.tie ? false : tr.mode === "streak" ? Boolean(tr.streakOver)
+      : tr.mode === "quick" ? tr.quickMax !== undefined && v.asked >= tr.quickMax && !v.open
+      : v.categories.length > 0 && v.categories.every((c) => c.values.every((x) => x.played)) && (!v.final || v.final.played);
+    return { kind: "trivia", title: team ? `${st.title}: ${team}` : st.title, ...v, quickMax: tr.quickMax ?? null, ended };
+  }
+  // Every other play (plan 2026-10-21): only what has been said aloud, never the script or the key.
+  const play = await db.prepare("SELECT started_at FROM plays WHERE id = ?").bind(playId).first<{ started_at: number }>();
+  const ev = await db.prepare("SELECT kind, detail, verdict, at FROM play_events WHERE play_id = ? AND kind IN ('cue', 'accusation', 'reveal', 'ending') ORDER BY at LIMIT 60").bind(playId).all<WatchEvent>();
+  const k = kindOfStory(st);
+  const bs = st.branches ? await loadState(db, playId) : null;
+  const w = k === "campaign" ? await loadWorld(db, playId) : null;
+  const view = timelineView({ startedAt: play?.started_at ?? Date.now(), events: ev.results ?? [], path: bs ? bs.path.map((x) => x.choice) : undefined, ended: bs?.ended, world: w });
+  const genre = isWinddown(st) ? "Wind-down" : WATCH_GENRE[k];
+  const thin = k === "game" || (k === "adventure" && !Object.keys(st.cues ?? {}).length);
+  return { kind: "timeline", title: st.title, slug: st.slug, genre, minutes: st.duration_minutes || null, thin, ...view };
+}
+/** What a tool's result draws on the host's screen, or null. Never a hidden roll, never anything not yet said. */
+async function screenAfter(ctx: Ctx, name: string, args: Record<string, unknown>, res: ToolResult): Promise<Record<string, unknown> | null> {
+  const txt = (res.content ?? []).map((c) => (c.type === "text" ? c.text ?? "" : "")).join("\n");
+  if (name === "roll") {
+    if (args.hidden) return null;
+    const totals = [...txt.matchAll(/=\s*(-?\d+)/g)];
+    const why = typeof args.why === "string" ? args.why.slice(0, 80) : null;
+    let body = txt.split(" Say the result aloud")[0];
+    if (why && body.startsWith(`${why}: `)) body = body.slice(why.length + 2);
+    return { kind: "roll", dice: String(args.dice ?? "").slice(0, 40), why, total: totals.length ? Number(totals[totals.length - 1][1]) : null, result: body.slice(0, 200) };
+  }
+  if (PICKER_TOOLS.has(name)) {
+    // The stories this reply names, in its order: the menu the player just heard, as covers.
+    const all = await allStories(ctx);
+    const hits = all.map((st) => ({ st, i: txt.indexOf(st.title) })).filter((x) => x.i >= 0);
+    const kept = hits.filter((x) => !hits.some((y) => y !== x && y.st.title.length > x.st.title.length && y.st.title.includes(x.st.title) && y.i <= x.i && x.i < y.i + y.st.title.length));
+    const cards = kept.sort((a, b) => a.i - b.i).slice(0, 12).map((x) => storyCard(ctx.env, x.st));
+    return cards.length ? { kind: "picker", heading: name === "open_plot_speaks" ? "Plot Speaks" : "Stories and games", stories: cards } : null;
+  }
+  if (!ctx.db) return null;
+  const playId = typeof args.play_id === "string" ? args.play_id : /Play id: ([0-9a-f-]{36})/i.exec(txt)?.[1];
+  let st: Story | undefined;
+  if (playId) {
+    const row = await ctx.db.prepare("SELECT story FROM plays WHERE id = ?").bind(playId).first<{ story: string }>();
+    if (row) st = (await allStories(ctx)).find((x) => x.slug === row.story);
+  }
+  if (!st && typeof args.slug === "string") st = (await resolveStory(ctx, args.slug)).s ?? undefined;
+  if (!st) return null;
+  const story = storyCard(ctx.env, st);
+  const opening = name === "start_story" || name === "world_recall";
+  // A passenger can follow along: the watch code the host just read out, with a QR code to scan.
+  const wc = /WATCH CODE: "([a-z]+ [a-z]+)"/.exec(txt)?.[1];
+  const watch = wc ? { code: wc, url: `${screenOrigin(ctx.env)}/watch?code=${encodeURIComponent(wc).replace(/%20/g, "+")}`, qr: "" } : null;
+  if (watch) watch.qr = qrSvg(watch.url);
+  // The head-to-head code a finished board just got (triviaStep), for the end-of-game card.
+  const challengeCode = /CHALLENGE CODE: "([a-z]+(?: [a-z]+){2})"/.exec(txt)?.[1] ?? null;
+  const extra = { story, opening, watch, slug: st.slug, playId: playId ?? null, challengeCode };
+  if (isWinddown(st)) return { kind: "winddown", ...extra };
+  if (!playId) return { kind: "cover", ...extra };
+  return { ...(await playView(ctx.db, st, playId)), ...extra };
+}
+/** game_board in a quick fire or streak: the tally, and whether the game is over (no board to pick from). */
+function quickBoard(st: ReturnType<typeof newTrivia>): string {
+  const right = Object.values(st.scores).reduce((a, n) => a + n, 0);
+  const over = st.mode === "streak" ? Boolean(st.streakOver) : st.quickMax !== undefined && (st.quickN ?? 0) >= st.quickMax && !st.current;
+  if (st.tie) return `A trivia-off is on between ${st.tie.players.join(" and ")}. Read the question again:\n${st.tie.clue}`;
+  if (over) return st.mode === "streak" ? `The streak is over at ${right} in a row. Offer another go or the main menu.` : `The quick fire is over: ${st.quickN ?? 0} questions, ${right} right${Object.keys(st.scores).length > 1 ? ` (${Object.entries(st.scores).map(([n, v]) => `${n} ${v}`).join(", ")})` : ""}. Offer another game or the main menu.`;
+  return `${st.mode === "streak" ? `STREAK: ${right} in a row` : `QUICK FIRE: ${st.quickN ?? 0}${st.quickMax ? ` of ${st.quickMax}` : ""} asked, ${right} right`}. ${st.current ? "A question is open: ask the player to answer it." : "Call game_question with category \"next\" for the next question."}`;
+}
+/** A QR code as an SVG (qrcode-generator, MIT), for the watch page link. */
+function qrSvg(url: string): string {
+  const q = qrcode(0, "M");
+  q.addData(url);
+  q.make();
+  return q.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
+}
+
 function createServer(ctx: Ctx) {
   const gpt = ctx.chatgpt;
   // History rows name what was played anywhere; in ChatGPT the family stories' titles stay out.
@@ -337,6 +433,31 @@ function createServer(ctx: Ctx) {
     },
     { instructions: INSTRUCTIONS },
   );
+  // The Plot Speaks screen as an MCP App (board-app.ts): what a host that draws screens shows beside the game
+  // (Claude in the chat, Alexa+ on an Echo Show). Covers load from the site, so it is the only domain allowed.
+  const screenMeta = { ui: { prefersBorder: false, csp: { resourceDomains: [screenOrigin(ctx.env)] } } };
+  for (const [id, uri] of [["screen", SCREEN_URI], ["trivia-board", BOARD_APP_URI]] as const) {
+    server.registerResource(id, uri, { title: "Plot Speaks screen", description: "The story's cover and what is happening in play: the trivia board, the story so far, a dice roll. Read-only.", mimeType: BOARD_APP_MIME, _meta: screenMeta },
+      async () => ({ contents: [{ uri, mimeType: BOARD_APP_MIME, text: BOARD_APP_HTML, _meta: screenMeta }] }));
+  }
+  // Every tool with something to show links the screen, and its result carries what to draw (screenAfter).
+  // A failed call shows nothing, and a screen that fails to build never fails the tool.
+  const register = server.registerTool.bind(server) as unknown as (...a: unknown[]) => unknown;
+  (server as unknown as { registerTool: (...a: unknown[]) => unknown }).registerTool = (name: unknown, config: unknown, cb: unknown) => {
+    if (typeof name !== "string" || !SCREEN_TOOLS.has(name)) return register(name, config, cb);
+    const c = (config ?? {}) as { _meta?: Record<string, unknown>; inputSchema?: unknown };
+    const run = cb as (...a: unknown[]) => Promise<ToolResult>;
+    return register(name, { ...c, _meta: { ...(c._meta ?? {}), ui: { resourceUri: SCREEN_URI } } }, async (...a: unknown[]) => {
+      const res = await run(...a);
+      if (!res || res.isError) return res;
+      const args = (c.inputSchema ? a[0] : {}) as Record<string, unknown>;
+      try {
+        const shown = await screenAfter(ctx, name, args ?? {}, res);
+        if (shown) return { ...res, _meta: { ...(res._meta ?? {}), [SCREEN_META_KEY]: shown } };
+      } catch (e) { log("screen_error", { tool: name, message: String(e).slice(0, 200) }); }
+      return res;
+    });
+  };
 
   server.registerTool(
     "open_plot_speaks",
@@ -757,10 +878,18 @@ function createServer(ctx: Ctx) {
   // ------------------------------------------------------------ trivia (kind: trivia)
   // One helper runs every trivia step: find the story and its play, load the state, apply the step,
   // save the state and log the event, all for this story's own play only.
-  const triviaStep = async (slug: string, play_id: string, tool: string, run: (b: NonNullable<Story["trivia"]>, st: ReturnType<typeof newTrivia>) => Step | Promise<Step>) => {
-    const r = await resolveStory(ctx, slug);
-    if (!r.s) { log(tool, { found: null }); return fail(r.error); }
-    const s = r.s;
+  const triviaStep = async (slug: string, play_id: string, tool: string, run: (b: NonNullable<Story["trivia"]>, st: ReturnType<typeof newTrivia>, x: { spare?: TriviaBoard; spareKind: "own" | "general" }) => Step | Promise<Step>) => {
+    // The play decides the story (Haiku test 2026-10-23: "daily" passed back as the slug matched another story).
+    let s: Story | undefined;
+    try {
+      const own = ctx.db ? await ctx.db.prepare("SELECT story FROM plays WHERE id = ?").bind(play_id).first<{ story: string }>() : null;
+      if (own) s = (await allStories(ctx)).find((x) => x.slug === own.story);
+    } catch (e) { log("db_error", { message: String(e).slice(0, 200) }); }
+    if (!s) {
+      const r = await resolveStory(ctx, slug);
+      if (!r.s) { log(tool, { found: null }); return fail(r.error); }
+      s = r.s;
+    }
     if (!s.trivia && s.slug !== TEAM_TRIVIA) return fail(`${s.title} isn't a trivia game.`);
     let st: ReturnType<typeof newTrivia> | null = null;
     let ownPlay = false;
@@ -780,7 +909,11 @@ function createServer(ctx: Ctx) {
     const view: TriviaBoard = aliases?.size
       ? { categories: dealt.categories.map((c) => ({ ...c, clues: c.clues.map((q) => { const extra = aliases.get(clueId(c.name, q)); return extra ? { ...q, also: [...q.also, ...extra] } : q; }) })) }
       : dealt;
-    const out = await run(view, state);
+    // A trivia-off draws clues this play never dealt: from its own board, or (Team Trivia, one clue a slot)
+    // from the general board.
+    const spareKind: "own" | "general" = s.trivia ? "own" : "general";
+    const spare = s.trivia ?? STORIES.find((x) => x.slug === "trivia-general")?.trivia ?? undefined;
+    const out = await run(view, state, { spare, spareKind });
     log(tool, { story: s.slug, error: Boolean(out.error), event: out.event?.verdict ?? null });
     if (out.error) return fail(out.text);
     // Real difficulty (migration 0022): a ruling on a clue (not a stepped clue's early step) counts toward
@@ -813,7 +946,8 @@ function createServer(ctx: Ctx) {
       const full = view.categories.filter((c) => !(quickish && c.final)).reduce((n, c) => n + c.clues.length, 0);
       // A sized quick fire ends at its cap; a streak ends on its first miss (or when the questions run out).
       const total = quickish && out.state.quickMax ? Math.min(full, out.state.quickMax) : full;
-      const over = out.state.mode === "streak" ? Boolean(out.state.streakOver && !state.streakOver) : out.state.asked.length >= total && state.asked.length < total;
+      const done = (x: typeof state) => x.asked.length >= total && !x.tie;
+      const over = out.state.mode === "streak" ? Boolean(out.state.streakOver && !state.streakOver) : done(out.state) && !done(state);
       const outcome = out.state.mode === "streak"
         ? `streak ${Object.values(out.state.scores).reduce((a, n) => a + n, 0)}`
         : `${out.state.mode === "quick" ? "quick fire" : "board cleared"}: ${Object.entries(out.state.scores).map(([n, v]) => `${n} ${v}`).join(", ").slice(0, 70) || "no points"}`;
@@ -828,7 +962,8 @@ function createServer(ctx: Ctx) {
       ]);
       if (over) {
         const extra: string[] = [];
-        const top = Object.entries(out.state.scores).sort((a, b) => b[1] - a[1])[0] as [string, number] | undefined;
+        // The trivia-off winner tops the board (their score is level with the others they beat).
+        const top = (out.state.tieWinner ? [out.state.tieWinner, out.state.scores[out.state.tieWinner] ?? 0] : Object.entries(out.state.scores).sort((a, b) => b[1] - a[1])[0]) as [string, number] | undefined;
         try {
           if (out.state.daily) {
             const row = await ctx.db.prepare("SELECT count(*) AS n, max(score) AS top FROM daily_scores WHERE day = ?").bind(out.state.daily).first<{ n: number; top: number | null }>();
@@ -861,7 +996,7 @@ function createServer(ctx: Ctx) {
       description: "Returns a Plot Speaks trivia game's scores and the categories and values still on the board.",
       inputSchema: { slug: SLUG.describe("The game's slug"), play_id: PLAY_ID.describe("The play id from start_story") },
     },
-    async ({ slug, play_id }) => triviaStep(slug, play_id, "game_board", (b, st) => ({ text: renderBoard(b, st), state: st })),
+    async ({ slug, play_id }) => triviaStep(slug, play_id, "game_board", (b, st) => (st.mode === "quick" || st.mode === "streak" ? { text: quickBoard(st), state: st } : { text: renderBoard(b, st), state: st })),
   );
   server.registerTool(
     "game_question",
@@ -891,7 +1026,7 @@ function createServer(ctx: Ctx) {
         player: z.string().max(40).optional().describe("The answering player's name, for the scores"),
       },
     },
-    async ({ slug, play_id, answer, player }) => triviaStep(slug, play_id, "game_answer", (b, st) => answerQuestion(b, st, answer, player)),
+    async ({ slug, play_id, answer, player }) => triviaStep(slug, play_id, "game_answer", (b, st, x) => answerQuestion(b, st, answer, player, x.spare, x.spareKind)),
   );
   server.registerTool(
     "game_challenge",
@@ -1463,23 +1598,7 @@ async function watchApi(env: Env, code: string): Promise<Response> {
     const s = STORIES.find((x) => x.slug === row.story);
     if (!s) return apiJson({ error: "not_found" }, 404);
     const headers = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-robots-tag": "noindex" };
-    const st = await loadTrivia(db, row.play_id);
-    const b = s.trivia ?? st?.board ?? (st?.team ? teamBoard(st.team) : null);
-    if (st && b) {
-      const team = st.team ? teamBySlug(st.team)?.name ?? null : null;
-      return new Response(JSON.stringify({ kind: "trivia", title: team ? `${s.title}: ${team}` : s.title, ...watchView(dealtBoard(b, st), st) }), { headers });
-    }
-    // Every other play (plan 2026-10-21): only what has been said aloud, never the script or the key.
-    const play = await db.prepare("SELECT started_at FROM plays WHERE id = ?").bind(row.play_id).first<{ started_at: number }>();
-    const ev = await db.prepare("SELECT kind, detail, verdict, at FROM play_events WHERE play_id = ? AND kind IN ('cue', 'accusation', 'reveal', 'ending') ORDER BY at LIMIT 60").bind(row.play_id).all<WatchEvent>();
-    const k = kindOfStory(s);
-    const bs = s.branches ? await loadState(db, row.play_id) : null;
-    const w = k === "campaign" ? await loadWorld(db, row.play_id) : null;
-    const mins = s.duration_minutes || null;
-    const view = timelineView({ startedAt: play?.started_at ?? Date.now(), events: ev.results ?? [], path: bs ? bs.path.map((x) => x.choice) : undefined, ended: bs?.ended, world: w });
-    const genre = isWinddown(s) ? "Wind-down" : WATCH_GENRE[k];
-    const thin = k === "game" || (k === "adventure" && !Object.keys(s.cues ?? {}).length);
-    return new Response(JSON.stringify({ kind: "timeline", title: s.title, slug: s.slug, genre, minutes: mins, thin, ...view }), { headers });
+    return new Response(JSON.stringify(await playView(db, s, row.play_id)), { headers });
   } catch (e) { log("db_error", { message: String(e).slice(0, 200) }); return apiJson({ error: "unavailable" }, 503); }
 }
 
@@ -1626,6 +1745,15 @@ async function handleAccountPages(request: Request, env: Env): Promise<Response 
       else notice = await saveProfile(env.DB, user.id, checked.handle, form.get("public") === "1");
     } catch (e) { log("db_error", { message: String(e).slice(0, 200) }); notice = "error"; }
     return Response.redirect(new URL(`/account?profile=${notice}#profile`, url).toString(), 303);
+  }
+  // Remove one game or story from your history (Ben, 2026-10-23): your own rows only, same-origin posts only.
+  if (p === "/account/history/remove" && request.method === "POST" && sameOrigin && user) {
+    let notice = "removed";
+    try {
+      const form = await request.formData();
+      if (!(await removeHistory(env.DB, user.id, String(form.get("play_id") ?? "")))) notice = "missing";
+    } catch (e) { log("db_error", { message: String(e).slice(0, 200) }); notice = "error"; }
+    return Response.redirect(new URL(`/account?history=${notice}#history`, url).toString(), 303);
   }
   if (p === "/account/delete" && request.method === "POST" && sameOrigin && user) {
     try { await deleteAccount(env, user.id); } catch (e) {

@@ -3,13 +3,16 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "data": "node ../tools/worker-data/build.mjs",
+    "data": "node ../tools/worker-data/build.mjs && node ../tools/worker-data/clue-images.mjs",
     "dev": "npm run data && wrangler dev",
     "deploy:dev": "npm run data && npm run typecheck && wrangler deploy --env=dev",
     "types": "wrangler types --include-runtime=true",
     "typecheck": "npm run types && tsc -p tsconfig.json"
   },
   "devDependencies": {
+    "@svg-maps/world": "^2.0.0",
+    "flag-icons": "^7.6.0",
+    "svg-path-bbox": "^2.1.0",
     "typescript": "^5.9.3",
     "wrangler": "^4.127.1"
   },
@@ -17,6 +20,7 @@
     "@cloudflare/workers-oauth-provider": "^1.2.3",
     "@modelcontextprotocol/server": "^2.3.1",
     "agents": "^0.28.1",
+    "qrcode-generator": "^1.5.2",
     "zod": "^4.6.7"
   }
 }

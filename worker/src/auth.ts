@@ -218,6 +218,14 @@ export async function historyOf(db: D1Database | undefined, userId: string, limi
     return results ?? [];
   } catch { return []; }
 }
+/** Removes one play from a person's history (their own rows only); badges and stats follow from what is left. */
+export async function removeHistory(db: D1Database | undefined, userId: string, playId: string): Promise<boolean> {
+  if (!db || !/^[0-9a-f-]{36}$/i.test(playId)) return false;
+  try {
+    const r = await db.prepare("DELETE FROM user_history WHERE user_id = ? AND play_id = ?").bind(userId, playId).run();
+    return (r.meta?.changes ?? 0) > 0;
+  } catch { return false; }
+}
 export async function playedSlugs(db: D1Database | undefined, userId: string | null): Promise<Set<string>> {
   if (!db || !userId) return new Set();
   try {
